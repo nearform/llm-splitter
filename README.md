@@ -1,14 +1,75 @@
-![CI](https://github.com/nearform/hub-template/actions/workflows/ci.yml/badge.svg?event=push)
+# llm-chunk
 
-# Hub Template
+Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.
 
-A feature-packed template to start a new repository on the hub, including:
+## Features
+- Fast, memory-efficient chunking for large texts or arrays of texts
+- Supports character, sentence, and paragraph chunking strategies
+- Configurable chunk size and overlap
+- Returns detailed metadata for each chunk (start/end indices and positions)
+- TypeScript support
+- Robust, tested API
 
-- code linting with [ESlint](https://eslint.org) and [prettier](https://prettier.io)
-- pre-commit code linting and commit message linting with [husky](https://www.npmjs.com/package/husky) and [commitlint](https://commitlint.js.org/)
-- dependabot setup with automatic merging thanks to ["merge dependabot" GitHub action](https://github.com/fastify/github-action-merge-dependabot)
-- notifications about commits waiting to be released thanks to ["notify release" GitHub action](https://github.com/nearform/github-action-notify-release)
-- PRs' linked issues check with ["check linked issues" GitHub action](https://github.com/nearform/github-action-check-linked-issues)
-- Continuous Integration GitHub workflow
+## Installation
 
-[![banner](https://raw.githubusercontent.com/nearform/.github/refs/heads/master/assets/os-banner-green.svg)](https://www.nearform.com/contact/?utm_source=open-source&utm_medium=banner&utm_campaign=os-project-pages)
+```bash
+npm install llm-chunk
+```
+
+## Usage
+
+```typescript
+import { split, iterateChunks, getChunk, SplitOptions, Chunk } from 'llm-chunk'
+
+const text = 'This is a long document. It has multiple sentences.\n\nAnd paragraphs.'
+const options: SplitOptions = {
+  chunkSize: 50,
+  chunkOverlap: 10,
+  chunkStrategy: 'sentence', // or 'paragraph'
+}
+
+// Get all chunks as an array
+const chunks: Chunk[] = split(text, options)
+
+// Or use the generator for streaming/large data
+for (const chunk of iterateChunks(text, options)) {
+  console.log(chunk)
+}
+
+// Get a substring from the original text(s)
+const sub = getChunk(text, 0, 20)
+```
+
+## API
+
+### `split(text, options?): Chunk[]`
+Splits the input text(s) into an array of chunk objects.
+
+### `iterateChunks(text, options?): Generator<Chunk>`
+Yields chunk objects one at a time (memory efficient for large inputs).
+
+### `getChunk(text, start?, end?): string`
+Returns the substring from the input text(s) between start and end character positions.
+
+### `SplitOptions`
+- `chunkSize` (number): Maximum size of each chunk (default: 512)
+- `chunkOverlap` (number): Number of characters to overlap between chunks (default: 0)
+- `lengthFunction` (function): Optional function to calculate the length of the text (default: `text.length`)
+- `chunkStrategy` ('sentence' | 'paragraph'): Optional chunking strategy. If set, overrides character-based chunking.
+
+### `Chunk`
+- `chunk` (string): The chunked text
+- `startIndex` (number): Index in the input array or unit array
+- `startPosition` (number): Character offset in the original string
+- `endIndex` (number): Index in the input array or unit array
+- `endPosition` (number): Character offset in the original string
+
+## Testing
+
+```bash
+npm test
+```
+
+## License
+
+ISC
