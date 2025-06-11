@@ -26,6 +26,192 @@ export interface Chunk {
   endPosition: number // character offset in the original string
 }
 
+interface ChunkUnit {
+  unit: string
+  start: number
+  end: number
+}
+
+/**
+ * Get the length of a text based on the provided length function or default to character count.
+ * @param text - The input text.
+ * @param lengthFunction - Optional function to calculate the length of the text.
+ * @returns The length of the text.
+ */
+function getLength(
+  text: string,
+  lengthFunction?: (text: string) => number
+): number {
+  return lengthFunction ? lengthFunction(text) : text.length
+}
+
+/**
+ * Get text units based on the specified strategy.
+ * @param text - The input text to split into units.
+ * @param strategy - The chunking strategy to use.
+ * @returns An array of text units with their start and end positions.
+ */
+function getUnits(
+  text: string,
+  strategy: 'sentence' | 'paragraph'
+): ChunkUnit[] {
+  const units: ChunkUnit[] = []
+  if (strategy === 'paragraph') {
+    const regex: RegExp = /\n{2,}/g
+    let lastIndex: number = 0
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const end: number = match.index
+      const unit: string = text.slice(lastIndex, end).trim()
+      if (unit) units.push({ unit, start: lastIndex, end })
+      lastIndex = regex.lastIndex
+    }
+    const lastUnit: string = text.slice(lastIndex).trim()
+    if (lastUnit)
+      units.push({ unit: lastUnit, start: lastIndex, end: text.length })
+  } else {
+    const regex: RegExp = /[^.!?]+[.!?]+(?:\s+|$)/g
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const unit: string = match[0].trim()
+      if (unit) units.push({ unit, start: match.index, end: regex.lastIndex })
+    }
+  }
+  return units
+}
+
+/**
+ * Check if all chunk units can fit within the specified chunk size.
+ * @param chunkUnits - Array of chunk units with their text and positions.
+ * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param chunkSize - Maximum size of each chunk.
+ * @param joinerLen - Length of the joiner string used to combine units.
+ * @returns True if all units can fit, false otherwise.
+ */
+function canFitAllUnits(
+  chunkUnits: ChunkUnit[],
+  lengthFunction: ((text: string) => number) | undefined,
+  chunkSize: number,
+  joinerLen: number
+): boolean {
+  return (
+    chunkUnits.every(u => getLength(u.unit, lengthFunction) <= chunkSize) &&
+    chunkUnits.reduce(
+      (acc: number, u: { unit: string }, i: number) =>
+        acc + getLength(u.unit, lengthFunction) + (i > 0 ? joinerLen : 0),
+      0
+    ) <= chunkSize
+  )
+}
+
+/**
+ * Generator function to yield chunks of text based on character count.
+ * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ *
+ * @param currentText - The text to chunk.
+ * @param chunkSize - Maximum size of each chunk.
+ * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param chunkOverlap - Number of characters to overlap between chunks.
+ * @yields Chunk object containing the chunked string and its indices.
+ */
+function* chunkByCharacter(
+  currentText: string,
+  chunkSize: number,
+  lengthFunction: ((text: string) => number) | undefined,
+  chunkOverlap: number
+) {
+  let start = 0
+  const textLen = currentText.length
+  while (start < textLen) {
+    // Binary search for the largest end such that getLength(currentText.slice(start, end)) <= chunkSize
+    let low = start + 1
+    let high = textLen
+    let bestEnd = start + 1
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2)
+      const len = getLength(currentText.slice(start, mid), lengthFunction)
+      if (len <= chunkSize) {
+        bestEnd = mid
+        low = mid + 1
+      } else {
+        high = mid - 1
+      }
+    }
+    // Ensure at least one character per chunk
+    if (bestEnd === start) bestEnd = Math.min(start + 1, textLen)
+    yield {
+      chunk: currentText.slice(start, bestEnd),
+      startIndex: start,
+      startPosition: start,
+      endIndex: bestEnd - 1,
+      endPosition: bestEnd
+    }
+    if (bestEnd >= textLen) break
+    if (chunkOverlap > 0 && bestEnd > start)
+      start = Math.max(bestEnd - chunkOverlap, start + 1)
+    else start = bestEnd
+  }
+}
+
+/**
+ * Generator function to yield chunks of text based on a greedy sliding window approach.
+ * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ *
+ * @param chunkUnits - Array of chunk units (sentences or paragraphs) with their text and positions.
+ * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param joinerLen - Length of the joiner string used to combine units.
+ * @param chunkSize - Maximum size of each chunk.
+ * @param joiner - String used to join units into a chunk.
+ * @param chunkOverlap - Number of characters to overlap between chunks.
+ * @yields Chunk object containing the chunked string and its indices.
+ */
+function* chunkByGreedySlidingWindow(
+  chunkUnits: ChunkUnit[],
+  lengthFunction: ((text: string) => number) | undefined,
+  joinerLen: number,
+  chunkSize: number,
+  joiner: string,
+  chunkOverlap: number
+) {
+  let i = 0
+  const n = chunkUnits.length
+  while (i < n) {
+    let currentLen = 0
+    let first = true
+    let j = i
+    // Find the maximal window [i, j) that fits
+    while (j < n) {
+      const unitLen = getLength(chunkUnits[j].unit, lengthFunction)
+      const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
+      if (simulatedLen > chunkSize && j > i) break
+      if (simulatedLen > chunkSize && j === i) {
+        // Force at least one unit per chunk
+        j++
+        break
+      }
+      currentLen = simulatedLen
+      first = false
+      j++
+    }
+    if (j > i) {
+      const chunkStr = chunkUnits.slice(i, j).map(u => u.unit).join(joiner)
+      yield {
+        chunk: chunkStr,
+        startIndex: i,
+        startPosition: chunkUnits[i].start,
+        endIndex: j - 1,
+        endPosition: chunkUnits[j - 1].end
+      }
+    }
+    // Advance window
+    if (chunkOverlap > 0 && j - i > 0) {
+      i += Math.max(1, (j - i) - chunkOverlap)
+    } else {
+      i = j
+    }
+  }
+}
+
 /**
  * Split text or array of texts for LLM vectorization using a sliding window approach.
  * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
@@ -56,36 +242,10 @@ export function* iterateChunks(
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<Chunk> {
-  function getUnits(text: string, strategy: 'sentence' | 'paragraph') {
-    const units: { unit: string; start: number; end: number }[] = []
-    if (strategy === 'paragraph') {
-      const regex: RegExp = /\n{2,}/g
-      let lastIndex: number = 0
-      let match: RegExpExecArray | null
-      while ((match = regex.exec(text)) !== null) {
-        const end: number = match.index
-        const unit: string = text.slice(lastIndex, end).trim()
-        if (unit) units.push({ unit, start: lastIndex, end })
-        lastIndex = regex.lastIndex
-      }
-      const lastUnit: string = text.slice(lastIndex).trim()
-      if (lastUnit)
-        units.push({ unit: lastUnit, start: lastIndex, end: text.length })
-    } else {
-      const regex: RegExp = /[^.!?]+[.!?]+(?:\s+|$)/g
-      let match: RegExpExecArray | null
-      while ((match = regex.exec(text)) !== null) {
-        const unit: string = match[0].trim()
-        if (unit) units.push({ unit, start: match.index, end: regex.lastIndex })
-      }
-    }
-    return units
-  }
-
   const texts: string[] = Array.isArray(text) ? text : [text]
-  for (let textIdx: number = 0; textIdx < texts.length; textIdx++) {
-    const currentText: string = texts[textIdx]
-    if (currentText.length === 0) {
+  for (const currentText of texts)
+    if (currentText.length === 0)
+      // If the text is empty, yield an empty chunk
       yield {
         chunk: '',
         startIndex: 0,
@@ -93,10 +253,9 @@ export function* iterateChunks(
         endIndex: 0,
         endPosition: 0
       }
-      continue
-    }
-    if (chunkStrategy) {
-      const unitsRaw: { unit: string; start: number; end: number }[] =
+    else if (chunkStrategy) {
+      // Get chunk units (sentences or paragraphs) based on strategy
+      const chunkUnits: ChunkUnit[] =
         Array.isArray(text) && text !== texts
           ? (text as string[]).map((u: string) => ({
               unit: u,
@@ -104,109 +263,39 @@ export function* iterateChunks(
               end: u.length
             }))
           : getUnits(currentText, chunkStrategy)
-      const getLength: (t: string) => number = lengthFunction
-        ? lengthFunction
-        : (t: string) => t.length
+      // Choose joiner based on strategy
       const joiner: string = chunkStrategy === 'paragraph' ? '\n\n' : ' '
-      const joinerLen: number = getLength(joiner)
-      const allUnitsFit: boolean =
-        unitsRaw.every((u) => getLength(u.unit) <= chunkSize) &&
-        unitsRaw.reduce(
-          (acc: number, u: { unit: string }, i: number) => acc + getLength(u.unit) + (i > 0 ? joinerLen : 0),
-          0
-        ) <= chunkSize
-      if (allUnitsFit) {
-        for (let i: number = 0; i < unitsRaw.length; i++)
+      // Length of joiner (for accurate chunk size calculation)
+      const joinerLen: number = getLength(joiner, lengthFunction)
+      // Check if all units fit within chunk size
+      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
+        // If all units fit, yield each as its own chunk
+        for (const chunkUnit of chunkUnits)
           yield {
-            chunk: unitsRaw[i].unit,
-            startIndex: i,
-            startPosition: unitsRaw[i].start,
-            endIndex: i,
-            endPosition: unitsRaw[i].end
+            chunk: chunkUnit.unit,
+            startIndex: chunkUnits.indexOf(chunkUnit),
+            startPosition: chunkUnit.start,
+            endIndex: chunkUnits.indexOf(chunkUnit),
+            endPosition: chunkUnit.end
           }
-        continue
-      }
-      let i: number = 0
-      let lastChunk: string | undefined = undefined
-      const tempChunks: Chunk[] = []
-      while (i < unitsRaw.length) {
-        let chunkUnits: { unit: string; start: number; end: number }[] = []
-        let currentLen: number = 0
-        let first: boolean = true
-        let j: number = i
-        while (j < unitsRaw.length) {
-          const unit: { unit: string; start: number; end: number } = unitsRaw[j]
-          const unitLen: number = getLength(unit.unit)
-          let simulatedLen: number = currentLen + (first ? 0 : joinerLen) + unitLen
-          if (simulatedLen > chunkSize && chunkUnits.length > 0) break
-          if (simulatedLen > chunkSize && chunkUnits.length === 0) {
-            chunkUnits.push(unit)
-            j++
-            break
-          }
-          chunkUnits.push(unit)
-          currentLen = simulatedLen
-          first = false
-          j++
-        }
-        const chunkStr: string = chunkUnits.map((u) => u.unit).join(joiner)
-        if (chunkStr && chunkStr !== lastChunk) {
-          tempChunks.push({
-            chunk: chunkStr,
-            startIndex: i,
-            startPosition: chunkUnits[0].start,
-            endIndex: j - 1,
-            endPosition: chunkUnits[chunkUnits.length - 1].end
-          })
-          lastChunk = chunkStr
-        }
-        if (chunkOverlap > 0 && chunkUnits.length > 0) {
-          i += Math.max(1, chunkUnits.length - chunkOverlap)
-        } else {
-          i = j
-        }
-      }
-      if (
-        tempChunks.length > 1 &&
-        tempChunks[tempChunks.length - 1] &&
-        tempChunks[tempChunks.length - 2] &&
-        tempChunks[tempChunks.length - 2].chunk.endsWith(
-          tempChunks[tempChunks.length - 1].chunk
+      else
+        // If not all units fit, use greedy sliding window approach
+        yield* chunkByGreedySlidingWindow(
+          chunkUnits,
+          lengthFunction,
+          joinerLen,
+          chunkSize,
+          joiner,
+          chunkOverlap
         )
+    } else
+      // Default character-based chunking
+      yield* chunkByCharacter(
+        currentText,
+        chunkSize,
+        lengthFunction,
+        chunkOverlap
       )
-        tempChunks.pop()
-      for (const c of tempChunks) yield c
-      continue
-    }
-    // Character-based chunking (default)
-    const getLength: (t: string) => number = lengthFunction ? lengthFunction : (t: string) => t.length
-    let start: number = 0
-    while (start < currentText.length) {
-      let end: number = start
-      let currentLen: number = 0
-      while (end < currentText.length && currentLen < chunkSize) {
-        const substr: string = currentText.slice(start, end + 1)
-        currentLen = getLength(substr)
-        if (currentLen > chunkSize) break
-        end++
-      }
-      if (end === start) end = Math.min(start + 1, currentText.length)
-      const chunkStr: string = currentText.slice(start, end)
-      yield {
-        chunk: chunkStr,
-        startIndex: start,
-        startPosition: start,
-        endIndex: end - 1,
-        endPosition: end
-      }
-      if (end >= currentText.length) break
-      if (chunkOverlap > 0 && end > start) {
-        start = Math.max(end - chunkOverlap, start + 1)
-      } else {
-        start = end
-      }
-    }
-  }
 }
 
 /**

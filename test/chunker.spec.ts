@@ -205,16 +205,9 @@ describe('split', () => {
         endPosition: 3
       },
       {
-        chunk: 'iou',
+        chunk: 'ioubcdfg',
         startIndex: 2,
         startPosition: 2,
-        endIndex: 4,
-        endPosition: 5
-      },
-      {
-        chunk: 'ubcdfg',
-        startIndex: 4,
-        startPosition: 4,
         endIndex: 9,
         endPosition: 10
       }
@@ -390,6 +383,13 @@ describe('split', () => {
         startPosition: 8,
         endIndex: 3,
         endPosition: 14
+      },
+      {
+        chunk: 'D4',
+        startIndex: 3,
+        startPosition: 12,
+        endIndex: 3,
+        endPosition: 14
       }
     ])
   })
@@ -420,6 +420,13 @@ describe('split', () => {
         chunk: 'C3. D4.',
         startIndex: 2,
         startPosition: 8,
+        endIndex: 3,
+        endPosition: 15
+      },
+      {
+        chunk: 'D4.',
+        startIndex: 3,
+        startPosition: 12,
         endIndex: 3,
         endPosition: 15
       }
@@ -640,6 +647,12 @@ describe('split', () => {
       }
     ])
   })
+
+  test('split and getChunk are co-functions', () => {
+    const input = ['abcde', 'fghij']
+    const [{ chunk, startIndex, endIndex }] = split(input, { chunkSize: 2 });
+    expect(getChunk(input, startIndex, endIndex + 1)).toBe(chunk);
+  })
 })
 
 describe('getChunk', () => {
@@ -673,6 +686,7 @@ describe('getChunk', () => {
     expect(getChunk([], 0, 2)).toBe('')
   })
 })
+
 describe('split (coverage edge cases)', () => {
   test('should cover allUnitsFit branch for paragraph', () => {
     const input = 'A\n\nB'
