@@ -194,7 +194,10 @@ function* chunkByGreedySlidingWindow(
       j++
     }
     if (j > i) {
-      const chunkStr = chunkUnits.slice(i, j).map(u => u.unit).join(joiner)
+      const chunkStr = chunkUnits
+        .slice(i, j)
+        .map(u => u.unit)
+        .join(joiner)
       yield {
         chunk: chunkStr,
         startIndex: i,
@@ -205,7 +208,7 @@ function* chunkByGreedySlidingWindow(
     }
     // Advance window
     if (chunkOverlap > 0 && j - i > 0) {
-      i += Math.max(1, (j - i) - chunkOverlap)
+      i += Math.max(1, j - i - chunkOverlap)
     } else {
       i = j
     }
@@ -271,14 +274,14 @@ export function* iterateChunks(
       if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
         // If all units fit, yield each as its own chunk
         for (let i = 0; i < chunkUnits.length; i++) {
-          const chunkUnit = chunkUnits[i];
+          const chunkUnit = chunkUnits[i]
           yield {
             chunk: chunkUnit.unit,
             startIndex: i,
             startPosition: chunkUnit.start,
             endIndex: i,
             endPosition: chunkUnit.end
-          };
+          }
         }
       else
         // If not all units fit, use greedy sliding window approach
@@ -317,3 +320,5 @@ export function getChunk(
   const e: number = end ?? input.length
   return input.slice(s, e)
 }
+
+export { chunkByCharacter, chunkByGreedySlidingWindow }
