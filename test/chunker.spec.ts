@@ -794,7 +794,7 @@ describe('split (coverage edge cases)', () => {
 })
 
 describe('chunkByCharacter', () => {
-  it('yields correct chunks for basic input', () => {
+  test('yields correct chunks for basic input', () => {
     const result = Array.from(chunkByCharacter('abcdef', 2, undefined, 0))
     expect(result).toEqual([
       {
@@ -820,7 +820,7 @@ describe('chunkByCharacter', () => {
       }
     ])
   })
-  it('handles overlap', () => {
+  test('handles overlap', () => {
     const result = Array.from(chunkByCharacter('abcdef', 3, undefined, 1))
     expect(result).toEqual([
       {
@@ -846,20 +846,20 @@ describe('chunkByCharacter', () => {
       }
     ])
   })
-  it('handles custom lengthFunction', () => {
+  test('handles custom lengthFunction', () => {
     const result = Array.from(
       chunkByCharacter('aabbcc', 1, (t: string) => t.length / 2, 0)
     )
     expect(result.length).toBe(3)
   })
-  it('handles empty input', () => {
+  test('handles empty input', () => {
     const result = Array.from(chunkByCharacter('', 2, undefined, 0))
     expect(result).toEqual([])
   })
 })
 
 describe('chunkByGreedySlidingWindow', () => {
-  it('yields correct chunks for basic input', () => {
+  test('yields correct chunks for basic input', () => {
     const units = [
       { unit: 'A', start: 0, end: 1 },
       { unit: 'B', start: 2, end: 3 },
@@ -885,7 +885,8 @@ describe('chunkByGreedySlidingWindow', () => {
       }
     ])
   })
-  it('handles overlap', () => {
+
+  test('handles overlap', () => {
     const units = [
       { unit: 'A', start: 0, end: 1 },
       { unit: 'B', start: 2, end: 3 },
@@ -918,7 +919,8 @@ describe('chunkByGreedySlidingWindow', () => {
       }
     ])
   })
-  it('handles single unit larger than chunkSize', () => {
+
+  test('handles single unit larger than chunkSize', () => {
     const units = [
       { unit: 'LONGUNIT', start: 0, end: 8 },
       { unit: 'B', start: 9, end: 10 }
@@ -928,7 +930,8 @@ describe('chunkByGreedySlidingWindow', () => {
     ) as any[]
     expect(result[0].chunk).toBe('LONGUNIT')
   })
-  it('handles empty input', () => {
+
+  test('handles empty input', () => {
     const result = Array.from(
       chunkByGreedySlidingWindow([], undefined, 1, 3, ' ', 0)
     )
