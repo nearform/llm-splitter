@@ -270,14 +270,16 @@ export function* iterateChunks(
       // Check if all units fit within chunk size
       if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
         // If all units fit, yield each as its own chunk
-        for (const chunkUnit of chunkUnits)
+        for (let i = 0; i < chunkUnits.length; i++) {
+          const chunkUnit = chunkUnits[i];
           yield {
             chunk: chunkUnit.unit,
-            startIndex: chunkUnits.indexOf(chunkUnit),
+            startIndex: i,
             startPosition: chunkUnit.start,
-            endIndex: chunkUnits.indexOf(chunkUnit),
+            endIndex: i,
             endPosition: chunkUnit.end
-          }
+          };
+        }
       else
         // If not all units fit, use greedy sliding window approach
         yield* chunkByGreedySlidingWindow(
