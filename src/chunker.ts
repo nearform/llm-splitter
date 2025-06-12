@@ -1,4 +1,4 @@
-import type { SplitOptions, Chunk, ChunkUnit } from './types'
+import type { SplitOptions, ChunkUnit } from './types'
 import {
   canFitAllUnits,
   chunkByCharacter,
@@ -12,17 +12,61 @@ import {
  * @param text - A string or array of strings.
  * @param start - Optional start character position (inclusive, default 0).
  * @param end - Optional end character position (exclusive, default: end of input).
- * @returns The substring between start and end positions.
+ * @returns The substring(s) between start and end positions.
  */
 export function getChunk(
   text: string | string[],
   start?: number,
   end?: number
-): string {
-  const input: string = Array.isArray(text) ? text.join('') : text
-  const s: number = start ?? 0
-  const e: number = end ?? input.length
-  return input.slice(s, e)
+): typeof text {
+  if (typeof text === 'string') return text.slice(start, end)
+
+  let currentLength: number = 0
+  let startIndex: number | null = null
+  let startOffset: number = 0
+  let endIndex: number | null = null
+  let endOffset: number = 0
+
+  // Scan through the array to find start and end indices
+  for (const [index, row] of text.entries()) {
+    currentLength += row.length
+    if (currentLength >= (start ?? 0) && startIndex === null) {
+      startIndex = index
+      startOffset = row.length - (currentLength - (start ?? 0))
+    }
+    if (currentLength > (end ?? Infinity)) {
+      endIndex = index
+      endOffset = row.length - (currentLength - (end ?? Infinity))
+      break
+    }
+  }
+
+  // If no start found return an empty array
+  if (startIndex === null) return []
+
+  // Expand to the end of the last string if no endIndex found
+  if (endIndex === null) {
+    endIndex = text.length - 1
+    endOffset = text[endIndex].length
+  }
+
+  // If start and end are in the same string, return the substring
+  if (startIndex === endIndex)
+    return [text[startIndex].slice(startOffset, endOffset)]
+
+  // Return the two-part array
+  if (startIndex === endIndex - 1)
+    return [
+      text[startIndex].slice(startOffset),
+      text[endIndex].slice(0, endOffset)
+    ].filter(Boolean)
+
+  // Return the entire chunk from start to end
+  return [
+    text[startIndex].slice(startOffset),
+    ...text.slice(startIndex + 1, endIndex),
+    text[endIndex].slice(0, endOffset)
+  ].filter(Boolean)
 }
 
 /**
@@ -39,47 +83,17 @@ export function* iterateChunks(
     lengthFunction,
     chunkStrategy
   }: SplitOptions = {}
-): Generator<Chunk> {
+): Generator<string> {
   const texts: string[] = Array.isArray(text) ? text : [text]
   for (const currentText of texts)
-    if (currentText.length === 0)
-      // If the text is empty, yield an empty chunk
-      yield {
-        chunk: '',
-        startIndex: 0,
-        startPosition: 0,
-        endIndex: 0,
-        endPosition: 0
-      }
-    else if (chunkStrategy) {
-      // Get chunk units (sentences or paragraphs) based on strategy
-      const chunkUnits: ChunkUnit[] =
-        Array.isArray(text) && text !== texts
-          ? (text as string[]).map((u: string) => ({
-              unit: u,
-              start: 0,
-              end: u.length
-            }))
-          : getUnits(currentText, chunkStrategy)
-      // Choose joiner based on strategy
-      const joiner: string = chunkStrategy === 'paragraph' ? '\n\n' : ' '
-      // Length of joiner (for accurate chunk size calculation)
+    if (currentText.length === 0) yield ''
+    else if (chunkStrategy === 'paragraph') {
+      const chunkUnits: ChunkUnit[] = getUnits(currentText)
+      const joiner: string = '\n\n'
       const joinerLen: number = getLength(joiner, lengthFunction)
-      // Check if all units fit within chunk size
       if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
-        // If all units fit, yield each as its own chunk
-        for (let i = 0; i < chunkUnits.length; i++) {
-          const chunkUnit = chunkUnits[i]
-          yield {
-            chunk: chunkUnit.unit,
-            startIndex: i,
-            startPosition: chunkUnit.start,
-            endIndex: i,
-            endPosition: chunkUnit.end
-          }
-        }
+        for (const { unit } of chunkUnits) yield unit
       else
-        // If not all units fit, use greedy sliding window approach
         yield* chunkByGreedySlidingWindow(
           chunkUnits,
           lengthFunction,
@@ -109,6 +123,6 @@ export function* iterateChunks(
 export function split(
   text: string | string[],
   options: SplitOptions = {}
-): Chunk[] {
+): string[] {
   return [...iterateChunks(text, options)]
 }

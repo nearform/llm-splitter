@@ -5,7 +5,7 @@ Efficient, configurable text chunking utility for LLM vectorization. Returns ric
 ## Features
 
 - Fast, memory-efficient chunking for large texts or arrays of texts
-- Supports character, sentence, and paragraph chunking strategies
+- Supports character and paragraph chunking strategies
 - Configurable chunk size and overlap
 - Returns detailed metadata for each chunk (start/end indices and positions)
 - TypeScript support
@@ -27,7 +27,7 @@ const text =
 const options: SplitOptions = {
   chunkSize: 50,
   chunkOverlap: 10,
-  chunkStrategy: 'sentence' // or 'paragraph'
+  chunkStrategy: 'paragraph' // only 'paragraph' is supported as a strategy override
 }
 
 // Get all chunks as an array
@@ -48,6 +48,8 @@ const sub = getChunk(text, 0, 20)
 
 Splits the input text(s) into an array of chunk objects.
 
+- Returns: `string[]` – An array of chunked strings. Each string is a chunk of the input text.
+
 ### `iterateChunks(text, options?): Generator<Chunk>`
 
 Yields chunk objects one at a time (memory efficient for large inputs).
@@ -61,7 +63,7 @@ Returns the substring from the input text(s) between start and end character pos
 - `chunkSize` (number): Maximum size of each chunk (default: 512)
 - `chunkOverlap` (number): Number of characters to overlap between chunks (default: 0)
 - `lengthFunction` (function): Optional function to calculate the length of the text (default: `text.length`)
-- `chunkStrategy` ('sentence' | 'paragraph'): Optional chunking strategy. If set, overrides character-based chunking.
+- `chunkStrategy` ('paragraph'): Optional chunking strategy. If set, overrides character-based chunking.
 
 ### `Chunk`
 

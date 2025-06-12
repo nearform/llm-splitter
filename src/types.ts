@@ -9,18 +9,10 @@ export interface SplitOptions {
    */
   lengthFunction?: (text: string) => number
   /**
-   * Optional chunking strategy: 'sentence' or 'paragraph'.
+   * Optional chunking strategy: 'paragraph'.
    * If set, overrides character-based chunking. Default: 'paragraph'.
    */
-  chunkStrategy?: 'sentence' | 'paragraph'
-}
-
-export interface Chunk {
-  chunk: string
-  startIndex: number // index in the input array or unit array
-  startPosition: number // character offset in the original string
-  endIndex: number // index in the input array or unit array
-  endPosition: number // character offset in the original string
+  chunkStrategy?: 'paragraph'
 }
 
 export interface ChunkUnit {

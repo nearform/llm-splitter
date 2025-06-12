@@ -3,56 +3,12 @@ import { chunkByCharacter, chunkByGreedySlidingWindow } from '../src/utils'
 describe('chunkByCharacter', () => {
   test('yields correct chunks for basic input', () => {
     const result = Array.from(chunkByCharacter('abcdef', 2, undefined, 0))
-    expect(result).toEqual([
-      {
-        chunk: 'ab',
-        startIndex: 0,
-        startPosition: 0,
-        endIndex: 1,
-        endPosition: 2
-      },
-      {
-        chunk: 'cd',
-        startIndex: 2,
-        startPosition: 2,
-        endIndex: 3,
-        endPosition: 4
-      },
-      {
-        chunk: 'ef',
-        startIndex: 4,
-        startPosition: 4,
-        endIndex: 5,
-        endPosition: 6
-      }
-    ])
+    expect(result).toEqual(['ab', 'cd', 'ef'])
   })
 
   test('handles overlap', () => {
     const result = Array.from(chunkByCharacter('abcdef', 3, undefined, 1))
-    expect(result).toEqual([
-      {
-        chunk: 'abc',
-        startIndex: 0,
-        startPosition: 0,
-        endIndex: 2,
-        endPosition: 3
-      },
-      {
-        chunk: 'cde',
-        startIndex: 2,
-        startPosition: 2,
-        endIndex: 4,
-        endPosition: 5
-      },
-      {
-        chunk: 'ef',
-        startIndex: 4,
-        startPosition: 4,
-        endIndex: 5,
-        endPosition: 6
-      }
-    ])
+    expect(result).toEqual(['abc', 'cde', 'ef'])
   })
 
   test('handles custom lengthFunction', () => {
@@ -78,22 +34,7 @@ describe('chunkByGreedySlidingWindow', () => {
     const result = Array.from(
       chunkByGreedySlidingWindow(units, undefined, 1, 3, ' ', 0)
     )
-    expect(result).toEqual([
-      {
-        chunk: 'A B',
-        startIndex: 0,
-        startPosition: 0,
-        endIndex: 1,
-        endPosition: 3
-      },
-      {
-        chunk: 'C',
-        startIndex: 2,
-        startPosition: 4,
-        endIndex: 2,
-        endPosition: 5
-      }
-    ])
+    expect(result).toEqual(['A B', 'C'])
   })
 
   test('handles overlap', () => {
@@ -105,29 +46,7 @@ describe('chunkByGreedySlidingWindow', () => {
     const result = Array.from(
       chunkByGreedySlidingWindow(units, undefined, 1, 3, ' ', 1)
     )
-    expect(result).toEqual([
-      {
-        chunk: 'A B',
-        startIndex: 0,
-        startPosition: 0,
-        endIndex: 1,
-        endPosition: 3
-      },
-      {
-        chunk: 'B C',
-        startIndex: 1,
-        startPosition: 2,
-        endIndex: 2,
-        endPosition: 5
-      },
-      {
-        chunk: 'C',
-        startIndex: 2,
-        startPosition: 4,
-        endIndex: 2,
-        endPosition: 5
-      }
-    ])
+    expect(result).toEqual(['A B', 'B C', 'C'])
   })
 
   test('handles single unit larger than chunkSize', () => {
@@ -137,8 +56,8 @@ describe('chunkByGreedySlidingWindow', () => {
     ]
     const result = Array.from(
       chunkByGreedySlidingWindow(units, undefined, 1, 3, ' ', 0)
-    ) as any[]
-    expect(result[0].chunk).toBe('LONGUNIT')
+    )
+    expect(result[0]).toBe('LONGUNIT')
   })
 
   test('handles empty input', () => {
