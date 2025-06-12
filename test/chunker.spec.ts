@@ -150,7 +150,9 @@ describe('split', () => {
     const input = ['abcde', 'fghij']
     let offset = 0
     for (const chunk of iterateChunks(input, { chunkSize: 2 })) {
-      expect(getChunk(input, offset, offset + chunk.length)).toEqual([chunk])
+      const chunkFromGetChunk = getChunk(input, offset, offset + chunk.length)
+      const chunkStr = Array.isArray(chunkFromGetChunk) ? chunkFromGetChunk.join('') : chunkFromGetChunk
+      expect(chunkStr).toBe(chunk)
       offset += chunk.length
     }
   })

@@ -83,7 +83,7 @@ export function* iterateChunks(
     lengthFunction,
     chunkStrategy
   }: SplitOptions = {}
-): Generator<string> {
+): Generator<typeof text> {
   const texts: string[] = Array.isArray(text) ? text : [text]
   for (const currentText of texts)
     if (currentText.length === 0) yield ''
@@ -102,7 +102,7 @@ export function* iterateChunks(
           joiner,
           chunkOverlap
         )
-    } else
+    } else {
       // Default character-based chunking
       yield* chunkByCharacter(
         currentText,
@@ -110,6 +110,7 @@ export function* iterateChunks(
         lengthFunction,
         chunkOverlap
       )
+    }
 }
 
 /**
@@ -124,5 +125,6 @@ export function split(
   text: string | string[],
   options: SplitOptions = {}
 ): string[] {
-  return [...iterateChunks(text, options)]
+  // Flatten the result in case any yielded value is an array
+  return [...iterateChunks(text, options)].flat()
 }

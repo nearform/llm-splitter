@@ -60,23 +60,23 @@ export function canFitAllUnits(
 }
 
 /**
- * Generator function to yield chunks of text based on character count.
- * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ * Chunk the text by character count, with optional overlapping.
  *
  * @param currentText - The text to chunk.
  * @param chunkSize - Maximum size of each chunk.
  * @param lengthFunction - Optional function to calculate the length of the text.
  * @param chunkOverlap - Number of characters to overlap between chunks.
- * @yields Chunk object containing the chunked string and its indices.
+ * @returns Array of string chunks.
  */
-export function* chunkByCharacter(
+export function chunkByCharacter(
   currentText: string,
   chunkSize: number,
   lengthFunction: ((text: string) => number) | undefined,
   chunkOverlap: number
-): Generator<string> {
+): string[] {
   let start = 0
   const textLen = currentText.length
+  const chunks: string[] = []
   while (start < textLen) {
     // Binary search for the largest end such that getLength(currentText.slice(start, end)) <= chunkSize
     let low = start + 1
@@ -94,12 +94,13 @@ export function* chunkByCharacter(
     }
     // Ensure at least one character per chunk
     if (bestEnd === start) bestEnd = Math.min(start + 1, textLen)
-    yield currentText.slice(start, bestEnd)
+    chunks.push(currentText.slice(start, bestEnd))
     if (bestEnd >= textLen) break
     if (chunkOverlap > 0 && bestEnd > start)
       start = Math.max(bestEnd - chunkOverlap, start + 1)
     else start = bestEnd
   }
+  return chunks
 }
 
 /**
@@ -112,18 +113,19 @@ export function* chunkByCharacter(
  * @param chunkSize - Maximum size of each chunk.
  * @param joiner - String used to join units into a chunk.
  * @param chunkOverlap - Number of characters to overlap between chunks.
- * @yields Chunk object containing the chunked string and its indices.
+ * @returns Array of chunked strings.
  */
-export function* chunkByGreedySlidingWindow(
+export function chunkByGreedySlidingWindow(
   chunkUnits: ChunkUnit[],
   lengthFunction: ((text: string) => number) | undefined,
   joinerLen: number,
   chunkSize: number,
   joiner: string,
   chunkOverlap: number
-): Generator<string> {
+): string[] {
   let i = 0
   const n = chunkUnits.length
+  const chunks: string[] = []
   while (i < n) {
     let currentLen = 0
     let first = true
@@ -147,7 +149,7 @@ export function* chunkByGreedySlidingWindow(
         .slice(i, j)
         .map(u => u.unit)
         .join(joiner)
-      yield chunkStr
+      chunks.push(chunkStr)
     }
     // Advance window
     if (chunkOverlap > 0 && j - i > 0) {
@@ -156,4 +158,5 @@ export function* chunkByGreedySlidingWindow(
       i = j
     }
   }
+  return chunks
 }
