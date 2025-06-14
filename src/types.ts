@@ -20,3 +20,9 @@ export interface ChunkUnit {
   start: number
   end: number
 }
+
+export interface ChunkResult {
+  text: string | string[]
+  start: number
+  end: number
+}

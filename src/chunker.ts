@@ -1,4 +1,4 @@
-import type { SplitOptions, ChunkUnit } from './types'
+import type { SplitOptions, ChunkUnit, ChunkResult } from './types'
 import {
   canFitAllUnits,
   chunkByCharacter,
@@ -73,7 +73,7 @@ export function getChunk(
  * Synchronous generator version of split. Yields each chunk object as produced.
  * @param text - A string or array of strings to split.
  * @param options - Options object.
- * @yields Chunk object for each chunk.
+ * @yields Chunk object for each chunk with text and position information.
  */
 export function* iterateChunks(
   text: string | string[],
@@ -83,18 +83,32 @@ export function* iterateChunks(
     lengthFunction,
     chunkStrategy
   }: SplitOptions = {}
-): Generator<typeof text> {
+): Generator<ChunkResult> {
   const texts: string[] = Array.isArray(text) ? text : [text]
-  for (const currentText of texts)
-    if (currentText.length === 0) yield ''
-    else if (chunkStrategy === 'paragraph') {
+  let globalOffset = 0
+
+  for (const currentText of texts) {
+    if (currentText.length === 0) {
+      yield {
+        text: Array.isArray(text) ? [''] : '',
+        start: globalOffset,
+        end: globalOffset
+      }
+    } else if (chunkStrategy === 'paragraph') {
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
       const joiner: string = '\n\n'
       const joinerLen: number = getLength(joiner, lengthFunction)
-      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
-        for (const { unit } of chunkUnits) yield unit
-      else
-        yield* chunkByGreedySlidingWindow(
+
+      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen)) {
+        for (const { unit, start, end } of chunkUnits) {
+          yield {
+            text: Array.isArray(text) ? [unit] : unit,
+            start: globalOffset + start,
+            end: globalOffset + end
+          }
+        }
+      } else {
+        const chunks = chunkByGreedySlidingWindow(
           chunkUnits,
           lengthFunction,
           joinerLen,
@@ -102,29 +116,47 @@ export function* iterateChunks(
           joiner,
           chunkOverlap
         )
+        for (const chunk of chunks) {
+          yield {
+            text: Array.isArray(text) ? [chunk.text] : chunk.text,
+            start: globalOffset + chunk.start,
+            end: globalOffset + chunk.end
+          }
+        }
+      }
     } else {
       // Default character-based chunking
-      yield* chunkByCharacter(
+      const chunks = chunkByCharacter(
         currentText,
         chunkSize,
         lengthFunction,
-        chunkOverlap
+        chunkOverlap,
+        globalOffset
       )
+      for (const chunk of chunks) {
+        yield {
+          text: Array.isArray(text) ? [chunk.text] : chunk.text,
+          start: chunk.start,
+          end: chunk.end
+        }
+      }
     }
+
+    globalOffset += currentText.length
+  }
 }
 
 /**
  * Split text or array of texts for LLM vectorization using a sliding window approach.
  * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
  *
- * @param input - A string or array of strings to split.
+ * @param text - A string or array of strings to split.
  * @param options - Options object.
- * @returns Array of chunked strings.
+ * @returns Array of chunk objects with text and position information.
  */
 export function split(
   text: string | string[],
   options: SplitOptions = {}
-): string[] {
-  // Flatten the result in case any yielded value is an array
-  return [...iterateChunks(text, options)].flat()
+): ChunkResult[] {
+  return [...iterateChunks(text, options)]
 }

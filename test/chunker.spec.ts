@@ -1,32 +1,40 @@
 import { split, getChunk, iterateChunks } from '../src/chunker'
-import { type SplitOptions } from '../src/types'
-import { chunkByCharacter, chunkByGreedySlidingWindow } from '../src/utils'
+import { type SplitOptions, type ChunkResult } from '../src/types'
 
 describe('split', () => {
   test('should split a single string into correct sizes', () => {
     const input = 'abcdefghij'
-    expect(split(input, { chunkSize: 3 })).toEqual(['abc', 'def', 'ghi', 'j'])
+    expect(split(input, { chunkSize: 3 })).toEqual([
+      { text: 'abc', start: 0, end: 3 },
+      { text: 'def', start: 3, end: 6 },
+      { text: 'ghi', start: 6, end: 9 },
+      { text: 'j', start: 9, end: 10 }
+    ])
   })
 
   test('should split an array of strings into correct sizes', () => {
     const input = ['abcde', 'fghij']
     expect(split(input, { chunkSize: 2 })).toEqual([
-      'ab',
-      'cd',
-      'e',
-      'fg',
-      'hi',
-      'j'
+      { text: ['ab'], start: 0, end: 2 },
+      { text: ['cd'], start: 2, end: 4 },
+      { text: ['e'], start: 4, end: 5 },
+      { text: ['fg'], start: 5, end: 7 },
+      { text: ['hi'], start: 7, end: 9 },
+      { text: ['j'], start: 9, end: 10 }
     ])
   })
 
   test('should return the whole string if smaller than chunk size', () => {
     const input = 'abc'
-    expect(split(input, { chunkSize: 10 })).toEqual(['abc'])
+    expect(split(input, { chunkSize: 10 })).toEqual([
+      { text: 'abc', start: 0, end: 3 }
+    ])
   })
 
   test('should handle empty string input', () => {
-    expect(split('', { chunkSize: 5 })).toEqual([''])
+    expect(split('', { chunkSize: 5 })).toEqual([
+      { text: '', start: 0, end: 0 }
+    ])
   })
 
   test('should handle empty array input', () => {
@@ -41,17 +49,21 @@ describe('split', () => {
     const input = 'a'.repeat(600)
     const result = split(input)
     expect(result.length).toBe(2)
-    expect(result[0].length).toBe(512)
-    expect(result[1].length).toBe(88)
+    expect((result[0].text as string).length).toBe(512)
+    expect((result[1].text as string).length).toBe(88)
+    expect(result[0].start).toBe(0)
+    expect(result[0].end).toBe(512)
+    expect(result[1].start).toBe(512)
+    expect(result[1].end).toBe(600)
   })
 
   test('should split with overlap (sliding window)', () => {
     const input = 'abcdefghij'
     expect(split(input, { chunkSize: 4, chunkOverlap: 2 })).toEqual([
-      'abcd',
-      'cdef',
-      'efgh',
-      'ghij'
+      { text: 'abcd', start: 0, end: 4 },
+      { text: 'cdef', start: 2, end: 6 },
+      { text: 'efgh', start: 4, end: 8 },
+      { text: 'ghij', start: 6, end: 10 }
     ])
   })
 
@@ -61,7 +73,11 @@ describe('split', () => {
       chunkSize: 2,
       lengthFunction: t => (t.match(/[aeiou]/g) || []).length
     }
-    expect(split(input, options)).toEqual(['abcde', 'io', 'uxyz'])
+    expect(split(input, options)).toEqual([
+      { text: 'abcde', start: 0, end: 5 },
+      { text: 'io', start: 5, end: 7 },
+      { text: 'uxyz', start: 7, end: 11 }
+    ])
   })
 
   test('should handle custom lengthFunction with overlap', () => {
@@ -71,13 +87,20 @@ describe('split', () => {
       chunkOverlap: 1,
       lengthFunction: t => (t.match(/[aeiou]/g) || []).length
     }
-    expect(split(input, options)).toEqual(['aei', 'ioubcdfg'])
+    expect(split(input, options)).toEqual([
+      { text: 'aei', start: 0, end: 3 },
+      { text: 'ioubcdfg', start: 2, end: 10 }
+    ])
   })
 
   test('should split by paragraph boundaries', () => {
     const input = 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3'
     const result = split(input, { chunkSize: 100, chunkStrategy: 'paragraph' })
-    expect(result).toEqual(['Para1 line1\nPara1 line2', 'Para2 line1', 'Para3'])
+    expect(result).toEqual([
+      { text: 'Para1 line1\nPara1 line2', start: 0, end: 23 },
+      { text: 'Para2 line1', start: 25, end: 36 },
+      { text: 'Para3', start: 38, end: 43 }
+    ])
   })
 
   test('should perform greedy unit-based chunking with overlap (paragraph)', () => {
@@ -87,7 +110,12 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    expect(result).toEqual(['A', 'B', 'C', 'D'])
+    expect(result).toEqual([
+      { text: 'A', start: 0, end: 1 },
+      { text: 'B', start: 3, end: 4 },
+      { text: 'C', start: 6, end: 7 },
+      { text: 'D', start: 9, end: 10 }
+    ])
   })
 
   test('should perform greedy unit-based chunking with overlap and join multiple units (paragraph)', () => {
@@ -97,39 +125,63 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    expect(result).toEqual(['A1\n\nB2', 'B2\n\nC3', 'C3\n\nD4', 'D4'])
+    expect(result).toEqual([
+      { text: 'A1\n\nB2', start: 0, end: 6 },
+      { text: 'B2\n\nC3', start: 4, end: 10 },
+      { text: 'C3\n\nD4', start: 8, end: 14 },
+      { text: 'D4', start: 12, end: 14 }
+    ])
   })
 
   test('should handle empty string with chunkStrategy', () => {
-    expect(split('', { chunkStrategy: 'paragraph' })).toEqual([''])
+    expect(split('', { chunkStrategy: 'paragraph' })).toEqual([
+      { text: '', start: 0, end: 0 }
+    ])
   })
 
   test('should handle array of empty strings with chunkStrategy', () => {
-    expect(split(['', ''], { chunkStrategy: 'paragraph' })).toEqual(['', ''])
+    expect(split(['', ''], { chunkStrategy: 'paragraph' })).toEqual([
+      { text: [''], start: 0, end: 0 },
+      { text: [''], start: 0, end: 0 }
+    ])
   })
 
   test('should handle array of empty strings', () => {
-    expect(split(['', ''])).toEqual(['', ''])
+    expect(split(['', ''])).toEqual([
+      { text: [''], start: 0, end: 0 },
+      { text: [''], start: 0, end: 0 }
+    ])
   })
 
   test('should handle array of empty strings with chunkSize and chunkStrategy', () => {
     expect(
       split(['', ''], { chunkSize: 5, chunkStrategy: 'paragraph' })
-    ).toEqual(['', ''])
+    ).toEqual([
+      { text: [''], start: 0, end: 0 },
+      { text: [''], start: 0, end: 0 }
+    ])
   })
 
   test('should cover array input branch for unit-based chunking', () => {
     const input = ['A', 'B', 'C']
     // This triggers the Array.isArray(text) && text !== texts branch
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual(['A', 'B', 'C'])
+    expect(result).toEqual([
+      { text: ['A'], start: 0, end: 1 },
+      { text: ['B'], start: 1, end: 2 },
+      { text: ['C'], start: 2, end: 3 }
+    ])
   })
 
   test('should cover array input branch for unit-based chunking with empty strings', () => {
     const input = ['', 'A', '']
     // This triggers the Array.isArray(text) && text !== texts branch for empty and non-empty
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual(['', 'A', ''])
+    expect(result).toEqual([
+      { text: [''], start: 0, end: 0 },
+      { text: ['A'], start: 0, end: 1 },
+      { text: [''], start: 1, end: 1 }
+    ])
   })
 
   test('should cover array input branch for unit-based chunking with empty array', () => {
@@ -143,17 +195,24 @@ describe('split', () => {
     const input = ['A', 'B', 'C', 'D']
     // This triggers the Array.isArray(text) && text !== texts branch and uses the mapped result
     const result = split(input, { chunkSize: 1, chunkStrategy: 'paragraph' })
-    expect(result).toEqual(['A', 'B', 'C', 'D'])
+    expect(result).toEqual([
+      { text: ['A'], start: 0, end: 1 },
+      { text: ['B'], start: 1, end: 2 },
+      { text: ['C'], start: 2, end: 3 },
+      { text: ['D'], start: 3, end: 4 }
+    ])
   })
 
   test('split and getChunk are co-functions', () => {
     const input = ['abcde', 'fghij']
     let offset = 0
     for (const chunk of iterateChunks(input, { chunkSize: 2 })) {
-      const chunkFromGetChunk = getChunk(input, offset, offset + chunk.length)
+      const chunkLength = chunk.end - chunk.start
+      const chunkFromGetChunk = getChunk(input, offset, offset + chunkLength)
       const chunkStr = Array.isArray(chunkFromGetChunk) ? chunkFromGetChunk.join('') : chunkFromGetChunk
-      expect(chunkStr).toBe(chunk)
-      offset += chunk.length
+      const expectedText = Array.isArray(chunk.text) ? chunk.text.join('') : chunk.text
+      expect(chunkStr).toBe(expectedText)
+      offset += chunkLength
     }
   })
 })
@@ -195,34 +254,41 @@ describe('split (coverage edge cases)', () => {
     const input = 'A\n\nB'
     // Both paragraphs fit in one chunk
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual(['A', 'B'])
+    expect(result).toEqual([
+      { text: 'A', start: 0, end: 1 },
+      { text: 'B', start: 3, end: 4 }
+    ])
   })
 
   test('should handle a single unit larger than chunk size', () => {
     const input = 'ThisIsAVeryLongParagraph'
     // Paragraph is longer than chunkSize, so it should still yield it
     const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph' })
-    expect(result[0]).toBe('ThisIsAVeryLongParagraph')
+    expect(result[0]).toEqual({ text: 'ThisIsAVeryLongParagraph', start: 0, end: 24 })
   })
 
   test('should cover lengthFunction branch for character-based chunking', () => {
     const input = 'abcdef'
     // Use a custom lengthFunction to trigger the branch
     const result = split(input, { chunkSize: 2, lengthFunction: t => t.length })
-    expect(result[0]).toBe('ab')
+    expect(result[0]).toEqual({ text: 'ab', start: 0, end: 2 })
   })
 
   test("should cover the 'break' branch when currentLen > chunkSize in character-based chunking", () => {
     const input = 'abcde'
     // chunkSize 2, so after 'ab', 'c' will be a new chunk
     const result = split(input, { chunkSize: 2 })
-    expect(result).toEqual(['ab', 'cd', 'e'])
+    expect(result).toEqual([
+      { text: 'ab', start: 0, end: 2 },
+      { text: 'cd', start: 2, end: 4 },
+      { text: 'e', start: 4, end: 5 }
+    ])
   })
 
   test("should cover the 'end === start' branch in character-based chunking", () => {
     const input = 'a'
     // chunkSize 0 will force end === start
     const result = split(input, { chunkSize: 0 })
-    expect(result[0]).toBe('a')
+    expect(result[0]).toEqual({ text: 'a', start: 0, end: 1 })
   })
 })
