@@ -88,26 +88,25 @@ export function* iterateChunks(
   let globalOffset = 0
 
   for (const currentText of texts) {
-    if (currentText.length === 0) {
+    if (currentText.length === 0)
       yield {
         text: Array.isArray(text) ? [''] : '',
         start: globalOffset,
         end: globalOffset
       }
-    } else if (chunkStrategy === 'paragraph') {
+    else if (chunkStrategy === 'paragraph') {
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
       const joiner: string = '\n\n'
       const joinerLen: number = getLength(joiner, lengthFunction)
 
-      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen)) {
-        for (const { unit, start, end } of chunkUnits) {
+      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
+        for (const { unit, start, end } of chunkUnits)
           yield {
             text: Array.isArray(text) ? [unit] : unit,
             start: globalOffset + start,
             end: globalOffset + end
           }
-        }
-      } else {
+      else {
         const chunks = chunkByGreedySlidingWindow(
           chunkUnits,
           lengthFunction,
@@ -116,13 +115,12 @@ export function* iterateChunks(
           joiner,
           chunkOverlap
         )
-        for (const chunk of chunks) {
+        for (const chunk of chunks)
           yield {
             text: Array.isArray(text) ? [chunk.text] : chunk.text,
             start: globalOffset + chunk.start,
             end: globalOffset + chunk.end
           }
-        }
       }
     } else {
       // Default character-based chunking
@@ -133,13 +131,12 @@ export function* iterateChunks(
         chunkOverlap,
         globalOffset
       )
-      for (const chunk of chunks) {
+      for (const chunk of chunks)
         yield {
           text: Array.isArray(text) ? [chunk.text] : chunk.text,
           start: chunk.start,
           end: chunk.end
         }
-      }
     }
 
     globalOffset += currentText.length
