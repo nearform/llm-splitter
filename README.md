@@ -75,13 +75,13 @@ getChunk(['abc', 'def', 'ghi'], 2, 7) // ['c', 'def', 'g']
 - `lengthFunction` (function): Optional function to calculate the length of the text (default: `text.length`)
 - `chunkStrategy` ('paragraph'): Optional chunking strategy. If set, overrides character-based chunking.
 
-### `Chunk`
+### `ChunkResult`
 
-- `chunk` (string): The chunked text
-- `startIndex` (number): Index in the input array or unit array
-- `startPosition` (number): Character offset in the original string
-- `endIndex` (number): Index in the input array or unit array
-- `endPosition` (number): Character offset in the original string
+- `text` (`string | string[]`): The chunked text. May be a string or an array of strings, depending on input and chunking strategy.
+- `start` (`number`): Start character offset in the original input.
+- `end` (`number`): End character offset in the original input.
+
+> Note: Some older documentation or code comments may refer to this as `Chunk`. The correct exported type is `ChunkResult`.
 
 ## Configuration & Extensibility
 
