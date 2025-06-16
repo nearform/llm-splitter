@@ -113,7 +113,7 @@ export function chunkByCharacter(
  * Generator function to yield chunks of text based on a greedy sliding window approach.
  * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
  *
- * @param chunkUnits - Array of chunk units (sentences or paragraphs) with their text and positions.
+ * @param chunkUnits - Array of chunk units (paragraphs) with their text and positions.
  * @param lengthFunction - Optional function to calculate the length of the text.
  * @param joinerLen - Length of the joiner string used to combine units.
  * @param chunkSize - Maximum size of each chunk.
