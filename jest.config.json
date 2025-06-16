@@ -1,4 +1,5 @@
 {
+  "collectCoverage": true,
   "moduleFileExtensions": ["js", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",

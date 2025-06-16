@@ -10,7 +10,7 @@ export function getLength(
   text: string,
   lengthFunction?: (text: string) => number
 ): number {
-  return lengthFunction ? lengthFunction(text) : text.length
+  return lengthFunction?.(text) ?? text.length
 }
 
 /**

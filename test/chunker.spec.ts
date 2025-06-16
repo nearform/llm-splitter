@@ -209,8 +209,12 @@ describe('split', () => {
     for (const chunk of iterateChunks(input, { chunkSize: 2 })) {
       const chunkLength = chunk.end - chunk.start
       const chunkFromGetChunk = getChunk(input, offset, offset + chunkLength)
-      const chunkStr = Array.isArray(chunkFromGetChunk) ? chunkFromGetChunk.join('') : chunkFromGetChunk
-      const expectedText = Array.isArray(chunk.text) ? chunk.text.join('') : chunk.text
+      const chunkStr = Array.isArray(chunkFromGetChunk)
+        ? chunkFromGetChunk.join('')
+        : chunkFromGetChunk
+      const expectedText = Array.isArray(chunk.text)
+        ? chunk.text.join('')
+        : chunk.text
       expect(chunkStr).toBe(expectedText)
       offset += chunkLength
     }
@@ -264,7 +268,11 @@ describe('split (coverage edge cases)', () => {
     const input = 'ThisIsAVeryLongParagraph'
     // Paragraph is longer than chunkSize, so it should still yield it
     const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph' })
-    expect(result[0]).toEqual({ text: 'ThisIsAVeryLongParagraph', start: 0, end: 24 })
+    expect(result[0]).toEqual({
+      text: 'ThisIsAVeryLongParagraph',
+      start: 0,
+      end: 24
+    })
   })
 
   test('should cover lengthFunction branch for character-based chunking', () => {
