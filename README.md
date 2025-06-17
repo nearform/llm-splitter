@@ -8,7 +8,7 @@ Efficient, configurable text chunking utility for LLM vectorization pipelines. D
 - Supports character and paragraph chunking strategies
 - Configurable chunk size and overlap
 - Returns detailed metadata for each chunk (start/end indices and positions)
-- TypeScript support
+- TypeScript support with exported types
 - Robust, tested API
 
 ## Installation
@@ -20,37 +20,43 @@ npm install llm-chunk
 ## Usage
 
 ```typescript
-import { split, iterateChunks, getChunk, SplitOptions, Chunk } from 'llm-chunk'
+import {
+  split,
+  iterateChunks,
+  getChunk,
+  type SplitOptions,
+  type ChunkResult
+} from 'llm-chunk'
 
 const text =
   'This is a long document. It has multiple sentences.\n\nAnd paragraphs.'
 const options: SplitOptions = {
   chunkSize: 50,
   chunkOverlap: 10,
-  chunkStrategy: 'paragraph' // only 'paragraph' is supported as a strategy override
+  chunkStrategy: 'paragraph' // or omit for character-based chunking
 }
 
 // Get all chunks as an array
-const chunks: Chunk[] = split(text, options)
+const chunks: ChunkResult[] = split(text, options)
 
 // Or use the generator for streaming/large data
 for (const chunk of iterateChunks(text, options)) {
   console.log(chunk)
 }
 
-// Get a substring from the original text(s)
+// Get a substring or segment from the original text(s)
 const sub = getChunk(text, 0, 20)
 ```
 
 ## API
 
-### `split(text, options?): Chunk[]`
+### `split(text, options?): ChunkResult[]`
 
 Splits the input text(s) into an array of chunk objects.
 
-- Returns: `Chunk[]` – An array of chunk metadata objects. Each object contains the chunked text and its metadata.
+- Returns: `ChunkResult[]` – Each object contains the chunked text and its metadata.
 
-### `iterateChunks(text, options?): Generator<Chunk>`
+### `iterateChunks(text, options?): Generator<ChunkResult>`
 
 Yields chunk objects one at a time (memory efficient for large inputs).
 
@@ -81,8 +87,6 @@ getChunk(['abc', 'def', 'ghi'], 2, 7) // ['c', 'def', 'g']
 - `start` (`number`): Start character offset in the original input.
 - `end` (`number`): End character offset in the original input.
 
-> Note: Some older documentation or code comments may refer to this as `Chunk`. The correct exported type is `ChunkResult`.
-
 ## Configuration & Extensibility
 
 You can extend chunking strategies by providing custom logic or by contributing to the project. The API is designed for easy integration into LLM pipelines and vector stores.
@@ -99,7 +103,7 @@ Contributions, issues, and feature requests are welcome! Please open an issue or
 
 ## License
 
-ISC
+MIT
 
 ---
 
