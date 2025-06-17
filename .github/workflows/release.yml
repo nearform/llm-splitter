@@ -21,9 +21,19 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      id-token: write
     steps:
       - uses: nearform-actions/optic-release-automation-action@v4
         with:
           semver: ${{ github.event.inputs.semver }}
+          npm-token: >-
+            ${{ secrets[format('NPM_TOKEN_{0}', github.actor)] ||
+            secrets.NPM_TOKEN }}
+          optic-token: >-
+            ${{ secrets[format('OPTIC_TOKEN_{0}', github.actor)] ||
+            secrets.OPTIC_TOKEN }}
           commit-message: 'chore: release {version}'
-          build-command: npm ci
+          build-command: |
+            npm ci
+            npm run build
+          provenance: true
