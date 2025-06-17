@@ -1,6 +1,10 @@
 {
   "collectCoverage": true,
+  "extensionsToTreatAsEsm": [".ts"],
   "moduleFileExtensions": ["js", "ts"],
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1"
+  },
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".spec.ts$",
@@ -11,10 +15,6 @@
         "useESM": true
       }
     ]
-  },
-  "extensionsToTreatAsEsm": [".ts"],
-  "moduleNameMapper": {
-    "^(\\.{1,2}/.*)\\.js$": "$1"
   },
   "verbose": true
 }
