@@ -1,5 +1,5 @@
 import { split, getChunk, iterateChunks } from '../src/chunker'
-import { type SplitOptions, type ChunkResult } from '../src/types'
+import { type SplitOptions } from '../src/types'
 
 describe('split', () => {
   test('should split a single string into correct sizes', () => {
@@ -204,9 +204,25 @@ describe('split', () => {
   })
 
   test('split and getChunk are co-functions', () => {
-    const input = ['abcde', 'fghij']
+    // Generate a large array of random word strings of varying sizes
+    function randomWord() {
+      const length = Math.floor(Math.random() * 8) + 2
+      return Array.from({ length }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('')
+    }
+    function randomPhrase() {
+      const wordCount = Math.floor(Math.random() * 10) + 1
+      return Array.from({ length: wordCount }, randomWord).join(' ')
+    }
+    // At least a few hundred words total
+    let totalWords = 0
+    const input: string[] = []
+    while (totalWords < 500) {
+      const phrase = randomPhrase()
+      totalWords += phrase.split(' ').length
+      input.push(phrase)
+    }
     let offset = 0
-    for (const chunk of iterateChunks(input, { chunkSize: 2 })) {
+    for (const chunk of iterateChunks(input, { chunkSize: 50 })) {
       const chunkLength = chunk.end - chunk.start
       const chunkFromGetChunk = getChunk(input, offset, offset + chunkLength)
       const chunkStr = Array.isArray(chunkFromGetChunk)
