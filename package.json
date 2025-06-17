@@ -1,5 +1,6 @@
 {
-  "name": "llm-chunk",
+  "name": "@nearform/llm-chunk",
+  "private": false,
   "version": "1.0.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
   "main": "dist/chunker.js",
@@ -24,7 +25,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/nearform/hub-template/issues"
   },
