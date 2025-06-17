@@ -1,13 +1,22 @@
 {
-  "name": "hub-template",
+  "name": "llm-chunk",
   "version": "1.0.0",
-  "description": "Template to start a new repository on the hub",
-  "main": "index.js",
+  "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
+  "main": "dist/chunker.js",
+  "types": "dist/chunker.d.ts",
   "type": "module",
   "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "prebuild": "rm -rf dist",
+    "pretest": "npm run build",
+    "test:unit": "jest --config jest.config.json",
+    "test": "npm run test:unit",
     "lint": "eslint .",
-    "test": "echo \"Error: no test specified\" && exit 0",
-    "prepare": "husky"
+    "prepare": "husky",
+    "format": "prettier --write . && eslint --cache --fix .",
+    "check": "npm run lint && npm run test:unit && npm run check-format",
+    "check-lint": "eslint .",
+    "check-format": "prettier --check ."
   },
   "repository": {
     "type": "git",
@@ -29,8 +38,12 @@
     "eslint-plugin-prettier": "^5.4.1",
     "globals": "^16.2.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.1.2",
-    "prettier": "^3.5.3"
+    "lint-staged": "^16.1.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "@types/jest": "^29.5.6"
   },
   "lint-staged": {
     "*.{js,jsx}": "eslint --cache --fix"

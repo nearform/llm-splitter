@@ -1,0 +1,11 @@
+{
+  "collectCoverage": true,
+  "moduleFileExtensions": ["js", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".spec.ts$",
+  "transform": {
+    "^.+\\.ts$": "ts-jest"
+  },
+  "verbose": true
+}
