@@ -206,11 +206,11 @@ describe('split', () => {
   test('split and getChunk are co-functions', () => {
     // Generate a large array of random word strings of varying sizes
     function randomWord() {
-      const length = Math.floor(Math.random() * 8) + 2
+      const length = Math.floor(Math.random() * 16) + 2
       return Array.from({ length }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('')
     }
     function randomPhrase() {
-      const wordCount = Math.floor(Math.random() * 10) + 1
+      const wordCount = Math.floor(Math.random() * 50) + 5
       return Array.from({ length: wordCount }, randomWord).join(' ')
     }
     // At least a few hundred words total
