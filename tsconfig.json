@@ -1,14 +1,12 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "target": "es2022",
-    "module": "es2022",
+    "target": "ES2022",
+    "module": "NodeNext",
     "lib": ["ES2022"],
     "sourceMap": true,
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "strict": true,
-    "allowSyntheticDefaultImports": true
+    "moduleResolution": "nodenext",
+    "strict": true
   },
   "include": ["src/**/*.ts", "./package.json"],
   "exclude": ["node_modules/**/*"]

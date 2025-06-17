@@ -1,11 +1,11 @@
-import type { SplitOptions, ChunkUnit, ChunkResult } from './types'
+import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
 import {
   canFitAllUnits,
   chunkByCharacter,
   chunkByGreedySlidingWindow,
   getLength,
   getUnits
-} from './utils'
+} from './utils.js'
 
 /**
  * Returns the substring from the input text(s) between start and end character positions (character-based only).

@@ -1,4 +1,4 @@
-import { ChunkUnit } from './types'
+import { ChunkUnit } from './types.js'
 
 /**
  * Get the length of a text based on the provided length function or default to character count.
