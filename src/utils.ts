@@ -1,17 +1,4 @@
-import { ChunkUnit } from './types.js'
-
-/**
- * Get the length of a text based on the provided length function or default to character count.
- * @param text - The input text.
- * @param lengthFunction - Optional function to calculate the length of the text.
- * @returns The length of the text.
- */
-export function getLength(
-  text: string,
-  lengthFunction?: (text: string) => number
-): number {
-  return lengthFunction?.(text) ?? text.length
-}
+import { ChunkResult, ChunkUnit } from './types.js'
 
 /**
  * Get text units based on the specified strategy.
@@ -38,22 +25,22 @@ export function getUnits(text: string): ChunkUnit[] {
 /**
  * Check if all chunk units can fit within the specified chunk size.
  * @param chunkUnits - Array of chunk units with their text and positions.
- * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param splitter - Optional function to split the text into units.
  * @param chunkSize - Maximum size of each chunk.
  * @param joinerLen - Length of the joiner string used to combine units.
  * @returns True if all units can fit, false otherwise.
  */
 export function canFitAllUnits(
   chunkUnits: ChunkUnit[],
-  lengthFunction: ((text: string) => number) | undefined,
+  splitter: ((text: string) => string[]) | undefined,
   chunkSize: number,
   joinerLen: number
 ): boolean {
   return (
-    chunkUnits.every(u => getLength(u.unit, lengthFunction) <= chunkSize) &&
+    chunkUnits.every(u => (splitter ? splitter(u.unit).length : u.unit.length) <= chunkSize) &&
     chunkUnits.reduce(
       (acc: number, u: { unit: string }, i: number) =>
-        acc + getLength(u.unit, lengthFunction) + (i > 0 ? joinerLen : 0),
+        acc + (splitter ? splitter(u.unit).length : u.unit.length) + (i > 0 ? joinerLen : 0),
       0
     ) <= chunkSize
   )
@@ -64,7 +51,7 @@ export function canFitAllUnits(
  *
  * @param currentText - The text to chunk.
  * @param chunkSize - Maximum size of each chunk.
- * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param splitter - Optional function to split the text into units.
  * @param chunkOverlap - Number of characters to overlap between chunks.
  * @param startOffset - Starting character position offset for calculating absolute positions.
  * @returns Array of chunk objects with text and positions.
@@ -72,21 +59,21 @@ export function canFitAllUnits(
 export function chunkByCharacter(
   currentText: string,
   chunkSize: number,
-  lengthFunction: ((text: string) => number) | undefined,
+  splitter: ((text: string) => string[]) | undefined,
   chunkOverlap: number,
   startOffset: number = 0
-): { text: string; start: number; end: number }[] {
+): ChunkResult[] {
   let start = 0
   const textLen = currentText.length
-  const chunks: { text: string; start: number; end: number }[] = []
+  const chunks: ChunkResult[] = []
   while (start < textLen) {
-    // Binary search for the largest end such that getLength(currentText.slice(start, end)) <= chunkSize
+    // Binary search for the largest end such that splitter(currentText.slice(start, end)).length <= chunkSize
     let low = start + 1
     let high = textLen
     let bestEnd = start + 1
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
-      const len = getLength(currentText.slice(start, mid), lengthFunction)
+      const len = splitter ? splitter(currentText.slice(start, mid)).length : currentText.slice(start, mid).length
       if (len <= chunkSize) {
         bestEnd = mid
         low = mid + 1
@@ -114,7 +101,7 @@ export function chunkByCharacter(
  * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
  *
  * @param chunkUnits - Array of chunk units (paragraphs) with their text and positions.
- * @param lengthFunction - Optional function to calculate the length of the text.
+ * @param splitter - Optional function to split the text into units.
  * @param joinerLen - Length of the joiner string used to combine units.
  * @param chunkSize - Maximum size of each chunk.
  * @param joiner - String used to join units into a chunk.
@@ -123,22 +110,22 @@ export function chunkByCharacter(
  */
 export function chunkByGreedySlidingWindow(
   chunkUnits: ChunkUnit[],
-  lengthFunction: ((text: string) => number) | undefined,
+  splitter: ((text: string) => string[]) | undefined,
   joinerLen: number,
   chunkSize: number,
   joiner: string,
   chunkOverlap: number
-): { text: string; start: number; end: number }[] {
+): ChunkResult[] {
   let i = 0
   const n = chunkUnits.length
-  const chunks: { text: string; start: number; end: number }[] = []
+  const chunks: ChunkResult[] = []
   while (i < n) {
     let currentLen = 0
     let first = true
     let j = i
     // Find the maximal window [i, j) that fits
     while (j < n) {
-      const unitLen = getLength(chunkUnits[j].unit, lengthFunction)
+      const unitLen = splitter ? splitter(chunkUnits[j].unit).length : chunkUnits[j].unit.length
       const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
       if (simulatedLen > chunkSize && j > i) break
       if (simulatedLen > chunkSize && j === i) {

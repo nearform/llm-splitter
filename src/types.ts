@@ -4,10 +4,10 @@ export interface SplitOptions {
   /** Number of characters to overlap between chunks (default: 0). */
   chunkOverlap?: number
   /**
-   * Optional function to calculate the length of the text.
-   * If omitted, defaults to the number of characters (text.length).
+   * Optional function to split text into units.
+   * If omitted, defaults to splitting character by character.
    */
-  lengthFunction?: (text: string) => number
+  splitter?: (text: string) => string[]
   /**
    * Optional chunking strategy: 'paragraph'.
    * If set, overrides character-based chunking. Default: 'paragraph'.

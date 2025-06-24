@@ -3,7 +3,6 @@ import {
   canFitAllUnits,
   chunkByCharacter,
   chunkByGreedySlidingWindow,
-  getLength,
   getUnits
 } from './utils.js'
 
@@ -80,7 +79,7 @@ export function* iterateChunks(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    lengthFunction,
+    splitter,
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
@@ -97,9 +96,9 @@ export function* iterateChunks(
     else if (chunkStrategy === 'paragraph') {
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
       const joiner: string = '\n\n'
-      const joinerLen: number = getLength(joiner, lengthFunction)
+      const joinerLen: number = splitter ? splitter(joiner).length : joiner.length
 
-      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
+      if (canFitAllUnits(chunkUnits, splitter, chunkSize, joinerLen))
         for (const { unit, start, end } of chunkUnits)
           yield {
             text: Array.isArray(text) ? [unit] : unit,
@@ -109,7 +108,7 @@ export function* iterateChunks(
       else {
         const chunks = chunkByGreedySlidingWindow(
           chunkUnits,
-          lengthFunction,
+          splitter,
           joinerLen,
           chunkSize,
           joiner,
@@ -117,7 +116,7 @@ export function* iterateChunks(
         )
         for (const chunk of chunks)
           yield {
-            text: Array.isArray(text) ? [chunk.text] : chunk.text,
+            text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
             start: globalOffset + chunk.start,
             end: globalOffset + chunk.end
           }
@@ -127,13 +126,13 @@ export function* iterateChunks(
       const chunks = chunkByCharacter(
         currentText,
         chunkSize,
-        lengthFunction,
+        splitter,
         chunkOverlap,
         globalOffset
       )
       for (const chunk of chunks)
         yield {
-          text: Array.isArray(text) ? [chunk.text] : chunk.text,
+          text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
           start: chunk.start,
           end: chunk.end
         }
