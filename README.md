@@ -1,4 +1,4 @@
-# llm-chunk
+# @nearform/llm-chunk
 
 Efficient, configurable text chunking utility for LLM vectorization pipelines. Designed for high performance and flexibility, it returns rich chunk metadata for downstream vectorization or retrieval tasks.
 
@@ -14,7 +14,7 @@ Efficient, configurable text chunking utility for LLM vectorization pipelines. D
 ## Installation
 
 ```bash
-npm install llm-chunk
+npm install @nearform/llm-chunk
 ```
 
 ## Usage
