@@ -97,9 +97,7 @@ describe('split', () => {
     const input = 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3'
     const result = split(input, { chunkSize: 100, chunkStrategy: 'paragraph' })
     expect(result).toEqual([
-      { text: 'Para1 line1\nPara1 line2', start: 0, end: 23 },
-      { text: 'Para2 line1', start: 25, end: 36 },
-      { text: 'Para3', start: 38, end: 43 }
+      { text: 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3', start: 0, end: 43 }
     ])
   })
 
@@ -303,13 +301,12 @@ describe('getChunk', () => {
 })
 
 describe('split (coverage edge cases)', () => {
-  test('should cover allUnitsFit branch for paragraph', () => {
+  test('should cover paragraph chunking with small chunk size', () => {
     const input = 'A\n\nB'
-    // Both paragraphs fit in one chunk
+    // Both paragraphs fit in one chunk with joiner
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
     expect(result).toEqual([
-      { text: 'A', start: 0, end: 1 },
-      { text: 'B', start: 3, end: 4 }
+      { text: 'A\n\nB', start: 0, end: 4 }
     ])
   })
 
@@ -368,8 +365,8 @@ describe('split (coverage edge cases)', () => {
   test('should handle array input with paragraph strategy', () => {
     const input = ['Para1 line1\nPara1 line2\n\nPara2 line1', 'Para3\n\nPara4']
     const result = split(input, { chunkSize: 100, chunkStrategy: 'paragraph' })
-    expect(result[0].text).toEqual(['Para1 line1\nPara1 line2']) // Should be array format
-    expect(result[1].text).toEqual(['Para2 line1'])
+    expect(result[0].text).toEqual(['Para1 line1\nPara1 line2\n\nPara2 line1']) // Should be array format
+    expect(result[1].text).toEqual(['Para3\n\nPara4'])
   })
 
   // Test for utils.ts:85 - bestEnd === start case (force at least one character)
@@ -395,7 +392,7 @@ describe('split (coverage edge cases)', () => {
     const input = ['Para1\n\nPara2', 'Para3']
     const wordSplitter = (text: string) => text.split(/\s+/)
     const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph', splitter: wordSplitter })
-    expect(result[0].text).toEqual(['Para1']) // Should use array format
+    expect(result[0].text).toEqual(['Para1\n\nPara2']) // Should use array format
   })
 
   // Test for chunker.ts line 119 - array input character chunking with splitter

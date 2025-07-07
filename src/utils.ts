@@ -23,30 +23,6 @@ export function getUnits(text: string): ChunkUnit[] {
 }
 
 /**
- * Check if all chunk units can fit within the specified chunk size.
- * @param chunkUnits - Array of chunk units with their text and positions.
- * @param splitter - Optional function to split the text into units.
- * @param chunkSize - Maximum size of each chunk.
- * @param joinerLen - Length of the joiner string used to combine units.
- * @returns True if all units can fit, false otherwise.
- */
-export function canFitAllUnits(
-  chunkUnits: ChunkUnit[],
-  splitter: ((text: string) => string[]) | undefined,
-  chunkSize: number,
-  joinerLen: number
-): boolean {
-  return (
-    chunkUnits.every(u => (splitter ? splitter(u.unit).length : u.unit.length) <= chunkSize) &&
-    chunkUnits.reduce(
-      (acc: number, u: { unit: string }, i: number) =>
-        acc + (splitter ? splitter(u.unit).length : u.unit.length) + (i > 0 ? joinerLen : 0),
-      0
-    ) <= chunkSize
-  )
-}
-
-/**
  * Chunk the text by character count, with optional overlapping.
  *
  * @param currentText - The text to chunk.
@@ -98,35 +74,40 @@ export function chunkByCharacter(
 
 /**
  * Generator function to yield chunks of text based on a greedy sliding window approach.
- * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ * Each chunk will overlap with the previous chunk by `chunkOverlap` tokens (if provided).
  *
  * @param chunkUnits - Array of chunk units (paragraphs) with their text and positions.
- * @param splitter - Optional function to split the text into units.
- * @param joinerLen - Length of the joiner string used to combine units.
- * @param chunkSize - Maximum size of each chunk.
- * @param joiner - String used to join units into a chunk.
- * @param chunkOverlap - Number of characters to overlap between chunks.
+ * @param splitter - Optional function to split the text into tokens. Defaults to character-based splitting if not provided.
+ * @param chunkSize - Maximum size of each chunk in tokens.
+ * @param chunkOverlap - Number of tokens to overlap between chunks.
  * @returns Array of chunk objects with text and positions.
  */
-export function chunkByGreedySlidingWindow(
+export function chunkByParagraph(
   chunkUnits: ChunkUnit[],
   splitter: ((text: string) => string[]) | undefined,
-  joinerLen: number,
   chunkSize: number,
-  joiner: string,
   chunkOverlap: number
 ): ChunkResult[] {
   let i = 0
   const n = chunkUnits.length
   const chunks: ChunkResult[] = []
+  const joiner = '\n\n'
+  
+  // Default splitter splits by character if no custom splitter provided
+  const defaultSplitter = (text: string) => text.split('')
+  const effectiveSplitter = splitter || defaultSplitter
+  const joinerLen = effectiveSplitter(joiner).length
+  
   while (i < n) {
     let currentLen = 0
     let first = true
     let j = i
-    // Find the maximal window [i, j) that fits
+    
+    // Find the maximal window [i, j) that fits within chunkSize
     while (j < n) {
-      const unitLen = splitter ? splitter(chunkUnits[j].unit).length : chunkUnits[j].unit.length
+      const unitLen = effectiveSplitter(chunkUnits[j].unit).length
       const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
+      
       if (simulatedLen > chunkSize && j > i) break
       if (simulatedLen > chunkSize && j === i) {
         // Force at least one unit per chunk
@@ -137,6 +118,7 @@ export function chunkByGreedySlidingWindow(
       first = false
       j++
     }
+    
     if (j > i) {
       const chunkStr = chunkUnits
         .slice(i, j)
@@ -148,12 +130,17 @@ export function chunkByGreedySlidingWindow(
         end: chunkUnits[j - 1].end
       })
     }
-    // Advance window
-    if (chunkOverlap > 0 && j - i > 0) {
-      i += Math.max(1, j - i - chunkOverlap)
+    
+    // Calculate overlap and advance window
+    if (chunkOverlap > 0 && j > i) {
+      // Move backward by chunkOverlap units from the end of current chunk
+      // But ensure we always make progress to avoid infinite loop
+      const overlapStart = Math.max(i + 1, j - chunkOverlap)
+      i = overlapStart
     } else {
       i = j
     }
   }
+  
   return chunks
 }

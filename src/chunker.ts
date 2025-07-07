@@ -1,8 +1,7 @@
 import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
 import {
-  canFitAllUnits,
   chunkByCharacter,
-  chunkByGreedySlidingWindow,
+  chunkByParagraph,
   getUnits
 } from './utils.js'
 
@@ -95,32 +94,19 @@ export function* iterateChunks(
       }
     else if (chunkStrategy === 'paragraph') {
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
-      const joiner: string = '\n\n'
-      const joinerLen: number = splitter ? splitter(joiner).length : joiner.length
 
-      if (canFitAllUnits(chunkUnits, splitter, chunkSize, joinerLen))
-        for (const { unit, start, end } of chunkUnits)
-          yield {
-            text: Array.isArray(text) ? [unit] : unit,
-            start: globalOffset + start,
-            end: globalOffset + end
-          }
-      else {
-        const chunks = chunkByGreedySlidingWindow(
-          chunkUnits,
-          splitter,
-          joinerLen,
-          chunkSize,
-          joiner,
-          chunkOverlap
-        )
-        for (const chunk of chunks)
-          yield {
-            text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
-            start: globalOffset + chunk.start,
-            end: globalOffset + chunk.end
-          }
-      }
+      const chunks = chunkByParagraph(
+        chunkUnits,
+        splitter,
+        chunkSize,
+        chunkOverlap
+      )
+      for (const chunk of chunks)
+        yield {
+          text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
+          start: globalOffset + chunk.start,
+          end: globalOffset + chunk.end
+        }
     } else {
       // Default character-based chunking
       const chunks = chunkByCharacter(
