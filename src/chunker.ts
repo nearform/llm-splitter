@@ -97,7 +97,7 @@ export function* iterateChunks(
 
       const chunks = chunkByParagraph(
         chunkUnits,
-        splitter,
+        splitter || ((text: string) => text.split('')),
         chunkSize,
         chunkOverlap
       )
@@ -112,7 +112,7 @@ export function* iterateChunks(
       const chunks = chunkByCharacter(
         currentText,
         chunkSize,
-        splitter,
+        splitter || ((text: string) => text.split('')),
         chunkOverlap,
         globalOffset
       )

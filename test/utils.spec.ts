@@ -1,9 +1,12 @@
 import { chunkByCharacter, chunkByParagraph } from '../src/utils'
 import { get_encoding } from 'tiktoken'
 
+// Default character-based splitter used across tests
+const defaultSplitter = (text: string) => text.split('')
+
 describe('chunkByCharacter', () => {
   test('yields correct chunks for basic input', () => {
-    const result = Array.from(chunkByCharacter('abcdef', 2, undefined, 0))
+    const result = Array.from(chunkByCharacter('abcdef', 2, defaultSplitter, 0))
     expect(result).toEqual([
       { text: 'ab', start: 0, end: 2 },
       { text: 'cd', start: 2, end: 4 },
@@ -12,7 +15,7 @@ describe('chunkByCharacter', () => {
   })
 
   test('handles overlap', () => {
-    const result = Array.from(chunkByCharacter('abcdef', 3, undefined, 1))
+    const result = Array.from(chunkByCharacter('abcdef', 3, defaultSplitter, 1))
     expect(result).toEqual([
       { text: 'abc', start: 0, end: 3 },
       { text: 'cde', start: 2, end: 5 },
@@ -28,13 +31,13 @@ describe('chunkByCharacter', () => {
   })
 
   test('handles empty input', () => {
-    const result = Array.from(chunkByCharacter('', 2, undefined, 0))
+    const result = Array.from(chunkByCharacter('', 2, defaultSplitter, 0))
     expect(result).toEqual([])
   })
 
   // Test for utils.ts:85 - bestEnd === start case  
   test('handles edge case in chunkByCharacter where bestEnd equals start', () => {
-    const result = chunkByCharacter('abc', 0, undefined, 0, 0)
+    const result = chunkByCharacter('abc', 0, defaultSplitter, 0, 0)
     expect(result.length).toBeGreaterThan(0) // Should still produce at least one chunk
     expect(result[0].text).toBe('a') // Should include at least one character
   })
@@ -59,7 +62,7 @@ describe('chunkByParagraph', () => {
       { unit: 'C', start: 4, end: 5 }
     ]
     const result = Array.from(
-      chunkByParagraph(units, undefined, 4, 0)
+      chunkByParagraph(units, defaultSplitter, 4, 0)
     )
     expect(result).toEqual([
       { text: 'A\n\nB', start: 0, end: 3 },
@@ -74,7 +77,7 @@ describe('chunkByParagraph', () => {
       { unit: 'C', start: 4, end: 5 }
     ]
     const result = Array.from(
-      chunkByParagraph(units, undefined, 4, 1)
+      chunkByParagraph(units, defaultSplitter, 4, 1)
     )
     expect(result).toEqual([
       { text: 'A\n\nB', start: 0, end: 3 },
@@ -89,14 +92,14 @@ describe('chunkByParagraph', () => {
       { unit: 'B', start: 9, end: 10 }
     ]
     const result = Array.from(
-      chunkByParagraph(units, undefined, 5, 0)
+      chunkByParagraph(units, defaultSplitter, 5, 0)
     )
     expect(result[0]).toEqual({ text: 'LONGUNIT', start: 0, end: 8 })
   })
 
   test('handles empty input', () => {
     const result = Array.from(
-      chunkByParagraph([], undefined, 5, 0)
+      chunkByParagraph([], defaultSplitter, 5, 0)
     )
     expect(result).toEqual([])
   })
@@ -107,7 +110,7 @@ describe('chunkByParagraph', () => {
       { unit: 'VERYLONGUNIT', start: 0, end: 12 },
       { unit: 'short', start: 13, end: 18 }
     ]
-    const result = chunkByParagraph(units, undefined, 5, 0)
+    const result = chunkByParagraph(units, defaultSplitter, 5, 0)
     expect(result[0].text).toBe('VERYLONGUNIT') // Should force inclusion even if too large
     expect(result.length).toBeGreaterThan(0)
   })

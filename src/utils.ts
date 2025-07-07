@@ -27,7 +27,7 @@ export function getUnits(text: string): ChunkUnit[] {
  *
  * @param currentText - The text to chunk.
  * @param chunkSize - Maximum size of each chunk.
- * @param splitter - Optional function to split the text into units.
+ * @param splitter - Function to split the text into units.
  * @param chunkOverlap - Number of characters to overlap between chunks.
  * @param startOffset - Starting character position offset for calculating absolute positions.
  * @returns Array of chunk objects with text and positions.
@@ -35,7 +35,7 @@ export function getUnits(text: string): ChunkUnit[] {
 export function chunkByCharacter(
   currentText: string,
   chunkSize: number,
-  splitter: ((text: string) => string[]) | undefined,
+  splitter: (text: string) => string[],
   chunkOverlap: number,
   startOffset: number = 0
 ): ChunkResult[] {
@@ -49,7 +49,7 @@ export function chunkByCharacter(
     let bestEnd = start + 1
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
-      const len = splitter ? splitter(currentText.slice(start, mid)).length : currentText.slice(start, mid).length
+      const len = splitter(currentText.slice(start, mid)).length
       if (len <= chunkSize) {
         bestEnd = mid
         low = mid + 1
@@ -77,14 +77,14 @@ export function chunkByCharacter(
  * Each chunk will overlap with the previous chunk by `chunkOverlap` tokens (if provided).
  *
  * @param chunkUnits - Array of chunk units (paragraphs) with their text and positions.
- * @param splitter - Optional function to split the text into tokens. Defaults to character-based splitting if not provided.
+ * @param splitter - Function to split the text into tokens.
  * @param chunkSize - Maximum size of each chunk in tokens.
  * @param chunkOverlap - Number of tokens to overlap between chunks.
  * @returns Array of chunk objects with text and positions.
  */
 export function chunkByParagraph(
   chunkUnits: ChunkUnit[],
-  splitter: ((text: string) => string[]) | undefined,
+  splitter: (text: string) => string[],
   chunkSize: number,
   chunkOverlap: number
 ): ChunkResult[] {
@@ -92,11 +92,7 @@ export function chunkByParagraph(
   const n = chunkUnits.length
   const chunks: ChunkResult[] = []
   const joiner = '\n\n'
-  
-  // Default splitter splits by character if no custom splitter provided
-  const defaultSplitter = (text: string) => text.split('')
-  const effectiveSplitter = splitter || defaultSplitter
-  const joinerLen = effectiveSplitter(joiner).length
+  const joinerLen = splitter(joiner).length
   
   while (i < n) {
     let currentLen = 0
@@ -105,7 +101,7 @@ export function chunkByParagraph(
     
     // Find the maximal window [i, j) that fits within chunkSize
     while (j < n) {
-      const unitLen = effectiveSplitter(chunkUnits[j].unit).length
+      const unitLen = splitter(chunkUnits[j].unit).length
       const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
       
       if (simulatedLen > chunkSize && j > i) break
