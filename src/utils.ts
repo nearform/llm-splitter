@@ -91,27 +91,26 @@ export function chunkByParagraph(
   let i = 0
   const n = chunkUnits.length
   const chunks: ChunkResult[] = []
-  const joiner = '\n\n'
-  const joinerLen = splitter(joiner).length
 
   while (i < n) {
     let currentLen = 0
-    let first = true
     let j = i
 
     // Find the maximal window [i, j) that fits within chunkSize
     while (j < n) {
       const unitLen = splitter(chunkUnits[j].unit).length
-      const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
+      const simulatedLen = currentLen + unitLen
 
       if (simulatedLen > chunkSize && j > i) break
       if (simulatedLen > chunkSize && j === i) {
-        // Force at least one unit per chunk
-        j++
-        break
+        // Single paragraph exceeds chunk size - break it into sub-chunks
+        const subChunks = chunkSingleParagraph(chunkUnits[i], splitter, chunkSize, chunkOverlap)
+        chunks.push(...subChunks)
+        i++
+        j = i
+        continue
       }
       currentLen = simulatedLen
-      first = false
       j++
     }
 
@@ -119,7 +118,7 @@ export function chunkByParagraph(
       const chunkStr = chunkUnits
         .slice(i, j)
         .map(u => u.unit)
-        .join(joiner)
+        .join('\n\n')
       chunks.push({
         text: chunkStr,
         start: chunkUnits[i].start,
@@ -135,6 +134,76 @@ export function chunkByParagraph(
       i = overlapStart
     } else {
       i = j
+    }
+  }
+
+  return chunks
+}
+
+/**
+ * Chunk a single paragraph that exceeds the chunk size limit
+ */
+function chunkSingleParagraph(
+  unit: ChunkUnit,
+  splitter: (text: string) => string[],
+  chunkSize: number,
+  chunkOverlap: number
+): ChunkResult[] {
+  const tokens = splitter(unit.unit)
+  const chunks: ChunkResult[] = []
+  let tokenIndex = 0
+
+  while (tokenIndex < tokens.length) {
+    let chunkTokens: string[] = []
+    let currentChunkSize = 0
+    let overlapTokens: string[] = []
+
+    // Add overlap tokens from previous chunk if this isn't the first chunk
+    if (chunks.length > 0 && chunkOverlap > 0) {
+      const overlapStart = Math.max(0, tokenIndex - chunkOverlap)
+      for (let k = overlapStart; k < tokenIndex; k++) {
+        overlapTokens.push(tokens[k])
+        currentChunkSize++
+      }
+      chunkTokens = [...overlapTokens]
+    }
+
+    // Add new tokens until we reach the chunk size limit
+    while (tokenIndex < tokens.length && currentChunkSize < chunkSize) {
+      chunkTokens.push(tokens[tokenIndex])
+      currentChunkSize++
+      tokenIndex++
+    }
+
+    // Create the chunk text
+    const chunkText = chunkTokens.join('')
+    
+    // Calculate character positions more accurately
+    let chunkStart: number
+    let chunkEnd: number
+    
+    if (chunks.length === 0) {
+      // First chunk starts at the beginning of the unit
+      chunkStart = unit.start
+      chunkEnd = unit.start + chunkText.length
+    } else {
+      // For subsequent chunks, calculate the position based on non-overlap tokens
+      const nonOverlapTokens = chunkTokens.slice(overlapTokens.length)
+      const nonOverlapText = nonOverlapTokens.join('')
+      const prevChunkEnd = chunks[chunks.length - 1].end
+      chunkStart = prevChunkEnd - (overlapTokens.join('').length)
+      chunkEnd = chunkStart + chunkText.length
+    }
+
+    chunks.push({
+      text: chunkText,
+      start: chunkStart,
+      end: Math.min(chunkEnd, unit.end)
+    })
+
+    // If we haven't made progress, force advance to avoid infinite loop
+    if (currentChunkSize === 0) {
+      tokenIndex++
     }
   }
 

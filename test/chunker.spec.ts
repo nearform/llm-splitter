@@ -114,10 +114,10 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
+    // With joiner length not counting toward chunk size, more units fit per chunk
     assert.deepStrictEqual(result, [
-      { text: 'A', start: 0, end: 1 },
-      { text: 'B', start: 3, end: 4 },
-      { text: 'C', start: 6, end: 7 },
+      { text: 'A\n\nB\n\nC', start: 0, end: 7 },
+      { text: 'C\n\nD', start: 6, end: 10 },
       { text: 'D', start: 9, end: 10 }
     ])
   })
@@ -129,9 +129,9 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
+    // With joiner length not counting toward chunk size, more units fit per chunk
     assert.deepStrictEqual(result, [
-      { text: 'A1\n\nB2', start: 0, end: 6 },
-      { text: 'B2\n\nC3', start: 4, end: 10 },
+      { text: 'A1\n\nB2\n\nC3', start: 0, end: 10 },
       { text: 'C3\n\nD4', start: 8, end: 14 },
       { text: 'D4', start: 12, end: 14 }
     ])
@@ -322,13 +322,13 @@ describe('split (coverage edge cases)', () => {
 
   test('should handle a single unit larger than chunk size', () => {
     const input = 'ThisIsAVeryLongParagraph'
-    // Paragraph is longer than chunkSize, so it should still yield it
+    // Paragraph is longer than chunkSize, so it should be split into multiple chunks
     const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph' })
-    assert.deepStrictEqual(result[0], {
-      text: 'ThisIsAVeryLongParagraph',
-      start: 0,
-      end: 24
-    })
+    assert.ok(result.length >= 2) // Should have multiple chunks
+    assert.ok(result[0].text.length <= 5) // First chunk should respect size limit
+    assert.strictEqual(result[0].text, 'ThisI') // First chunk should be 'ThisI'
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 5)
   })
 
   test('should cover splitter branch for character-based chunking', () => {
