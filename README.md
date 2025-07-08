@@ -133,7 +133,7 @@ Main content paragraph with lots of details.
 Conclusion paragraph.`
 
 const chunks = split(document, {
-  chunkSize: 20,
+  chunkSize: 20, // 20 tokens per chunk
   chunkStrategy: 'paragraph'
 })
 ```
@@ -187,7 +187,7 @@ encoding.free() // Clean up
 import { iterateChunks } from '@nearform/llm-chunk'
 
 // Memory-efficient processing of large documents
-for (const chunk of iterateChunks(largeDocument, { chunkSize: 200 })) {
+for (const chunk of iterateChunks(largeDocument, { chunkSize: 200 })) { // 200 tokens per chunk
   // Process each chunk individually
   await processChunk(chunk)
 }
@@ -205,8 +205,8 @@ const documents = [
 ]
 
 const chunks = split(documents, {
-  chunkSize: 50,
-  chunkOverlap: 5
+  chunkSize: 50, // 50 tokens per chunk
+  chunkOverlap: 5 // 5 tokens overlap between chunks
 })
 ```
 
@@ -221,8 +221,8 @@ const longParagraph =
   'This is a very long paragraph that exceeds the chunk size limit and needs to be broken down into smaller pieces while maintaining context between chunks.'
 
 const chunks = split(longParagraph, {
-  chunkSize: 10, // Small chunk size to force sub-paragraph chunking
-  chunkOverlap: 2, // Maintain context with overlap
+  chunkSize: 10, // Small chunk size to force sub-paragraph chunking (10 tokens)
+  chunkOverlap: 2, // Maintain context with overlap (2 tokens)
   splitter: text => text.split(' ') // Word-based tokenization
 })
 
