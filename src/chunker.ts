@@ -2,11 +2,13 @@ import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
 import { chunkByCharacter, chunkByParagraph, getUnits } from './utils.js'
 
 /**
- * Returns the substring from the input text(s) between start and end character positions (character-based only).
- * @param text - A string or array of strings.
- * @param start - Optional start character position (inclusive, default 0).
- * @param end - Optional end character position (exclusive, default: end of input).
- * @returns The substring(s) between start and end positions.
+ * Extracts a substring or segments from the input text by character positions.
+ * For string input, returns a substring. For array input, returns relevant segments.
+ *
+ * @param text - A string or array of strings to extract from.
+ * @param start - Starting character position (inclusive, default: 0).
+ * @param end - Ending character position (exclusive, default: end of input).
+ * @returns The substring for string input, or array of segments for array input.
  */
 export function getChunk(
   text: string | string[],
@@ -64,10 +66,12 @@ export function getChunk(
 }
 
 /**
- * Synchronous generator version of split. Yields each chunk object as produced.
- * @param text - A string or array of strings to split.
- * @param options - Options object.
- * @yields Chunk object for each chunk with text and position information.
+ * Memory-efficient generator that yields chunks one at a time.
+ * Supports both string and array inputs with consistent output format.
+ *
+ * @param text - A string or array of strings to split into chunks.
+ * @param options - Configuration options for chunking behavior.
+ * @yields Chunk objects with text content and character position metadata.
  */
 export function* iterateChunks(
   text: string | string[],
@@ -129,12 +133,13 @@ export function* iterateChunks(
 }
 
 /**
- * Split text or array of texts for LLM vectorization using a sliding window approach.
- * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ * Splits text or array of texts into chunks optimized for LLM vectorization.
+ * Uses paragraph-based chunking with automatic sub-chunking of long paragraphs.
+ * Supports token-based size calculation and configurable overlap.
  *
- * @param text - A string or array of strings to split.
- * @param options - Options object.
- * @returns Array of chunk objects with text and position information.
+ * @param text - A string or array of strings to split into chunks.
+ * @param options - Configuration options for chunking behavior.
+ * @returns Array of chunk objects with text content and character position metadata.
  */
 export function split(
   text: string | string[],

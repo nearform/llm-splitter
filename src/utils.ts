@@ -1,9 +1,9 @@
 import { ChunkResult, ChunkUnit } from './types.js'
 
 /**
- * Get text units based on the specified strategy.
- * @param text - The input text to split into units.
- * @returns An array of text units with their start and end positions.
+ * Extracts text units (paragraphs) from input text by splitting on double newlines.
+ * @param text - The input text to split into paragraph units.
+ * @returns An array of paragraph units with their character positions in the original text.
  */
 export function getUnits(text: string): ChunkUnit[] {
   const units: ChunkUnit[] = []
@@ -23,14 +23,15 @@ export function getUnits(text: string): ChunkUnit[] {
 }
 
 /**
- * Chunk the text by character count, with optional overlapping.
+ * Chunks text using a sliding window approach with token-based size calculation.
+ * Uses binary search to find optimal chunk boundaries that respect token limits.
  *
  * @param currentText - The text to chunk.
- * @param chunkSize - Maximum size of each chunk.
- * @param splitter - Function to split the text into units.
- * @param chunkOverlap - Number of characters to overlap between chunks.
+ * @param chunkSize - Maximum size of each chunk in tokens.
+ * @param splitter - Function to split text into tokens for size calculation.
+ * @param chunkOverlap - Number of tokens to overlap between chunks.
  * @param startOffset - Starting character position offset for calculating absolute positions.
- * @returns Array of chunk objects with text and positions.
+ * @returns Array of chunk objects with text and character positions.
  */
 export function chunkByCharacter(
   currentText: string,
@@ -73,14 +74,15 @@ export function chunkByCharacter(
 }
 
 /**
- * Generator function to yield chunks of text based on a greedy sliding window approach.
- * Each chunk will overlap with the previous chunk by `chunkOverlap` tokens (if provided).
+ * Chunks text by paragraphs using a greedy sliding window approach.
+ * Attempts to fit as many complete paragraphs as possible within the token limit.
+ * When a single paragraph exceeds the limit, it's automatically broken into sub-chunks.
  *
- * @param chunkUnits - Array of chunk units (paragraphs) with their text and positions.
- * @param splitter - Function to split the text into tokens.
+ * @param chunkUnits - Array of paragraph units with their text and character positions.
+ * @param splitter - Function to split text into tokens for size calculation.
  * @param chunkSize - Maximum size of each chunk in tokens.
- * @param chunkOverlap - Number of tokens to overlap between chunks.
- * @returns Array of chunk objects with text and positions.
+ * @param chunkOverlap - Number of paragraph units to overlap between chunks.
+ * @returns Array of chunk objects with text and character positions.
  */
 export function chunkByParagraph(
   chunkUnits: ChunkUnit[],
@@ -146,7 +148,14 @@ export function chunkByParagraph(
 }
 
 /**
- * Chunk a single paragraph that exceeds the chunk size limit
+ * Breaks a single paragraph that exceeds the chunk size limit into smaller sub-chunks.
+ * Maintains token-based overlap between sub-chunks and accurate character position tracking.
+ *
+ * @param unit - The paragraph unit that needs to be sub-chunked.
+ * @param splitter - Function to split text into tokens.
+ * @param chunkSize - Maximum size of each sub-chunk in tokens.
+ * @param chunkOverlap - Number of tokens to overlap between sub-chunks.
+ * @returns Array of sub-chunk objects with text and character positions.
  */
 function chunkSingleParagraph(
   unit: ChunkUnit,
