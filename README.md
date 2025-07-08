@@ -280,6 +280,14 @@ Contributions, issues, and feature requests are welcome! Please feel free to:
 - Submit a pull request with improvements
 - Suggest new chunking strategies or tokenization methods
 
+## Development
+
+This project was entirely developed using the latest AI tooling:
+- **GitHub Copilot** for code generation and completion
+- **Claude Sonnet 4 LLM** for architecture design and implementation
+
+This demonstrates the power of AI-assisted development for creating robust, production-ready libraries with comprehensive documentation and testing.
+
 ## License
 
 MIT
