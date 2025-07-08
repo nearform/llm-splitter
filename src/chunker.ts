@@ -23,13 +23,15 @@ export function getChunk(
   let endIndex: number | null = null
   let endOffset: number = 0
 
-  // Scan through the array to find start and end indices
+  // Iterate through array elements to locate start and end boundaries
   for (const [index, row] of text.entries()) {
     currentLength += row.length
+    // Mark the first array element containing the start position
     if (currentLength >= (start ?? 0) && startIndex === null) {
       startIndex = index
       startOffset = row.length - (currentLength - (start ?? 0))
     }
+    // Mark the first array element that exceeds the end position
     if (currentLength > (end ?? Infinity)) {
       endIndex = index
       endOffset = row.length - (currentLength - (end ?? Infinity))
@@ -37,27 +39,27 @@ export function getChunk(
     }
   }
 
-  // If no start found return an empty array
+  // Return empty array when start position is beyond the input text
   if (startIndex === null) return []
 
-  // Expand to the end of the last string if no endIndex found
+  // Set end boundary to the last element when no explicit end is found
   if (endIndex === null) {
     endIndex = text.length - 1
     endOffset = text[endIndex].length
   }
 
-  // If start and end are in the same string, return the substring
+  // Extract substring when start and end positions are within the same element
   if (startIndex === endIndex)
     return [text[startIndex].slice(startOffset, endOffset)]
 
-  // Return the two-part array
+  // Handle extraction spanning exactly two adjacent elements
   if (startIndex === endIndex - 1)
     return [
       text[startIndex].slice(startOffset),
       text[endIndex].slice(0, endOffset)
     ].filter(Boolean)
 
-  // Return the entire chunk from start to end
+  // Extract content spanning multiple elements
   return [
     text[startIndex].slice(startOffset),
     ...text.slice(startIndex + 1, endIndex),
@@ -82,10 +84,12 @@ export function* iterateChunks(
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
+  // Normalize input to array format for consistent processing
   const texts: string[] = Array.isArray(text) ? text : [text]
   let globalOffset = 0
 
   for (const currentText of texts) {
+    // Handle empty text segments by yielding empty chunks
     if (currentText.length === 0)
       yield {
         text: Array.isArray(text) ? [''] : '',
@@ -93,6 +97,7 @@ export function* iterateChunks(
         end: globalOffset
       }
     else if (chunkStrategy === 'paragraph') {
+      // Extract paragraph units for semantic chunking
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
 
       const chunks = chunkByParagraph(
@@ -110,7 +115,7 @@ export function* iterateChunks(
           end: globalOffset + chunk.end
         }
     } else {
-      // Default character-based chunking
+      // Apply character-based chunking as the default strategy
       const chunks = chunkByCharacter(
         currentText,
         chunkSize,
@@ -128,6 +133,7 @@ export function* iterateChunks(
         }
     }
 
+    // Update global position tracker for next text segment
     globalOffset += currentText.length
   }
 }
