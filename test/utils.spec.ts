@@ -70,9 +70,7 @@ describe('chunkByParagraph', () => {
     ]
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 4, 0))
     // With joiner length not counting toward chunk size, all units fit in one chunk
-    assert.deepStrictEqual(result, [
-      { text: 'A\n\nB\n\nC', start: 0, end: 5 }
-    ])
+    assert.deepStrictEqual(result, [{ text: 'A\n\nB\n\nC', start: 0, end: 5 }])
   })
 
   test('handles overlap', () => {
@@ -146,23 +144,19 @@ describe('chunkByParagraph', () => {
   })
 
   test('handles CommonJS ESM dependency text with chunk size 200', () => {
-    const text = 'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
-    const units = [
-      { unit: text, start: 0, end: text.length }
-    ]
+    const text =
+      'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
+    const units = [{ unit: text, start: 0, end: text.length }]
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 200, 0))
-    assert.deepStrictEqual(result, [
-      { text: text, start: 0, end: text.length }
-    ])
+    assert.deepStrictEqual(result, [{ text: text, start: 0, end: text.length }])
     assert.strictEqual(result.length, 1)
     assert.strictEqual(result[0].text.length, 188) // Verify the actual text length
   })
 
   test('handles CommonJS ESM dependency text with smaller chunk size to force chunking', () => {
-    const text = 'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
-    const units = [
-      { unit: text, start: 0, end: text.length }
-    ]
+    const text =
+      'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
+    const units = [{ unit: text, start: 0, end: text.length }]
     // Use a smaller chunk size to force sub-paragraph chunking
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 50, 0))
     assert.ok(result.length >= 2) // Should have multiple chunks
@@ -171,15 +165,14 @@ describe('chunkByParagraph', () => {
   })
 
   test('handles sub-paragraph chunking with overlap', () => {
-    const text = 'This is a very long paragraph that needs to be split into multiple chunks with overlapping content to maintain context between chunks.'
-    const units = [
-      { unit: text, start: 0, end: text.length }
-    ]
+    const text =
+      'This is a very long paragraph that needs to be split into multiple chunks with overlapping content to maintain context between chunks.'
+    const units = [{ unit: text, start: 0, end: text.length }]
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 30, 5))
     assert.ok(result.length >= 2) // Should have multiple chunks
     assert.ok(result[0].text.length <= 30) // First chunk should respect size limit
     assert.ok(result[1].text.length <= 30) // Second chunk should respect size limit
-    
+
     // Check that there is overlap between chunks
     if (result.length > 1) {
       const firstChunkEnd = result[0].text.slice(-5)
@@ -190,32 +183,36 @@ describe('chunkByParagraph', () => {
   })
 
   test('demonstrates complete sub-paragraph chunking with word-based tokenization', () => {
-    const text = 'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
-    const units = [
-      { unit: text, start: 0, end: text.length }
-    ]
-    
+    const text =
+      'The broader impact here is that CommonJS applications and libraries can only easily consume ESM dependencies if all functionality is only called upstream within asynchronous functionality.'
+    const units = [{ unit: text, start: 0, end: text.length }]
+
     // Use a word-based splitter to create more realistic chunks
-    const wordSplitter = (text: string) => text.split(/\s+/).filter(word => word.length > 0)
-    
+    const wordSplitter = (text: string) =>
+      text.split(/\s+/).filter(word => word.length > 0)
+
     const result = Array.from(chunkByParagraph(units, wordSplitter, 10, 2))
     assert.ok(result.length >= 2) // Should have multiple chunks
-    
+
     // Verify chunks respect the token limit
     for (const chunk of result) {
-      const chunkText = typeof chunk.text === 'string' ? chunk.text : chunk.text.join(' ')
+      const chunkText =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join(' ')
       const tokenCount = wordSplitter(chunkText).length
       assert.ok(tokenCount <= 10) // Should not exceed 10 words per chunk
     }
-    
+
     // Just verify that we have overlapping chunks by checking that the total content
     // is distributed across multiple chunks
     assert.ok(result.length >= 2, 'Should have at least 2 chunks')
-    
+
     // Verify that each chunk has reasonable content
     for (let i = 0; i < result.length; i++) {
       const chunk = result[i]
-      const chunkText = typeof chunk.text === 'string' ? chunk.text : (chunk.text as string[]).join(' ')
+      const chunkText =
+        typeof chunk.text === 'string'
+          ? chunk.text
+          : (chunk.text as string[]).join(' ')
       assert.ok(chunkText.length > 0, `Chunk ${i} should have content`)
     }
   })

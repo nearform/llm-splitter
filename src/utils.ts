@@ -104,7 +104,12 @@ export function chunkByParagraph(
       if (simulatedLen > chunkSize && j > i) break
       if (simulatedLen > chunkSize && j === i) {
         // Single paragraph exceeds chunk size - break it into sub-chunks
-        const subChunks = chunkSingleParagraph(chunkUnits[i], splitter, chunkSize, chunkOverlap)
+        const subChunks = chunkSingleParagraph(
+          chunkUnits[i],
+          splitter,
+          chunkSize,
+          chunkOverlap
+        )
         chunks.push(...subChunks)
         i++
         j = i
@@ -177,11 +182,11 @@ function chunkSingleParagraph(
 
     // Create the chunk text
     const chunkText = chunkTokens.join('')
-    
+
     // Calculate character positions more accurately
     let chunkStart: number
     let chunkEnd: number
-    
+
     if (chunks.length === 0) {
       // First chunk starts at the beginning of the unit
       chunkStart = unit.start
@@ -191,7 +196,7 @@ function chunkSingleParagraph(
       const nonOverlapTokens = chunkTokens.slice(overlapTokens.length)
       const nonOverlapText = nonOverlapTokens.join('')
       const prevChunkEnd = chunks[chunks.length - 1].end
-      chunkStart = prevChunkEnd - (overlapTokens.join('').length)
+      chunkStart = prevChunkEnd - overlapTokens.join('').length
       chunkEnd = chunkStart + chunkText.length
     }
 

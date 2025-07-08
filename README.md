@@ -33,8 +33,8 @@ And this is the third paragraph with additional details.`
 
 // Basic paragraph chunking
 const chunks = split(text, {
-  chunkSize: 10,        // Maximum 10 tokens per chunk
-  chunkOverlap: 2,      // 2 tokens overlap between chunks
+  chunkSize: 10, // Maximum 10 tokens per chunk
+  chunkOverlap: 2, // 2 tokens overlap between chunks
   chunkStrategy: 'paragraph'
 })
 
@@ -55,6 +55,7 @@ console.log(chunks)
 Splits input text into an array of chunks with metadata.
 
 **Parameters:**
+
 - `text`: `string | string[]` - Text to chunk (single string or array)
 - `options`: `SplitOptions` - Chunking configuration (optional)
 
@@ -65,6 +66,7 @@ Splits input text into an array of chunks with metadata.
 Memory-efficient generator that yields chunks one at a time.
 
 **Parameters:**
+
 - `text`: `string | string[]` - Text to chunk
 - `options`: `SplitOptions` - Chunking configuration (optional)
 
@@ -75,6 +77,7 @@ Memory-efficient generator that yields chunks one at a time.
 Extracts a substring or segments from the input text by character positions.
 
 **Parameters:**
+
 - `text`: `string | string[]` - Source text
 - `start`: `number` - Start position (inclusive, default: 0)
 - `end`: `number` - End position (exclusive, default: text length)
@@ -89,13 +92,13 @@ Extracts a substring or segments from the input text by character positions.
 interface SplitOptions {
   /** Maximum size of each chunk in tokens (default: 512) */
   chunkSize?: number
-  
+
   /** Number of tokens to overlap between chunks (default: 0) */
   chunkOverlap?: number
-  
+
   /** Custom function to split text into tokens (default: character-based) */
   splitter?: (text: string) => string[]
-  
+
   /** Chunking strategy (default: 'paragraph') */
   chunkStrategy?: 'paragraph'
 }
@@ -107,10 +110,10 @@ interface SplitOptions {
 interface ChunkResult {
   /** The chunked text content */
   text: string | string[]
-  
+
   /** Start character position in original text */
   start: number
-  
+
   /** End character position in original text */
   end: number
 }
@@ -143,11 +146,12 @@ import { split } from '@nearform/llm-chunk'
 const text = 'The quick brown fox jumps over the lazy dog.'
 
 // Custom word-based splitter
-const wordSplitter = (text: string) => text.split(/\s+/).filter(word => word.length > 0)
+const wordSplitter = (text: string) =>
+  text.split(/\s+/).filter(word => word.length > 0)
 
 const chunks = split(text, {
-  chunkSize: 5,           // 5 words per chunk
-  chunkOverlap: 1,        // 1 word overlap
+  chunkSize: 5, // 5 words per chunk
+  chunkOverlap: 1, // 1 word overlap
   splitter: wordSplitter,
   chunkStrategy: 'paragraph'
 })
@@ -168,8 +172,8 @@ const tokenSplitter = (text: string) => {
 }
 
 const chunks = split(longDocument, {
-  chunkSize: 100,         // 100 tokens per chunk
-  chunkOverlap: 10,       // 10 tokens overlap
+  chunkSize: 100, // 100 tokens per chunk
+  chunkOverlap: 10, // 10 tokens overlap
   splitter: tokenSplitter,
   chunkStrategy: 'paragraph'
 })
@@ -213,11 +217,12 @@ const chunks = split(documents, {
 When a single paragraph exceeds the chunk size limit, the library automatically breaks it into smaller chunks at token boundaries while maintaining overlap:
 
 ```typescript
-const longParagraph = 'This is a very long paragraph that exceeds the chunk size limit and needs to be broken down into smaller pieces while maintaining context between chunks.'
+const longParagraph =
+  'This is a very long paragraph that exceeds the chunk size limit and needs to be broken down into smaller pieces while maintaining context between chunks.'
 
 const chunks = split(longParagraph, {
-  chunkSize: 10,    // Small chunk size to force sub-paragraph chunking
-  chunkOverlap: 2,  // Maintain context with overlap
+  chunkSize: 10, // Small chunk size to force sub-paragraph chunking
+  chunkOverlap: 2, // Maintain context with overlap
   splitter: text => text.split(' ') // Word-based tokenization
 })
 
@@ -253,6 +258,7 @@ const customSplitter = (text: string) => yourTokenizer.encode(text)
 ## Performance
 
 The library is optimized for performance with:
+
 - Binary search algorithms for efficient chunk boundary detection
 - Memory-efficient generator-based processing
 - Minimal string copying and manipulation
@@ -269,6 +275,7 @@ The library includes comprehensive test coverage for all chunking strategies, ed
 ## Contributing
 
 Contributions, issues, and feature requests are welcome! Please feel free to:
+
 - Open an issue for bug reports or feature requests
 - Submit a pull request with improvements
 - Suggest new chunking strategies or tokenization methods
