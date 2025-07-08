@@ -93,17 +93,17 @@ export function chunkByParagraph(
   const chunks: ChunkResult[] = []
   const joiner = '\n\n'
   const joinerLen = splitter(joiner).length
-  
+
   while (i < n) {
     let currentLen = 0
     let first = true
     let j = i
-    
+
     // Find the maximal window [i, j) that fits within chunkSize
     while (j < n) {
       const unitLen = splitter(chunkUnits[j].unit).length
       const simulatedLen = currentLen + (first ? 0 : joinerLen) + unitLen
-      
+
       if (simulatedLen > chunkSize && j > i) break
       if (simulatedLen > chunkSize && j === i) {
         // Force at least one unit per chunk
@@ -114,7 +114,7 @@ export function chunkByParagraph(
       first = false
       j++
     }
-    
+
     if (j > i) {
       const chunkStr = chunkUnits
         .slice(i, j)
@@ -126,7 +126,7 @@ export function chunkByParagraph(
         end: chunkUnits[j - 1].end
       })
     }
-    
+
     // Calculate overlap and advance window
     if (chunkOverlap > 0 && j > i) {
       // Move backward by chunkOverlap units from the end of current chunk
@@ -137,6 +137,6 @@ export function chunkByParagraph(
       i = j
     }
   }
-  
+
   return chunks
 }

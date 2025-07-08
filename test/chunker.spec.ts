@@ -1,10 +1,12 @@
-import { split, getChunk, iterateChunks } from '../src/chunker'
-import { type SplitOptions } from '../src/types'
+import { test, describe } from 'node:test'
+import assert from 'node:assert'
+import { split, getChunk, iterateChunks } from '../src/chunker.js'
+import { type SplitOptions } from '../src/types.js'
 
 describe('split', () => {
   test('should split a single string into correct sizes', () => {
     const input = 'abcdefghij'
-    expect(split(input, { chunkSize: 3 })).toEqual([
+    assert.deepStrictEqual(split(input, { chunkSize: 3 }), [
       { text: 'abc', start: 0, end: 3 },
       { text: 'def', start: 3, end: 6 },
       { text: 'ghi', start: 6, end: 9 },
@@ -14,7 +16,7 @@ describe('split', () => {
 
   test('should split an array of strings into correct sizes', () => {
     const input = ['abcde', 'fghij']
-    expect(split(input, { chunkSize: 2 })).toEqual([
+    assert.deepStrictEqual(split(input, { chunkSize: 2 }), [
       { text: ['ab'], start: 0, end: 2 },
       { text: ['cd'], start: 2, end: 4 },
       { text: ['e'], start: 4, end: 5 },
@@ -26,40 +28,40 @@ describe('split', () => {
 
   test('should return the whole string if smaller than chunk size', () => {
     const input = 'abc'
-    expect(split(input, { chunkSize: 10 })).toEqual([
+    assert.deepStrictEqual(split(input, { chunkSize: 10 }), [
       { text: 'abc', start: 0, end: 3 }
     ])
   })
 
   test('should handle empty string input', () => {
-    expect(split('', { chunkSize: 5 })).toEqual([
+    assert.deepStrictEqual(split('', { chunkSize: 5 }), [
       { text: '', start: 0, end: 0 }
     ])
   })
 
   test('should handle empty array input', () => {
-    expect(split([], { chunkSize: 5 })).toEqual([])
+    assert.deepStrictEqual(split([], { chunkSize: 5 }), [])
   })
 
   test('should handle empty array input (coverage)', () => {
-    expect(split([])).toEqual([])
+    assert.deepStrictEqual(split([]), [])
   })
 
   test('should use default chunk size if not provided', () => {
     const input = 'a'.repeat(600)
     const result = split(input)
-    expect(result.length).toBe(2)
-    expect((result[0].text as string).length).toBe(512)
-    expect((result[1].text as string).length).toBe(88)
-    expect(result[0].start).toBe(0)
-    expect(result[0].end).toBe(512)
-    expect(result[1].start).toBe(512)
-    expect(result[1].end).toBe(600)
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual((result[0].text as string).length, 512)
+    assert.strictEqual((result[1].text as string).length, 88)
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 512)
+    assert.strictEqual(result[1].start, 512)
+    assert.strictEqual(result[1].end, 600)
   })
 
   test('should split with overlap (sliding window)', () => {
     const input = 'abcdefghij'
-    expect(split(input, { chunkSize: 4, chunkOverlap: 2 })).toEqual([
+    assert.deepStrictEqual(split(input, { chunkSize: 4, chunkOverlap: 2 }), [
       { text: 'abcd', start: 0, end: 4 },
       { text: 'cdef', start: 2, end: 6 },
       { text: 'efgh', start: 4, end: 8 },
@@ -71,9 +73,9 @@ describe('split', () => {
     const input = 'abcdeiouxyz'
     const options: SplitOptions = {
       chunkSize: 2,
-      splitter: t => (t.match(/[aeiou]/g) || [])
+      splitter: t => t.match(/[aeiou]/g) || []
     }
-    expect(split(input, options)).toEqual([
+    assert.deepStrictEqual(split(input, options), [
       { text: 'abcde', start: 0, end: 5 },
       { text: 'io', start: 5, end: 7 },
       { text: 'uxyz', start: 7, end: 11 }
@@ -85,9 +87,9 @@ describe('split', () => {
     const options: SplitOptions = {
       chunkSize: 3,
       chunkOverlap: 1,
-      splitter: t => (t.match(/[aeiou]/g) || [])
+      splitter: t => t.match(/[aeiou]/g) || []
     }
-    expect(split(input, options)).toEqual([
+    assert.deepStrictEqual(split(input, options), [
       { text: 'aei', start: 0, end: 3 },
       { text: 'ioubcdfg', start: 2, end: 10 }
     ])
@@ -96,8 +98,12 @@ describe('split', () => {
   test('should split by paragraph boundaries', () => {
     const input = 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3'
     const result = split(input, { chunkSize: 100, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([
-      { text: 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3', start: 0, end: 43 }
+    assert.deepStrictEqual(result, [
+      {
+        text: 'Para1 line1\nPara1 line2\n\nPara2 line1\n\nPara3',
+        start: 0,
+        end: 43
+      }
     ])
   })
 
@@ -108,7 +114,7 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: 'A', start: 0, end: 1 },
       { text: 'B', start: 3, end: 4 },
       { text: 'C', start: 6, end: 7 },
@@ -123,7 +129,7 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: 'A1\n\nB2', start: 0, end: 6 },
       { text: 'B2\n\nC3', start: 4, end: 10 },
       { text: 'C3\n\nD4', start: 8, end: 14 },
@@ -132,39 +138,40 @@ describe('split', () => {
   })
 
   test('should handle empty string with chunkStrategy', () => {
-    expect(split('', { chunkStrategy: 'paragraph' })).toEqual([
+    assert.deepStrictEqual(split('', { chunkStrategy: 'paragraph' }), [
       { text: '', start: 0, end: 0 }
     ])
   })
 
   test('should handle array of empty strings with chunkStrategy', () => {
-    expect(split(['', ''], { chunkStrategy: 'paragraph' })).toEqual([
+    assert.deepStrictEqual(split(['', ''], { chunkStrategy: 'paragraph' }), [
       { text: [''], start: 0, end: 0 },
       { text: [''], start: 0, end: 0 }
     ])
   })
 
   test('should handle array of empty strings', () => {
-    expect(split(['', ''])).toEqual([
+    assert.deepStrictEqual(split(['', '']), [
       { text: [''], start: 0, end: 0 },
       { text: [''], start: 0, end: 0 }
     ])
   })
 
   test('should handle array of empty strings with chunkSize and chunkStrategy', () => {
-    expect(
-      split(['', ''], { chunkSize: 5, chunkStrategy: 'paragraph' })
-    ).toEqual([
-      { text: [''], start: 0, end: 0 },
-      { text: [''], start: 0, end: 0 }
-    ])
+    assert.deepStrictEqual(
+      split(['', ''], { chunkSize: 5, chunkStrategy: 'paragraph' }),
+      [
+        { text: [''], start: 0, end: 0 },
+        { text: [''], start: 0, end: 0 }
+      ]
+    )
   })
 
   test('should cover array input branch for unit-based chunking', () => {
     const input = ['A', 'B', 'C']
     // This triggers the Array.isArray(text) && text !== texts branch
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: ['A'], start: 0, end: 1 },
       { text: ['B'], start: 1, end: 2 },
       { text: ['C'], start: 2, end: 3 }
@@ -175,7 +182,7 @@ describe('split', () => {
     const input = ['', 'A', '']
     // This triggers the Array.isArray(text) && text !== texts branch for empty and non-empty
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: [''], start: 0, end: 0 },
       { text: ['A'], start: 0, end: 1 },
       { text: [''], start: 1, end: 1 }
@@ -186,14 +193,14 @@ describe('split', () => {
     const input: string[] = []
     // This triggers the Array.isArray(text) && text !== texts branch with an empty array
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([])
+    assert.deepStrictEqual(result, [])
   })
 
   test('should cover array input mapping for unit-based chunking with multiple non-empty strings', () => {
     const input = ['A', 'B', 'C', 'D']
     // This triggers the Array.isArray(text) && text !== texts branch and uses the mapped result
     const result = split(input, { chunkSize: 1, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: ['A'], start: 0, end: 1 },
       { text: ['B'], start: 1, end: 2 },
       { text: ['C'], start: 2, end: 3 },
@@ -231,73 +238,78 @@ describe('split', () => {
       const expectedText = Array.isArray(chunk.text)
         ? chunk.text.join('')
         : chunk.text
-      expect(chunkStr).toBe(expectedText)
+      assert.strictEqual(chunkStr, expectedText)
       offset += chunkLength
     }
   })
 
-  it('should use default chunkOverlap when undefined', () => {
-    const result = Array.from(split('abcdefghijk', { 
-      chunkSize: 3, 
-      chunkOverlap: undefined  // explicitly undefined to test default
-    }))
-    expect(result).toHaveLength(4)
-    expect(result[0].text).toBe('abc')
-    expect(result[1].text).toBe('def') // no overlap
+  test('should use default chunkOverlap when undefined', () => {
+    const result = Array.from(
+      split('abcdefghijk', {
+        chunkSize: 3,
+        chunkOverlap: undefined // explicitly undefined to test default
+      })
+    )
+    assert.strictEqual(result.length, 4)
+    assert.strictEqual(result[0].text, 'abc')
+    assert.strictEqual(result[1].text, 'def') // no overlap
   })
 })
 
 describe('getChunk', () => {
   test('should return the full string if no start/end provided', () => {
-    expect(getChunk('abcdefgh')).toBe('abcdefgh')
-    expect(getChunk(['abc', 'def', 'gh'])).toEqual(['abc', 'def', 'gh'])
+    assert.strictEqual(getChunk('abcdefgh'), 'abcdefgh')
+    assert.deepStrictEqual(getChunk(['abc', 'def', 'gh']), ['abc', 'def', 'gh'])
   })
 
   test('should return substring for start only', () => {
-    expect(getChunk('abcdefgh', 2)).toBe('cdefgh')
-    expect(getChunk(['abc', 'def', 'gh'], 3)).toEqual(['def', 'gh'])
+    assert.strictEqual(getChunk('abcdefgh', 2), 'cdefgh')
+    assert.deepStrictEqual(getChunk(['abc', 'def', 'gh'], 3), ['def', 'gh'])
   })
 
   test('should return substring for start and end', () => {
-    expect(getChunk('abcdefgh', 2, 5)).toBe('cde')
-    expect(getChunk(['abc', 'def', 'gh'], 1, 7)).toEqual(['bc', 'def', 'g'])
+    assert.strictEqual(getChunk('abcdefgh', 2, 5), 'cde')
+    assert.deepStrictEqual(getChunk(['abc', 'def', 'gh'], 1, 7), [
+      'bc',
+      'def',
+      'g'
+    ])
   })
 
   test('should handle end beyond input length', () => {
-    expect(getChunk('abc', 1, 10)).toBe('bc')
-    expect(getChunk(['abc', 'def'], 2, 10)).toEqual(['c', 'def'])
+    assert.strictEqual(getChunk('abc', 1, 10), 'bc')
+    assert.deepStrictEqual(getChunk(['abc', 'def'], 2, 10), ['c', 'def'])
   })
 
   test('should handle start >= end', () => {
-    expect(getChunk('abc', 2, 2)).toBe('')
-    expect(getChunk(['abc', 'def'], 4, 2)).toEqual([])
+    assert.strictEqual(getChunk('abc', 2, 2), '')
+    assert.deepStrictEqual(getChunk(['abc', 'def'], 4, 2), [])
   })
 
   test('should handle empty input', () => {
-    expect(getChunk('', 0, 2)).toBe('')
-    expect(getChunk([], 0, 2)).toEqual([])
+    assert.strictEqual(getChunk('', 0, 2), '')
+    assert.deepStrictEqual(getChunk([], 0, 2), [])
   })
 
   // Test for chunker.ts:38 - getChunk with startIndex === null
   test('getChunk should return empty array when start is beyond input length', () => {
     const input = ['abc', 'def']
     const result = getChunk(input, 100, 105) // start way beyond length
-    expect(result).toEqual([])
+    assert.deepStrictEqual(result, [])
   })
 
-  // Test for chunker.ts:38 - getChunk with very specific edge case  
+  // Test for chunker.ts:38 - getChunk with very specific edge case
   test('getChunk should cover endIndex assignment when end is reached mid-string', () => {
     const result = getChunk(['hello', 'world'], 3, 7)
-    expect(result).toEqual(['lo', 'wo'])
+    assert.deepStrictEqual(result, ['lo', 'wo'])
   })
 
   test('getChunk should handle array where start position is exactly at boundary', () => {
     const input = ['a', 'b', 'c']
     // Try to get chunk starting exactly at total length - this should return empty string at end
-    const result = getChunk(input, 3, 4) 
-    expect(result).toEqual(['']) // Returns empty string, not empty array
+    const result = getChunk(input, 3, 4)
+    assert.deepStrictEqual(result, ['']) // Returns empty string, not empty array
   })
-
 })
 
 describe('split (coverage edge cases)', () => {
@@ -305,16 +317,14 @@ describe('split (coverage edge cases)', () => {
     const input = 'A\n\nB'
     // Both paragraphs fit in one chunk with joiner
     const result = split(input, { chunkSize: 10, chunkStrategy: 'paragraph' })
-    expect(result).toEqual([
-      { text: 'A\n\nB', start: 0, end: 4 }
-    ])
+    assert.deepStrictEqual(result, [{ text: 'A\n\nB', start: 0, end: 4 }])
   })
 
   test('should handle a single unit larger than chunk size', () => {
     const input = 'ThisIsAVeryLongParagraph'
     // Paragraph is longer than chunkSize, so it should still yield it
     const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph' })
-    expect(result[0]).toEqual({
+    assert.deepStrictEqual(result[0], {
       text: 'ThisIsAVeryLongParagraph',
       start: 0,
       end: 24
@@ -325,14 +335,14 @@ describe('split (coverage edge cases)', () => {
     const input = 'abcdef'
     // Use a custom splitter to trigger the branch
     const result = split(input, { chunkSize: 2, splitter: t => t.split('') })
-    expect(result[0]).toEqual({ text: 'ab', start: 0, end: 2 })
+    assert.deepStrictEqual(result[0], { text: 'ab', start: 0, end: 2 })
   })
 
   test("should cover the 'break' branch when currentLen > chunkSize in character-based chunking", () => {
     const input = 'abcde'
     // chunkSize 2, so after 'ab', 'c' will be a new chunk
     const result = split(input, { chunkSize: 2 })
-    expect(result).toEqual([
+    assert.deepStrictEqual(result, [
       { text: 'ab', start: 0, end: 2 },
       { text: 'cd', start: 2, end: 4 },
       { text: 'e', start: 4, end: 5 }
@@ -343,30 +353,32 @@ describe('split (coverage edge cases)', () => {
     const input = 'a'
     // chunkSize 0 will force end === start
     const result = split(input, { chunkSize: 0 })
-    expect(result[0]).toEqual({ text: 'a', start: 0, end: 1 })
+    assert.deepStrictEqual(result[0], { text: 'a', start: 0, end: 1 })
   })
 
   // Test for chunker.ts:38 - getChunk with startIndex === null
   test('getChunk should return empty array when start is beyond input length', () => {
     const input = ['abc', 'def']
     const result = getChunk(input, 100, 105) // start way beyond length
-    expect(result).toEqual([])
+    assert.deepStrictEqual(result, [])
   })
 
   // Test for chunker.ts:119 - array output for character-based chunking with array input
   test('should handle array input and maintain array output format', () => {
     const input = ['abc', 'def']
     const result = split(input, { chunkSize: 2 })
-    expect(result[0].text).toEqual(['ab']) // Should be array format
-    expect(result[1].text).toEqual(['c'])
+    assert.deepStrictEqual(result[0].text, ['ab']) // Should be array format
+    assert.deepStrictEqual(result[1].text, ['c'])
   })
 
   // Test for chunker.ts:99 - array input branch for paragraph strategy
   test('should handle array input with paragraph strategy', () => {
     const input = ['Para1 line1\nPara1 line2\n\nPara2 line1', 'Para3\n\nPara4']
     const result = split(input, { chunkSize: 100, chunkStrategy: 'paragraph' })
-    expect(result[0].text).toEqual(['Para1 line1\nPara1 line2\n\nPara2 line1']) // Should be array format
-    expect(result[1].text).toEqual(['Para3\n\nPara4'])
+    assert.deepStrictEqual(result[0].text, [
+      'Para1 line1\nPara1 line2\n\nPara2 line1'
+    ]) // Should be array format
+    assert.deepStrictEqual(result[1].text, ['Para3\n\nPara4'])
   })
 
   // Test for utils.ts:85 - bestEnd === start case (force at least one character)
@@ -375,7 +387,7 @@ describe('split (coverage edge cases)', () => {
     // Custom splitter that returns empty array, forcing bestEnd === start
     const emptySplitter = () => []
     const result = split(input, { chunkSize: 1, splitter: emptySplitter })
-    expect(result.length).toBeGreaterThan(0) // Should still produce chunks
+    assert.ok(result.length > 0) // Should still produce chunks
   })
 
   // Test for chunker.ts line 79 - array input with empty string and splitter
@@ -383,46 +395,50 @@ describe('split (coverage edge cases)', () => {
     const input = ['', 'abc']
     const charSplitter = (text: string) => text.split('')
     const result = split(input, { chunkSize: 2, splitter: charSplitter })
-    expect(result[0].text).toEqual(['']) // First chunk should be empty array element
-    expect(result[1].text).toEqual(['ab'])
+    assert.deepStrictEqual(result[0].text, ['']) // First chunk should be empty array element
+    assert.deepStrictEqual(result[1].text, ['ab'])
   })
 
-  // Test for chunker.ts line 99 - array input with paragraph strategy and splitter  
+  // Test for chunker.ts line 99 - array input with paragraph strategy and splitter
   test('should handle array input with paragraph strategy and custom splitter', () => {
     const input = ['Para1\n\nPara2', 'Para3']
     const wordSplitter = (text: string) => text.split(/\s+/)
-    const result = split(input, { chunkSize: 5, chunkStrategy: 'paragraph', splitter: wordSplitter })
-    expect(result[0].text).toEqual(['Para1\n\nPara2']) // Should use array format
+    const result = split(input, {
+      chunkSize: 5,
+      chunkStrategy: 'paragraph',
+      splitter: wordSplitter
+    })
+    assert.deepStrictEqual(result[0].text, ['Para1\n\nPara2']) // Should use array format
   })
 
   // Test for chunker.ts line 119 - array input character chunking with splitter
   test('should handle array input character chunking with custom splitter', () => {
     const input = ['hello', 'world']
-    const vowelSplitter = (text: string) => (text.match(/[aeiou]/g) || [])
+    const vowelSplitter = (text: string) => text.match(/[aeiou]/g) || []
     const result = split(input, { chunkSize: 2, splitter: vowelSplitter })
-    expect(result[0].text).toEqual(['hello']) // Should maintain array format
+    assert.deepStrictEqual(result[0].text, ['hello']) // Should maintain array format
   })
 
-  // Test for chunker.ts:79 - specific array input with empty strings and custom splitter  
+  // Test for chunker.ts:79 - specific array input with empty strings and custom splitter
   test('should handle complex array input with empty strings and custom splitter function', () => {
     const input = ['', 'test', '']
-    const result = split(input, { 
-      chunkSize: 10, 
-      splitter: (text: string) => text.split('') 
+    const result = split(input, {
+      chunkSize: 10,
+      splitter: (text: string) => text.split('')
     })
-    expect(result.length).toBeGreaterThan(0)
-    expect(result[0].text).toEqual([''])
+    assert.ok(result.length > 0)
+    assert.deepStrictEqual(result[0].text, [''])
   })
 
   // Test for chunker.ts:119 - array character chunking with specific splitter that affects length
   test('should handle array input with character strategy and length-affecting splitter', () => {
-    const input = ['hello', 'world'] 
+    const input = ['hello', 'world']
     // Splitter that changes effective length
-    const customSplitter = (text: string) => text.length > 3 ? [text] : []
-    const result = split(input, { 
-      chunkSize: 1, 
-      splitter: customSplitter 
+    const customSplitter = (text: string) => (text.length > 3 ? [text] : [])
+    const result = split(input, {
+      chunkSize: 1,
+      splitter: customSplitter
     })
-    expect(Array.isArray(result[0].text)).toBe(true) // Should maintain array format
+    assert.strictEqual(Array.isArray(result[0].text), true) // Should maintain array format
   })
 })

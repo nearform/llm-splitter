@@ -1,9 +1,5 @@
 import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
-import {
-  chunkByCharacter,
-  chunkByParagraph,
-  getUnits
-} from './utils.js'
+import { chunkByCharacter, chunkByParagraph, getUnits } from './utils.js'
 
 /**
  * Returns the substring from the input text(s) between start and end character positions (character-based only).
@@ -103,7 +99,9 @@ export function* iterateChunks(
       )
       for (const chunk of chunks)
         yield {
-          text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
+          text: Array.isArray(text)
+            ? [chunk.text as string]
+            : (chunk.text as string),
           start: globalOffset + chunk.start,
           end: globalOffset + chunk.end
         }
@@ -118,7 +116,9 @@ export function* iterateChunks(
       )
       for (const chunk of chunks)
         yield {
-          text: Array.isArray(text) ? [chunk.text as string] : chunk.text as string,
+          text: Array.isArray(text)
+            ? [chunk.text as string]
+            : (chunk.text as string),
           start: chunk.start,
           end: chunk.end
         }

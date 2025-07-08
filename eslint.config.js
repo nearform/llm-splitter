@@ -6,6 +6,14 @@ export default [
   js.configs.recommended,
   prettierRecommended,
   {
+    ignores: [
+      '**/dist/**',
+      '**/build/**',
+      '**/coverage/**',
+      '**/node_modules/**'
+    ]
+  },
+  {
     languageOptions: {
       globals: {
         ...globals.node
