@@ -43,17 +43,17 @@ export function chunkByCharacter(
   chunkOverlap: number,
   startOffset: number = 0
 ): ChunkResult[] {
-  let start = 0
-  const textLen = currentText.length
+  let start: number = 0
+  const textLen: number = currentText.length
   const chunks: ChunkResult[] = []
   while (start < textLen) {
     // Use binary search to find the optimal chunk boundary within token limits
-    let low = start + 1
-    let high = textLen
-    let bestEnd = start + 1
+    let low: number = start + 1
+    let high: number = textLen
+    let bestEnd: number = start + 1
     while (low <= high) {
-      const mid = Math.floor((low + high) / 2)
-      const len = splitter(currentText.slice(start, mid)).length
+      const mid: number = Math.floor((low + high) / 2)
+      const len: number = splitter(currentText.slice(start, mid)).length
       if (len <= chunkSize) {
         bestEnd = mid
         low = mid + 1
@@ -94,24 +94,24 @@ export function chunkByParagraph(
   chunkSize: number,
   chunkOverlap: number
 ): ChunkResult[] {
-  let i = 0
-  const n = chunkUnits.length
+  let i: number = 0
+  const n: number = chunkUnits.length
   const chunks: ChunkResult[] = []
 
   while (i < n) {
-    let currentLen = 0
-    let j = i
+    let currentLen: number = 0
+    let j: number = i
 
     // Expand window to include as many complete paragraphs as possible
     while (j < n) {
-      const unitLen = splitter(chunkUnits[j].unit).length
-      const simulatedLen = currentLen + unitLen
+      const unitLen: number = splitter(chunkUnits[j].unit).length
+      const simulatedLen: number = currentLen + unitLen
 
       // Stop expanding if adding this paragraph would exceed the limit
       if (simulatedLen > chunkSize && j > i) break
       // Handle oversized single paragraph by breaking it into sub-chunks
       if (simulatedLen > chunkSize && j === i) {
-        const subChunks = chunkSingleParagraph(
+        const subChunks: ChunkResult[] = chunkSingleParagraph(
           chunkUnits[i],
           splitter,
           chunkSize,
@@ -128,7 +128,7 @@ export function chunkByParagraph(
 
     // Create chunk from the selected paragraph range
     if (j > i) {
-      const chunkStr = chunkUnits
+      const chunkStr: string = chunkUnits
         .slice(i, j)
         .map(u => u.unit)
         .join('\n\n')
@@ -142,7 +142,7 @@ export function chunkByParagraph(
     // Advance window position considering overlap requirements
     if (chunkOverlap > 0 && j > i) {
       // Step back by the specified overlap amount while ensuring progress
-      const overlapStart = Math.max(i + 1, j - chunkOverlap)
+      const overlapStart: number = Math.max(i + 1, j - chunkOverlap)
       i = overlapStart
     } else {
       i = j
@@ -168,19 +168,19 @@ function chunkSingleParagraph(
   chunkSize: number,
   chunkOverlap: number
 ): ChunkResult[] {
-  const tokens = splitter(unit.unit)
+  const tokens: string[] = splitter(unit.unit)
   const chunks: ChunkResult[] = []
-  let tokenIndex = 0
+  let tokenIndex: number = 0
 
   while (tokenIndex < tokens.length) {
     let chunkTokens: string[] = []
-    let currentChunkSize = 0
+    let currentChunkSize: number = 0
     let overlapTokens: string[] = []
 
     // Include overlap tokens from the previous chunk for continuity
     if (chunks.length > 0 && chunkOverlap > 0) {
-      const overlapStart = Math.max(0, tokenIndex - chunkOverlap)
-      for (let k = overlapStart; k < tokenIndex; k++) {
+      const overlapStart: number = Math.max(0, tokenIndex - chunkOverlap)
+      for (let k: number = overlapStart; k < tokenIndex; k++) {
         overlapTokens.push(tokens[k])
         currentChunkSize++
       }
@@ -195,7 +195,7 @@ function chunkSingleParagraph(
     }
 
     // Reconstruct text from the selected tokens
-    const chunkText = chunkTokens.join('')
+    const chunkText: string = chunkTokens.join('')
 
     // Calculate accurate character positions within the original unit
     let chunkStart: number
@@ -207,7 +207,7 @@ function chunkSingleParagraph(
       chunkEnd = unit.start + chunkText.length
     } else {
       // Position subsequent chunks accounting for overlap
-      const prevChunkEnd = chunks[chunks.length - 1].end
+      const prevChunkEnd: number = chunks[chunks.length - 1].end
       chunkStart = prevChunkEnd - overlapTokens.join('').length
       chunkEnd = chunkStart + chunkText.length
     }

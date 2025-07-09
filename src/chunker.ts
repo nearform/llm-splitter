@@ -80,13 +80,13 @@ export function* iterateChunks(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter,
+    splitter = (text: string) => text.split(''),
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
   // Normalize input to array format for consistent processing
   const texts: string[] = Array.isArray(text) ? text : [text]
-  let globalOffset = 0
+  let globalOffset: number = 0
 
   for (const currentText of texts) {
     // Handle empty text segments by yielding empty chunks
@@ -100,9 +100,9 @@ export function* iterateChunks(
       // Extract paragraph units for semantic chunking
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
 
-      const chunks = chunkByParagraph(
+      const chunks: ChunkResult[] = chunkByParagraph(
         chunkUnits,
-        splitter || ((text: string) => text.split('')),
+        splitter,
         chunkSize,
         chunkOverlap
       )
@@ -116,10 +116,10 @@ export function* iterateChunks(
         }
     } else {
       // Apply character-based chunking as the default strategy
-      const chunks = chunkByCharacter(
+      const chunks: ChunkResult[] = chunkByCharacter(
         currentText,
         chunkSize,
-        splitter || ((text: string) => text.split('')),
+        splitter,
         chunkOverlap,
         globalOffset
       )

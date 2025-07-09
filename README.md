@@ -187,7 +187,8 @@ encoding.free() // Clean up
 import { iterateChunks } from '@nearform/llm-chunk'
 
 // Memory-efficient processing of large documents
-for (const chunk of iterateChunks(largeDocument, { chunkSize: 200 })) { // 200 tokens per chunk
+for (const chunk of iterateChunks(largeDocument, { chunkSize: 200 })) {
+  // 200 tokens per chunk
   // Process each chunk individually
   await processChunk(chunk)
 }
@@ -283,6 +284,7 @@ Contributions, issues, and feature requests are welcome! Please feel free to:
 ## Development
 
 This project was entirely developed using the latest AI tooling:
+
 - **GitHub Copilot** for code generation and completion
 - **Claude Sonnet 4 LLM** for architecture design and implementation
 
