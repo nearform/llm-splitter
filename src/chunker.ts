@@ -153,3 +153,5 @@ export function split(
 ): ChunkResult[] {
   return [...iterateChunks(text, options)]
 }
+
+export { split as default }
