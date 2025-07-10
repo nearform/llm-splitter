@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "declaration": true,
     "lib": ["ES2022"],
     "module": "NodeNext",
     "moduleResolution": "nodenext",
@@ -9,5 +10,5 @@
     "target": "ES2022"
   },
   "exclude": ["node_modules/**/*"],
-  "include": ["src/**/*.ts", "./package.json"]
+  "include": ["index.ts", "src/**/*.ts", "test/**/*.ts", "./package.json"]
 }

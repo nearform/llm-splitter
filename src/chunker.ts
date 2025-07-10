@@ -1,18 +1,14 @@
 import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
-import {
-  canFitAllUnits,
-  chunkByCharacter,
-  chunkByGreedySlidingWindow,
-  getLength,
-  getUnits
-} from './utils.js'
+import { chunkByCharacter, chunkByParagraph, getUnits } from './utils.js'
 
 /**
- * Returns the substring from the input text(s) between start and end character positions (character-based only).
- * @param text - A string or array of strings.
- * @param start - Optional start character position (inclusive, default 0).
- * @param end - Optional end character position (exclusive, default: end of input).
- * @returns The substring(s) between start and end positions.
+ * Extracts a substring or segments from the input text by character positions.
+ * For string input, returns a substring. For array input, returns relevant segments.
+ *
+ * @param text - A string or array of strings to extract from.
+ * @param start - Starting character position (inclusive, default: 0).
+ * @param end - Ending character position (exclusive, default: end of input).
+ * @returns The substring for string input, or array of segments for array input.
  */
 export function getChunk(
   text: string | string[],
@@ -27,41 +23,45 @@ export function getChunk(
   let endIndex: number | null = null
   let endOffset: number = 0
 
-  // Scan through the array to find start and end indices
+  // Iterate through array elements to locate start and end boundaries
   for (const [index, row] of text.entries()) {
     currentLength += row.length
+    // Mark the first array element containing the start position
     if (currentLength >= (start ?? 0) && startIndex === null) {
       startIndex = index
+      // Calculate offset within the element where extraction should begin
       startOffset = row.length - (currentLength - (start ?? 0))
     }
+    // Mark the first array element that exceeds the end position
     if (currentLength > (end ?? Infinity)) {
       endIndex = index
+      // Calculate offset within the element where extraction should end
       endOffset = row.length - (currentLength - (end ?? Infinity))
       break
     }
   }
 
-  // If no start found return an empty array
+  // Return empty array when start position is beyond the input text
   if (startIndex === null) return []
 
-  // Expand to the end of the last string if no endIndex found
+  // Set end boundary to the last element when no explicit end is found
   if (endIndex === null) {
     endIndex = text.length - 1
     endOffset = text[endIndex].length
   }
 
-  // If start and end are in the same string, return the substring
+  // Extract substring when start and end positions are within the same element
   if (startIndex === endIndex)
     return [text[startIndex].slice(startOffset, endOffset)]
 
-  // Return the two-part array
+  // Handle extraction spanning exactly two adjacent elements
   if (startIndex === endIndex - 1)
     return [
       text[startIndex].slice(startOffset),
       text[endIndex].slice(0, endOffset)
     ].filter(Boolean)
 
-  // Return the entire chunk from start to end
+  // Extract content spanning multiple elements
   return [
     text[startIndex].slice(startOffset),
     ...text.slice(startIndex + 1, endIndex),
@@ -70,24 +70,28 @@ export function getChunk(
 }
 
 /**
- * Synchronous generator version of split. Yields each chunk object as produced.
- * @param text - A string or array of strings to split.
- * @param options - Options object.
- * @yields Chunk object for each chunk with text and position information.
+ * Memory-efficient generator that yields chunks one at a time.
+ * Supports both string and array inputs with consistent output format.
+ *
+ * @param text - A string or array of strings to split into chunks.
+ * @param options - Configuration options for chunking behavior.
+ * @yields Chunk objects with text content and character position metadata.
  */
 export function* iterateChunks(
   text: string | string[],
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    lengthFunction,
+    splitter = (text: string) => text.split(''),
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
+  // Normalize input to array format for consistent processing
   const texts: string[] = Array.isArray(text) ? text : [text]
-  let globalOffset = 0
+  let globalOffset: number = 0
 
   for (const currentText of texts) {
+    // Handle empty text segments by yielding empty chunks
     if (currentText.length === 0)
       yield {
         text: Array.isArray(text) ? [''] : '',
@@ -95,61 +99,58 @@ export function* iterateChunks(
         end: globalOffset
       }
     else if (chunkStrategy === 'paragraph') {
+      // Extract paragraph units for semantic chunking
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
-      const joiner: string = '\n\n'
-      const joinerLen: number = getLength(joiner, lengthFunction)
 
-      if (canFitAllUnits(chunkUnits, lengthFunction, chunkSize, joinerLen))
-        for (const { unit, start, end } of chunkUnits)
-          yield {
-            text: Array.isArray(text) ? [unit] : unit,
-            start: globalOffset + start,
-            end: globalOffset + end
-          }
-      else {
-        const chunks = chunkByGreedySlidingWindow(
-          chunkUnits,
-          lengthFunction,
-          joinerLen,
-          chunkSize,
-          joiner,
-          chunkOverlap
-        )
-        for (const chunk of chunks)
-          yield {
-            text: Array.isArray(text) ? [chunk.text] : chunk.text,
-            start: globalOffset + chunk.start,
-            end: globalOffset + chunk.end
-          }
-      }
+      // Apply paragraph-based chunking with automatic sub-chunking
+      const chunks: ChunkResult[] = chunkByParagraph(
+        chunkUnits,
+        splitter,
+        chunkSize,
+        chunkOverlap
+      )
+      for (const chunk of chunks)
+        yield {
+          // Maintain input type consistency (string vs array)
+          text: Array.isArray(text)
+            ? [chunk.text as string]
+            : (chunk.text as string),
+          start: globalOffset + chunk.start,
+          end: globalOffset + chunk.end
+        }
     } else {
-      // Default character-based chunking
-      const chunks = chunkByCharacter(
+      // Apply character-based chunking as the default strategy
+      const chunks: ChunkResult[] = chunkByCharacter(
         currentText,
         chunkSize,
-        lengthFunction,
+        splitter,
         chunkOverlap,
         globalOffset
       )
       for (const chunk of chunks)
         yield {
-          text: Array.isArray(text) ? [chunk.text] : chunk.text,
+          // Maintain input type consistency (string vs array)
+          text: Array.isArray(text)
+            ? [chunk.text as string]
+            : (chunk.text as string),
           start: chunk.start,
           end: chunk.end
         }
     }
 
+    // Update global position tracker for next text segment
     globalOffset += currentText.length
   }
 }
 
 /**
- * Split text or array of texts for LLM vectorization using a sliding window approach.
- * Each chunk will overlap with the previous chunk by `chunkOverlap` characters (if provided).
+ * Splits text or array of texts into chunks optimized for LLM vectorization.
+ * Uses paragraph-based chunking with automatic sub-chunking of long paragraphs.
+ * Supports token-based size calculation and configurable overlap.
  *
- * @param text - A string or array of strings to split.
- * @param options - Options object.
- * @returns Array of chunk objects with text and position information.
+ * @param text - A string or array of strings to split into chunks.
+ * @param options - Configuration options for chunking behavior.
+ * @returns Array of chunk objects with text content and character position metadata.
  */
 export function split(
   text: string | string[],
@@ -157,3 +158,5 @@ export function split(
 ): ChunkResult[] {
   return [...iterateChunks(text, options)]
 }
+
+export { split as default }

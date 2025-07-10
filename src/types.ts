@@ -1,28 +1,34 @@
 export interface SplitOptions {
-  /** Maximum size of each chunk (default: 512). */
+  /** Maximum size of each chunk in tokens (default: 512). */
   chunkSize?: number
-  /** Number of characters to overlap between chunks (default: 0). */
+  /** Number of tokens to overlap between chunks (default: 0). */
   chunkOverlap?: number
   /**
-   * Optional function to calculate the length of the text.
-   * If omitted, defaults to the number of characters (text.length).
+   * Function to split text into tokens for size calculation.
+   * If omitted, defaults to character-based splitting.
    */
-  lengthFunction?: (text: string) => number
+  splitter?: (text: string) => string[]
   /**
-   * Optional chunking strategy: 'paragraph'.
-   * If set, overrides character-based chunking. Default: 'paragraph'.
+   * Chunking strategy to use (default: 'paragraph').
+   * 'paragraph' - Splits text by paragraphs (double newlines), with automatic sub-chunking of long paragraphs.
    */
   chunkStrategy?: 'paragraph'
 }
 
 export interface ChunkUnit {
+  /** The text content of the unit (e.g., a paragraph). */
   unit: string
+  /** Starting character position in the original text. */
   start: number
+  /** Ending character position in the original text. */
   end: number
 }
 
 export interface ChunkResult {
+  /** The chunked text content. String for single text input, array for array input. */
   text: string | string[]
+  /** Starting character position in the original text. */
   start: number
+  /** Ending character position in the original text. */
   end: number
 }
