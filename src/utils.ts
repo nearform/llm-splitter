@@ -112,11 +112,11 @@ export function chunkByParagraph(
 
     // Calculate overlap text from previous chunk if needed
     if (chunkOverlap > 0 && chunks.length > 0) {
-      const prevChunk = chunks[chunks.length - 1]
+      const prevChunk: ChunkResult = chunks[chunks.length - 1]
       const prevChunkTokens: string[] = splitter(prevChunk.text as string)
 
       if (prevChunkTokens.length >= chunkOverlap) {
-        const overlapTokens = prevChunkTokens.slice(-chunkOverlap)
+        const overlapTokens: string[] = prevChunkTokens.slice(-chunkOverlap)
         overlapText = overlapTokens.join('')
         overlapTokenCount = overlapTokens.length
         currentLen = overlapTokenCount // Start with overlap tokens counted
@@ -143,7 +143,7 @@ export function chunkByParagraph(
 
         // If we have overlap, prepend it to the first sub-chunk
         if (overlapText && subChunks.length > 0) {
-          const firstSubChunk = subChunks[0]
+          const firstSubChunk: ChunkResult = subChunks[0]
           subChunks[0] = {
             ...firstSubChunk,
             text: overlapText + '\n\n' + firstSubChunk.text
@@ -162,7 +162,7 @@ export function chunkByParagraph(
     if (j > i) {
       const chunkStr: string = chunkUnits
         .slice(i, j)
-        .map(u => u.unit)
+        .map((u: ChunkUnit) => u.unit)
         .join('\n\n')
 
       let finalChunkText: string = chunkStr
@@ -174,11 +174,11 @@ export function chunkByParagraph(
         finalChunkText = overlapText + '\n\n' + chunkStr
 
         // Calculate the character position where overlap starts in the original text
-        const prevChunk = chunks[chunks.length - 1]
-        const prevChunkText = prevChunk.text as string
-        const prevTokens = splitter(prevChunkText)
-        const preOverlapTokens = prevTokens.slice(0, -chunkOverlap)
-        const preOverlapText = preOverlapTokens.join('')
+        const prevChunk: ChunkResult = chunks[chunks.length - 1]
+        const prevChunkText: string = prevChunk.text as string
+        const prevTokens: string[] = splitter(prevChunkText)
+        const preOverlapTokens: string[] = prevTokens.slice(0, -chunkOverlap)
+        const preOverlapText: string = preOverlapTokens.join('')
 
         chunkStart = prevChunk.start + preOverlapText.length
       }
