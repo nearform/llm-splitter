@@ -8,16 +8,16 @@
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "prebuild": "rm -rf dist",
-    "pretest": "npm run build",
-    "test:unit": "node --test dist/test/utils.spec.js dist/test/chunker.spec.js",
-    "test": "npm run test:unit",
-    "lint": "eslint .",
-    "prepare": "husky",
-    "format": "prettier --write . && eslint --cache --fix .",
     "check": "npm run lint && npm run test:unit && npm run check-format",
+    "check-format": "prettier --check .",
     "check-lint": "eslint .",
-    "check-format": "prettier --check ."
+    "format": "prettier --write . && eslint --cache --fix .",
+    "lint": "eslint .",
+    "prebuild": "rm -rf dist",
+    "prepare": "husky",
+    "pretest": "npm run build",
+    "test": "npm run test:unit",
+    "test:unit": "node --test dist/test/utils.spec.js dist/test/chunker.spec.js"
   },
   "repository": {
     "type": "git",
