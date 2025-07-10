@@ -81,7 +81,7 @@ export function chunkByCharacter(
  * Chunks text by paragraphs using a greedy sliding window approach.
  * Attempts to fit as many complete paragraphs as possible within the token limit.
  * When a single paragraph exceeds the limit, it's automatically broken into sub-chunks.
- * 
+ *
  * **Important Behaviors**:
  * - Prevents duplicate/redundant final chunks when content is already covered by overlap
  * - Uses precise token-based overlap that can break paragraph boundaries for exact control
@@ -114,7 +114,7 @@ export function chunkByParagraph(
     if (chunkOverlap > 0 && chunks.length > 0) {
       const prevChunk = chunks[chunks.length - 1]
       const prevChunkTokens: string[] = splitter(prevChunk.text as string)
-      
+
       if (prevChunkTokens.length >= chunkOverlap) {
         const overlapTokens = prevChunkTokens.slice(-chunkOverlap)
         overlapText = overlapTokens.join('')
@@ -130,7 +130,7 @@ export function chunkByParagraph(
 
       // Stop expanding if adding this paragraph would exceed the limit
       if (simulatedLen > chunkSize && j > i) break
-      
+
       // Handle oversized single paragraph by breaking it into sub-chunks
       if (simulatedLen > chunkSize && j === i) {
         // For single large paragraph, we need to handle overlap differently
@@ -140,7 +140,7 @@ export function chunkByParagraph(
           chunkSize,
           chunkOverlap
         )
-        
+
         // If we have overlap, prepend it to the first sub-chunk
         if (overlapText && subChunks.length > 0) {
           const firstSubChunk = subChunks[0]
@@ -149,7 +149,7 @@ export function chunkByParagraph(
             text: overlapText + '\n\n' + firstSubChunk.text
           }
         }
-        
+
         chunks.push(...subChunks)
         i++
         continue
@@ -164,25 +164,25 @@ export function chunkByParagraph(
         .slice(i, j)
         .map(u => u.unit)
         .join('\n\n')
-      
+
       let finalChunkText: string = chunkStr
       let chunkStart: number = chunkUnits[i].start
       let chunkEnd: number = chunkUnits[j - 1].end
-      
+
       // Add overlap text if we have it
       if (overlapText) {
         finalChunkText = overlapText + '\n\n' + chunkStr
-        
+
         // Calculate the character position where overlap starts in the original text
         const prevChunk = chunks[chunks.length - 1]
         const prevChunkText = prevChunk.text as string
         const prevTokens = splitter(prevChunkText)
         const preOverlapTokens = prevTokens.slice(0, -chunkOverlap)
         const preOverlapText = preOverlapTokens.join('')
-        
+
         chunkStart = prevChunk.start + preOverlapText.length
       }
-      
+
       chunks.push({
         text: finalChunkText,
         start: chunkStart,
