@@ -42,6 +42,7 @@
     "lint-staged": "^16.1.0",
     "prettier": "^3.6.2",
     "tiktoken": "^1.0.21",
+    "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
   },
   "lint-staged": {

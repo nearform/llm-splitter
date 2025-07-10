@@ -85,7 +85,7 @@ export function chunkByCharacter(
  * @param chunkUnits - Array of paragraph units with their text and character positions.
  * @param splitter - Function to split text into tokens for size calculation.
  * @param chunkSize - Maximum size of each chunk in tokens.
- * @param chunkOverlap - Number of paragraph units to overlap between chunks.
+ * @param chunkOverlap - Number of tokens to overlap between chunks.
  * @returns Array of chunk objects with text and character positions.
  */
 export function chunkByParagraph(
@@ -119,7 +119,6 @@ export function chunkByParagraph(
         )
         chunks.push(...subChunks)
         i++
-        j = i
         continue
       }
       currentLen = simulatedLen
@@ -139,11 +138,39 @@ export function chunkByParagraph(
       })
     }
 
-    // Advance window position considering overlap requirements
-    if (chunkOverlap > 0 && j > i) {
-      // Step back by the specified overlap amount while ensuring progress
-      const overlapStart: number = Math.max(i + 1, j - chunkOverlap)
-      i = overlapStart
+    // Advance window position considering token-based overlap
+    if (chunkOverlap > 0 && j > i && chunks.length > 0) {
+      // Calculate where to start the next chunk based on token overlap
+      const lastChunkText: string = chunks[chunks.length - 1].text as string
+      const lastChunkTokens: string[] = splitter(lastChunkText)
+      
+      // If we can overlap by the requested amount within the last chunk, do so
+      if (lastChunkTokens.length >= chunkOverlap) {
+        // We need to find which paragraph units contain the overlap tokens
+        let remainingOverlap: number = chunkOverlap
+        let nextStartIndex: number = j
+        
+        // Work backwards through the units in the current chunk
+        for (let k = j - 1; k >= i && remainingOverlap > 0; k--) {
+          const unitTokens: string[] = splitter(chunkUnits[k].unit)
+          if (unitTokens.length <= remainingOverlap) {
+            // This entire unit should be included in the overlap
+            remainingOverlap -= unitTokens.length
+            nextStartIndex = k
+          } else {
+            // Only part of this unit is needed for overlap, but since we work with whole units,
+            // include the whole unit if it helps achieve the overlap
+            nextStartIndex = k
+            break
+          }
+        }
+        
+        // Ensure we make progress (don't start from the same position)
+        i = Math.max(nextStartIndex, i + 1)
+      } else {
+        // If last chunk is smaller than overlap, just move forward by 1
+        i = Math.max(j - 1, i + 1)
+      }
     } else {
       i = j
     }

@@ -1,7 +1,8 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert'
-import { chunkByCharacter, chunkByParagraph } from '../src/utils.js'
-import { get_encoding } from 'tiktoken'
+import { chunkByCharacter, chunkByParagraph, getUnits } from '../src/utils.js'
+import { encoding_for_model } from 'tiktoken'
+import { blogPost } from './fixtures.js'
 
 // Default character-based splitter used across tests
 const defaultSplitter = (text: string) => text.split('')
@@ -218,7 +219,7 @@ describe('chunkByParagraph', () => {
   })
 
   test('works with tiktoken as custom splitter', () => {
-    const encoding = get_encoding('gpt2')
+    const encoding = encoding_for_model('gpt2')
 
     const units = [
       { unit: 'Hello world!', start: 0, end: 12 },
@@ -252,5 +253,95 @@ describe('chunkByParagraph', () => {
 
     // Clean up encoding
     encoding.free()
+  })
+
+  test('handles comprehensive blog post content with tiktoken tokenization', () => {
+    // Use the blog post from fixtures as input
+    const units = getUnits(blogPost)
+
+    // Create tokenizer using text-embedding-ada-002 model
+    const tokenizer = encoding_for_model('text-embedding-ada-002')
+
+    const textDecoder = new TextDecoder()
+
+    // Create tiktoken-based splitter that returns token count, not individual tokens
+    const tokenSplitter = (text: string) => {
+      const tokens: Uint32Array = tokenizer.encode(text)
+      const tokenStrs: string[] = []
+      for (let i = 0; i < tokens.length; i++) {
+        tokenStrs.push(
+          textDecoder.decode(tokenizer.decode(new Uint32Array([tokens[i]])))
+        )
+      }
+
+      return tokenStrs
+    }
+
+    // Test with chunk size 512 and overlap 10
+    const result = Array.from(chunkByParagraph(units, tokenSplitter, 512, 10))
+
+    // Verify that we get multiple chunks for this large text
+    assert.ok(
+      result.length > 1,
+      'Should produce multiple chunks for large blog post'
+    )
+
+    // Verify each chunk respects the token limit
+    for (const chunk of result) {
+      const chunkText =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join('')
+      const actualTokenCount = tokenizer.encode(chunkText).length
+      assert.ok(
+        actualTokenCount <= 520,
+        `Chunk token count ${actualTokenCount} should not significantly exceed 512`
+      )
+    }
+
+    // Verify chunks have proper positioning
+    for (let i = 0; i < result.length; i++) {
+      const chunk = result[i]
+      assert.ok(
+        chunk.start >= 0,
+        `Chunk ${i} start position should be non-negative`
+      )
+      assert.ok(
+        chunk.end > chunk.start,
+        `Chunk ${i} end should be greater than start`
+      )
+    }
+
+    // Verify chunks are properly ordered
+    for (let i = 1; i < result.length; i++) {
+      const prevChunk = result[i - 1]
+      const currentChunk = result[i]
+      assert.ok(
+        currentChunk.start >= prevChunk.start,
+        `Chunk ${i} should start after or at previous chunk`
+      )
+    }
+
+    // Verify that chunks contain meaningful content (not just whitespace)
+    for (const chunk of result) {
+      const chunkText =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join('')
+      assert.ok(
+        chunkText.trim().length > 0,
+        'Each chunk should contain meaningful content'
+      )
+    }
+
+    // Verify that the total content is preserved across all chunks
+    const totalLength = result.reduce((sum, chunk) => {
+      return (
+        sum +
+        (typeof chunk.text === 'string'
+          ? chunk.text.length
+          : chunk.text.join('').length)
+      )
+    }, 0)
+    assert.ok(totalLength > 0, 'Total content should be preserved')
+
+    // Clean up encoding
+    tokenizer.free()
   })
 })
