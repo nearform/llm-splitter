@@ -115,10 +115,10 @@ describe('split', () => {
       chunkStrategy: 'paragraph'
     })
     // With joiner length not counting toward chunk size, more units fit per chunk
+    // Final 'D' is redundant since it's already covered by 'C\n\nD' with overlap
     assert.deepStrictEqual(result, [
       { text: 'A\n\nB\n\nC', start: 0, end: 7 },
-      { text: 'C\n\nD', start: 6, end: 10 },
-      { text: 'D', start: 9, end: 10 }
+      { text: 'C\n\nD', start: 6, end: 10 }
     ])
   })
 
@@ -130,10 +130,10 @@ describe('split', () => {
       chunkStrategy: 'paragraph'
     })
     // With joiner length not counting toward chunk size, more units fit per chunk
+    // Final 'D4' is redundant since it's already covered by 'C3\n\nD4' with overlap
     assert.deepStrictEqual(result, [
       { text: 'A1\n\nB2\n\nC3', start: 0, end: 10 },
-      { text: 'C3\n\nD4', start: 8, end: 14 },
-      { text: 'D4', start: 12, end: 14 }
+      { text: 'C3\n\nD4', start: 8, end: 14 }
     ])
   })
 

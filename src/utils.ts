@@ -81,6 +81,10 @@ export function chunkByCharacter(
  * Chunks text by paragraphs using a greedy sliding window approach.
  * Attempts to fit as many complete paragraphs as possible within the token limit.
  * When a single paragraph exceeds the limit, it's automatically broken into sub-chunks.
+ * 
+ * **Important**: This function prevents duplicate/redundant final chunks. If the remaining
+ * content is already fully covered by the previous chunk with overlap, no additional 
+ * chunk will be created. This ensures efficient chunking without unnecessary duplication.
  *
  * @param chunkUnits - Array of paragraph units with their text and character positions.
  * @param splitter - Function to split text into tokens for size calculation.
@@ -165,8 +169,35 @@ export function chunkByParagraph(
           }
         }
         
-        // Ensure we make progress (don't start from the same position)
-        i = Math.max(nextStartIndex, i + 1)
+        // Ensure we make progress and that there's actually content to process
+        const proposedStart = Math.max(nextStartIndex, i + 1)
+        
+        // Check if there are remaining units to process beyond the proposed start
+        if (proposedStart < n) {
+          // Calculate if the remaining content would create a meaningful chunk
+          let remainingContentTokens = 0
+          for (let k = proposedStart; k < n; k++) {
+            remainingContentTokens += splitter(chunkUnits[k].unit).length
+          }
+          
+          // Only create a new chunk if there's enough remaining content
+          // and it's not entirely contained in the previous chunk
+          if (remainingContentTokens > 0) {
+            const nextChunkEnd = chunkUnits[n - 1].end
+            const lastChunkEnd = chunks[chunks.length - 1].end
+            
+            // Don't create overlapping chunk if the content is already fully contained
+            if (nextChunkEnd > lastChunkEnd) {
+              i = proposedStart
+            } else {
+              i = j // Skip creating duplicate chunk
+            }
+          } else {
+            i = j // No meaningful content left
+          }
+        } else {
+          i = j // No more units to process
+        }
       } else {
         // If last chunk is smaller than overlap, just move forward by 1
         i = Math.max(j - 1, i + 1)

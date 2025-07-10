@@ -82,10 +82,9 @@ describe('chunkByParagraph', () => {
     ]
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 4, 1))
     // With joiner length not counting toward chunk size, all units fit in one chunk
-    // but overlap logic still creates an additional chunk
+    // No duplicate chunk needed since all content is already covered
     assert.deepStrictEqual(result, [
-      { text: 'A\n\nB\n\nC', start: 0, end: 5 },
-      { text: 'C', start: 4, end: 5 }
+      { text: 'A\n\nB\n\nC', start: 0, end: 5 }
     ])
   })
 
@@ -97,12 +96,12 @@ describe('chunkByParagraph', () => {
       { unit: 'D', start: 6, end: 7 }
     ]
     const result = Array.from(chunkByParagraph(units, defaultSplitter, 2, 1))
-    // With chunk size 2, we can fit 2 units per chunk, with overlap creating additional chunks
+    // With chunk size 2, we can fit 2 units per chunk, with proper overlap
+    // Final chunk 'D' is redundant since it's already covered by 'C\n\nD'
     assert.deepStrictEqual(result, [
       { text: 'A\n\nB', start: 0, end: 3 },
       { text: 'B\n\nC', start: 2, end: 5 },
-      { text: 'C\n\nD', start: 4, end: 7 },
-      { text: 'D', start: 6, end: 7 }
+      { text: 'C\n\nD', start: 4, end: 7 }
     ])
   })
 
@@ -343,5 +342,52 @@ describe('chunkByParagraph', () => {
 
     // Clean up encoding
     tokenizer.free()
+  })
+
+  test('prevents duplicate final chunks when content is already covered by overlap', () => {
+    const units = [
+      { unit: 'First paragraph', start: 0, end: 15 },
+      { unit: 'Second paragraph', start: 17, end: 33 },
+      { unit: 'Third paragraph', start: 35, end: 50 },
+      { unit: 'Final small bit', start: 52, end: 67 }
+    ]
+    
+    // Use a smaller chunk size to force multiple chunks
+    const result = Array.from(chunkByParagraph(units, defaultSplitter, 18, 5))
+    
+    // Verify that we get multiple chunks but don't get redundant final chunks
+    assert.ok(result.length >= 2, 'Should create multiple chunks')
+    
+    // Verify no chunk is entirely contained within another chunk
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const chunkA = result[i]
+        const chunkB = result[j]
+        
+        // Neither chunk should be entirely contained within the other
+        const aContainsB = chunkA.start <= chunkB.start && chunkA.end >= chunkB.end
+        const bContainsA = chunkB.start <= chunkA.start && chunkB.end >= chunkA.end
+        
+        assert.ok(
+          !aContainsB && !bContainsA,
+          `Chunk ${i} and chunk ${j} should not have one entirely contained in the other`
+        )
+      }
+    }
+    
+    // Verify that adjacent chunks have meaningful overlap
+    for (let i = 1; i < result.length; i++) {
+      const current = result[i]
+      const previous = result[i - 1]
+      
+      // Chunks should have overlap (current starts before previous ends)
+      if (current.start < previous.end) {
+        const overlapSize = previous.end - current.start
+        assert.ok(
+          overlapSize > 0,
+          `Chunk ${i} should have meaningful overlap with previous chunk`
+        )
+      }
+    }
   })
 })
