@@ -23,7 +23,7 @@ npm install @nearform/llm-chunk
 ## Quick Start
 
 ```typescript
-import { split } from '@nearform/llm-chunk'
+import split from '@nearform/llm-chunk'
 
 const document = `Introduction paragraph with important context.
 
@@ -125,7 +125,7 @@ interface ChunkResult {
 ### Tiktoken Integration (Recommended)
 
 ```typescript
-import { split } from '@nearform/llm-chunk'
+import split from '@nearform/llm-chunk'
 import { get_encoding } from 'tiktoken'
 
 // Use GPT tokenizer for accurate LLM token counting
@@ -148,7 +148,7 @@ encoding.free()
 ### Word-Based Chunking
 
 ```typescript
-import { split } from '@nearform/llm-chunk'
+import split from '@nearform/llm-chunk'
 
 const wordTokenizer = (text: string) =>
   text.split(/\s+/).filter(word => word.length > 0)
@@ -178,7 +178,7 @@ for (const chunk of iterateChunks(hugeDocument, {
 ### Array Input Processing
 
 ```typescript
-import { split } from '@nearform/llm-chunk'
+import split from '@nearform/llm-chunk'
 
 const documents = [
   'First document content...',
