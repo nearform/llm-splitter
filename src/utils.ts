@@ -16,6 +16,7 @@ export function getUnits(text: string): ChunkUnit[] {
     const unit: string = text.slice(lastIndex, end).trim()
     // Store non-empty paragraphs with their character positions
     if (unit) units.push({ unit, start: lastIndex, end })
+    // Move past the current separator for next iteration
     lastIndex = regex.lastIndex
   }
   // Handle the final paragraph after the last separator
@@ -119,7 +120,8 @@ export function chunkByParagraph(
         const overlapTokens: string[] = prevChunkTokens.slice(-chunkOverlap)
         overlapText = overlapTokens.join('')
         overlapTokenCount = overlapTokens.length
-        currentLen = overlapTokenCount // Start with overlap tokens counted
+        // Start with overlap tokens counted towards chunk size
+        currentLen = overlapTokenCount
       }
     }
 
@@ -151,9 +153,11 @@ export function chunkByParagraph(
         }
 
         chunks.push(...subChunks)
+        // Move to next paragraph after processing sub-chunks
         i++
         continue
       }
+      // Accept this paragraph and continue expanding
       currentLen = simulatedLen
       j++
     }
@@ -180,6 +184,7 @@ export function chunkByParagraph(
         const preOverlapTokens: string[] = prevTokens.slice(0, -chunkOverlap)
         const preOverlapText: string = preOverlapTokens.join('')
 
+        // Adjust start position to account for overlap
         chunkStart = prevChunk.start + preOverlapText.length
       }
 
@@ -229,6 +234,7 @@ function chunkSingleParagraph(
         overlapTokens.push(tokens[k])
         currentChunkSize++
       }
+      // Initialize chunk with overlap tokens
       chunkTokens = [...overlapTokens]
     }
 
@@ -260,6 +266,7 @@ function chunkSingleParagraph(
     chunks.push({
       text: chunkText,
       start: chunkStart,
+      // Ensure we don't exceed the original unit boundaries
       end: Math.min(chunkEnd, unit.end)
     })
 

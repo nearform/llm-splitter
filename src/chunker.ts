@@ -29,11 +29,13 @@ export function getChunk(
     // Mark the first array element containing the start position
     if (currentLength >= (start ?? 0) && startIndex === null) {
       startIndex = index
+      // Calculate offset within the element where extraction should begin
       startOffset = row.length - (currentLength - (start ?? 0))
     }
     // Mark the first array element that exceeds the end position
     if (currentLength > (end ?? Infinity)) {
       endIndex = index
+      // Calculate offset within the element where extraction should end
       endOffset = row.length - (currentLength - (end ?? Infinity))
       break
     }
@@ -100,6 +102,7 @@ export function* iterateChunks(
       // Extract paragraph units for semantic chunking
       const chunkUnits: ChunkUnit[] = getUnits(currentText)
 
+      // Apply paragraph-based chunking with automatic sub-chunking
       const chunks: ChunkResult[] = chunkByParagraph(
         chunkUnits,
         splitter,
@@ -108,6 +111,7 @@ export function* iterateChunks(
       )
       for (const chunk of chunks)
         yield {
+          // Maintain input type consistency (string vs array)
           text: Array.isArray(text)
             ? [chunk.text as string]
             : (chunk.text as string),
@@ -125,6 +129,7 @@ export function* iterateChunks(
       )
       for (const chunk of chunks)
         yield {
+          // Maintain input type consistency (string vs array)
           text: Array.isArray(text)
             ? [chunk.text as string]
             : (chunk.text as string),
