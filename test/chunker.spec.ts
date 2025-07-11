@@ -2,6 +2,8 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert'
 import { split, getChunk, iterateChunks } from '../src/chunker.js'
 import type { SplitOptions, ChunkResult } from '../src/types.js'
+import { encoding_for_model, type Tiktoken } from 'tiktoken'
+import { blogPost } from './fixtures.js'
 
 describe('split', () => {
   test('should split a single string into correct sizes', () => {
@@ -488,5 +490,46 @@ describe('split (coverage edge cases)', () => {
       splitter: customSplitter
     })
     assert.strictEqual(typeof result[0].text, 'string') // Should be string format
+  })
+
+  test('should verify split and getChunk consistency with tiktoken splitter on blog fixture', () => {
+    // Create tokenizer using text-embedding-ada-002 model (same as in utils.spec.ts)
+    const tokenizer: Tiktoken = encoding_for_model('text-embedding-ada-002')
+    const textDecoder = new TextDecoder()
+
+    // Create tiktoken-based splitter that returns token strings
+    const tokenSplitter: (text: string) => string[] = (text: string) => {
+      const tokens: Uint32Array = tokenizer.encode(text)
+      const tokenStrs: string[] = []
+      for (let i: number = 0; i < tokens.length; i++) {
+        tokenStrs.push(
+          textDecoder.decode(tokenizer.decode(new Uint32Array([tokens[i]])))
+        )
+      }
+      return tokenStrs
+    }
+
+    // Use the blog fixture with tiktoken splitter
+    const chunks: ChunkResult[] = split(blogPost, {
+      chunkSize: 512,
+      chunkOverlap: 10,
+      splitter: tokenSplitter
+    })
+
+    // Verify we get multiple chunks for this large text
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for blog post')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedText = getChunk(blogPost, chunk.start, chunk.end)
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+
+    // Clean up tokenizer
+    tokenizer.free()
   })
 })
