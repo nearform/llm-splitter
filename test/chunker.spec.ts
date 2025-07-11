@@ -544,11 +544,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -568,11 +567,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -608,11 +606,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -639,11 +636,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -667,11 +663,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -699,11 +694,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
@@ -722,11 +716,10 @@ describe('split (coverage edge cases)', () => {
     // For each chunk, verify that getChunk returns the same text
     for (const chunk of chunks) {
       const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
-      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
-      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
-      assert.strictEqual(
+      // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+      assert.deepStrictEqual(
         chunk.text,
-        retrievedText,
+        retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
