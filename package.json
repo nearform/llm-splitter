@@ -1,7 +1,7 @@
 {
   "name": "@nearform/llm-chunk",
   "private": false,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
