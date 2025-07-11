@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import { split, getChunk, iterateChunks } from '../src/chunker.js'
 import type { SplitOptions, ChunkResult } from '../src/types.js'
 import { encoding_for_model, type Tiktoken } from 'tiktoken'
-import { blogPost } from './fixtures.js'
+import { blogPost, multilineBlogPost } from './fixtures.js'
 
 describe('split', () => {
   test('should split a single string into correct sizes', () => {
@@ -531,5 +531,206 @@ describe('split (coverage edge cases)', () => {
 
     // Clean up tokenizer
     tokenizer.free()
+  })
+
+  test('should verify split and getChunk consistency with character-based splitting on multilineBlogPost fixture', () => {
+    // Use the multilineBlogPost fixture with character-based splitting (default behavior)
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 512,
+      chunkOverlap: 50
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+
+  test('should verify split and getChunk consistency with paragraph strategy on multilineBlogPost fixture', () => {
+    // Use the multilineBlogPost fixture with paragraph-based splitting 
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 1024,
+      chunkOverlap: 100,
+      chunkStrategy: 'paragraph'
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post with paragraph strategy')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+
+  test('should verify split and getChunk consistency with tiktoken splitter on multilineBlogPost fixture', () => {
+    // Create tokenizer using text-embedding-ada-002 model
+    const tokenizer: Tiktoken = encoding_for_model('text-embedding-ada-002')
+    const textDecoder = new TextDecoder()
+
+    // Create tiktoken-based splitter that returns token strings
+    const tokenSplitter: (text: string) => string[] = (text: string) => {
+      const tokens: Uint32Array = tokenizer.encode(text)
+      const tokenStrs: string[] = []
+      for (let i: number = 0; i < tokens.length; i++) {
+        tokenStrs.push(
+          textDecoder.decode(tokenizer.decode(new Uint32Array([tokens[i]])))
+        )
+      }
+      return tokenStrs
+    }
+
+    // Use the multilineBlogPost fixture with tiktoken splitter
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 256,
+      chunkOverlap: 20,
+      splitter: tokenSplitter
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post with tiktoken')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+
+    // Clean up tokenizer
+    tokenizer.free()
+  })
+
+  test('should handle multilineBlogPost with custom word-based splitter and verify consistency', () => {
+    // Create a word-based splitter
+    const wordSplitter: (text: string) => string[] = (text: string) =>
+      text.split(/\s+/).filter(word => word.length > 0)
+
+    // Use the multilineBlogPost fixture with word-based splitting
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 100,
+      chunkOverlap: 15,
+      splitter: wordSplitter
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post with word splitter')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+
+  test('should handle multilineBlogPost with sentence-based splitter and verify consistency', () => {
+    // Create a sentence-based splitter (split on sentence endings)
+    const sentenceSplitter: (text: string) => string[] = (text: string) =>
+      text.split(/[.!?]+/).filter(sentence => sentence.trim().length > 0)
+
+    // Use the multilineBlogPost fixture with sentence-based splitting
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 50,
+      chunkOverlap: 5,
+      splitter: sentenceSplitter
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post with sentence splitter')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+
+  test('should handle multilineBlogPost with no overlap and verify consistency', () => {
+    // Test with no overlap to ensure edge case handling
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 300,
+      chunkOverlap: 0
+    })
+
+    // Verify we get multiple chunks for this large text array
+    assert.ok(chunks.length > 1, 'Should produce multiple chunks for multiline blog post with no overlap')
+
+    // Verify no gaps or overlaps between chunks
+    for (let i = 0; i < chunks.length - 1; i++) {
+      assert.strictEqual(
+        chunks[i].end,
+        chunks[i + 1].start,
+        `Chunk ${i} end should equal chunk ${i + 1} start when no overlap`
+      )
+    }
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+
+  test('should handle multilineBlogPost with small chunk size and verify consistency', () => {
+    // Test with very small chunk size to stress test the splitting
+    const chunks: ChunkResult[] = split(multilineBlogPost, {
+      chunkSize: 50,
+      chunkOverlap: 10
+    })
+
+    // Verify we get many chunks for this large text array with small chunk size
+    assert.ok(chunks.length > 5, 'Should produce many chunks for multiline blog post with small chunk size')
+
+    // For each chunk, verify that getChunk returns the same text
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      // Since multilineBlogPost is an array, getChunk returns an array, so we need to join it
+      const retrievedText = Array.isArray(retrievedChunk) ? retrievedChunk.join('') : retrievedChunk
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
   })
 })

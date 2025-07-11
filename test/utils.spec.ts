@@ -378,13 +378,6 @@ describe('chunkByParagraph', () => {
         const overlapText: string = blogPost.substring(overlapStart, overlapEnd)
         const overlapTokenCount: number = tokenizer.encode(overlapText).length
 
-        console.log(`\nChunk ${i} overlap analysis:`)
-        console.log(`  Requested overlap: 10 tokens`)
-        console.log(`  Actual overlap: ${overlapTokenCount} tokens`)
-        console.log(`  Overlap text: "${overlapText.substring(0, 100)}..."`)
-        console.log(`  Previous chunk end: ${prevChunk.end}`)
-        console.log(`  Current chunk start: ${currentChunk.start}`)
-
         // For paragraph-based chunking, overlap may exceed requested amount due to
         // paragraph boundary preservation. This is expected behavior.
         // We just verify that some meaningful overlap exists and it's not excessive.
@@ -476,24 +469,6 @@ describe('chunkByParagraph', () => {
     const result: ChunkResult[] = Array.from(
       chunkByParagraph(units, tokenSplitter, 30, 5)
     )
-
-    console.log('\n--- Paragraph Chunking Overlap Behavior ---')
-    for (let i: number = 0; i < result.length; i++) {
-      const chunk: ChunkResult = result[i]
-      const tokenCount: number = encoding.encode(chunk.text as string).length
-      console.log(`Chunk ${i}: ${tokenCount} tokens`)
-      console.log(`  Text: "${(chunk.text as string).substring(0, 60)}..."`)
-
-      if (i > 0) {
-        const prevChunk: ChunkResult = result[i - 1]
-        if (chunk.start < prevChunk.end) {
-          const overlapChars: number = prevChunk.end - chunk.start
-          console.log(
-            `  Overlap: ${overlapChars} characters (preserves paragraph boundaries)`
-          )
-        }
-      }
-    }
 
     // Verify that we get reasonable chunking while preserving paragraph boundaries
     assert.ok(result.length >= 2, 'Should create multiple chunks')
