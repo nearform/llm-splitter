@@ -71,7 +71,7 @@ export function getChunk(
 
 /**
  * Memory-efficient generator that yields chunks one at a time.
- * Supports both string and array inputs with consistent output format.
+ * Supports both string and array inputs.
  *
  * @param text - A string or array of strings to split into chunks.
  * @param options - Configuration options for chunking behavior.
@@ -94,7 +94,7 @@ export function* iterateChunks(
     // Handle empty text segments by yielding empty chunks
     if (currentText.length === 0)
       yield {
-        text: Array.isArray(text) ? [''] : '',
+        text: '',
         start: globalOffset,
         end: globalOffset
       }
@@ -111,32 +111,19 @@ export function* iterateChunks(
       )
       for (const chunk of chunks)
         yield {
-          // Maintain input type consistency (string vs array)
-          text: Array.isArray(text)
-            ? [chunk.text as string]
-            : (chunk.text as string),
+          text: chunk.text,
           start: globalOffset + chunk.start,
           end: globalOffset + chunk.end
         }
-    } else {
+    } else
       // Apply character-based chunking as the default strategy
-      const chunks: ChunkResult[] = chunkByCharacter(
+      yield* chunkByCharacter(
         currentText,
         chunkSize,
         splitter,
         chunkOverlap,
         globalOffset
       )
-      for (const chunk of chunks)
-        yield {
-          // Maintain input type consistency (string vs array)
-          text: Array.isArray(text)
-            ? [chunk.text as string]
-            : (chunk.text as string),
-          start: chunk.start,
-          end: chunk.end
-        }
-    }
 
     // Update global position tracker for next text segment
     globalOffset += currentText.length

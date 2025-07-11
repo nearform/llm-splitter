@@ -109,8 +109,8 @@ interface SplitOptions {
 
 ```typescript
 interface ChunkResult {
-  /** Chunked text content (string for single input, string[] for array input) */
-  text: string | string[]
+  /** Chunked text content */
+  text: string
 
   /** Starting character position in original text */
   start: number
