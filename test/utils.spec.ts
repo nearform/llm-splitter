@@ -204,10 +204,16 @@ describe('chunkByParagraph', () => {
 
     // Check that there is overlap between chunks
     if (result.length > 1) {
-      const firstChunkText: string = result[0].text
-      const secondChunkText: string = result[1].text
-      const firstChunkEnd: string = firstChunkText.slice(-5)
-      const secondChunkStart: string = secondChunkText.slice(0, 5)
+      const firstChunkText: string | string[] = result[0].text
+      const secondChunkText: string | string[] = result[1].text
+      const firstChunkEnd: string =
+        typeof firstChunkText === 'string'
+          ? firstChunkText.slice(-5)
+          : firstChunkText.join('').slice(-5)
+      const secondChunkStart: string =
+        typeof secondChunkText === 'string'
+          ? secondChunkText.slice(0, 5)
+          : secondChunkText.join('').slice(0, 5)
       // There should be some overlap in content
       assert.ok(firstChunkEnd.length > 0 && secondChunkStart.length > 0)
     }
@@ -228,8 +234,10 @@ describe('chunkByParagraph', () => {
     assert.ok(result.length >= 2) // Should have multiple chunks
 
     // Verify chunks respect the token limit
-    for (const { text } of result) {
-      const tokenCount: number = wordSplitter(text).length
+    for (const chunk of result) {
+      const chunkText: string =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join(' ')
+      const tokenCount: number = wordSplitter(chunkText).length
       assert.ok(tokenCount <= 10) // Should not exceed 10 words per chunk
     }
 
@@ -240,7 +248,10 @@ describe('chunkByParagraph', () => {
     // Verify that each chunk has reasonable content
     for (let i: number = 0; i < result.length; i++) {
       const chunk: ChunkResult = result[i]
-      const chunkText: string = chunk.text
+      const chunkText: string =
+        typeof chunk.text === 'string'
+          ? chunk.text
+          : (chunk.text as string[]).join(' ')
       assert.ok(chunkText.length > 0, `Chunk ${i} should have content`)
     }
   })
@@ -322,8 +333,10 @@ describe('chunkByParagraph', () => {
     )
 
     // Verify each chunk respects the token limit
-    for (const { text } of result) {
-      const actualTokenCount: number = tokenizer.encode(text).length
+    for (const chunk of result) {
+      const chunkText: string =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join('')
+      const actualTokenCount: number = tokenizer.encode(chunkText).length
       assert.ok(
         actualTokenCount <= 520,
         `Chunk token count ${actualTokenCount} should not significantly exceed 512`
@@ -354,16 +367,25 @@ describe('chunkByParagraph', () => {
     }
 
     // Verify that chunks contain meaningful content (not just whitespace)
-    for (const { text } of result) {
+    for (const chunk of result) {
+      const chunkText: string =
+        typeof chunk.text === 'string' ? chunk.text : chunk.text.join('')
       assert.ok(
-        text.trim().length > 0,
+        chunkText.trim().length > 0,
         'Each chunk should contain meaningful content'
       )
     }
 
     // Verify that the total content is preserved across all chunks
     const totalLength: number = result.reduce(
-      (sum: number, chunk: ChunkResult) => sum + chunk.text.length,
+      (sum: number, chunk: ChunkResult) => {
+        return (
+          sum +
+          (typeof chunk.text === 'string'
+            ? chunk.text.length
+            : chunk.text.join('').length)
+        )
+      },
       0
     )
     assert.ok(totalLength > 0, 'Total content should be preserved') // Test overlap token count specifically

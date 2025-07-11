@@ -19,12 +19,12 @@ describe('split', () => {
   test('should split an array of strings into correct sizes', () => {
     const input: string[] = ['abcde', 'fghij']
     assert.deepStrictEqual(split(input, { chunkSize: 2 }), [
-      { text: 'ab', start: 0, end: 2 },
-      { text: 'cd', start: 2, end: 4 },
-      { text: 'e', start: 4, end: 5 },
-      { text: 'fg', start: 5, end: 7 },
-      { text: 'hi', start: 7, end: 9 },
-      { text: 'j', start: 9, end: 10 }
+      { text: ['ab'], start: 0, end: 2 },
+      { text: ['cd'], start: 2, end: 4 },
+      { text: ['e'], start: 4, end: 5 },
+      { text: ['fg'], start: 5, end: 7 },
+      { text: ['hi'], start: 7, end: 9 },
+      { text: ['j'], start: 9, end: 10 }
     ])
   })
 
@@ -53,8 +53,8 @@ describe('split', () => {
     const input: string = 'a'.repeat(600)
     const result: ChunkResult[] = split(input)
     assert.strictEqual(result.length, 2)
-    assert.strictEqual(result[0].text.length, 512)
-    assert.strictEqual(result[1].text.length, 88)
+    assert.strictEqual((result[0].text as string).length, 512)
+    assert.strictEqual((result[1].text as string).length, 88)
     assert.strictEqual(result[0].start, 0)
     assert.strictEqual(result[0].end, 512)
     assert.strictEqual(result[1].start, 512)
@@ -149,15 +149,15 @@ describe('split', () => {
 
   test('should handle array of empty strings with chunkStrategy', () => {
     assert.deepStrictEqual(split(['', ''], { chunkStrategy: 'paragraph' }), [
-      { text: '', start: 0, end: 0 },
-      { text: '', start: 0, end: 0 }
+      { text: [''], start: 0, end: 0 },
+      { text: [''], start: 0, end: 0 }
     ])
   })
 
   test('should handle array of empty strings', () => {
     assert.deepStrictEqual(split(['', '']), [
-      { text: '', start: 0, end: 0 },
-      { text: '', start: 0, end: 0 }
+      { text: [''], start: 0, end: 0 },
+      { text: [''], start: 0, end: 0 }
     ])
   })
 
@@ -165,8 +165,8 @@ describe('split', () => {
     assert.deepStrictEqual(
       split(['', ''], { chunkSize: 5, chunkStrategy: 'paragraph' }),
       [
-        { text: '', start: 0, end: 0 },
-        { text: '', start: 0, end: 0 }
+        { text: [''], start: 0, end: 0 },
+        { text: [''], start: 0, end: 0 }
       ]
     )
   })
@@ -179,9 +179,9 @@ describe('split', () => {
       chunkStrategy: 'paragraph'
     })
     assert.deepStrictEqual(result, [
-      { text: 'A', start: 0, end: 1 },
-      { text: 'B', start: 1, end: 2 },
-      { text: 'C', start: 2, end: 3 }
+      { text: ['A'], start: 0, end: 1 },
+      { text: ['B'], start: 1, end: 2 },
+      { text: ['C'], start: 2, end: 3 }
     ])
   })
 
@@ -193,9 +193,9 @@ describe('split', () => {
       chunkStrategy: 'paragraph'
     })
     assert.deepStrictEqual(result, [
-      { text: '', start: 0, end: 0 },
-      { text: 'A', start: 0, end: 1 },
-      { text: '', start: 1, end: 1 }
+      { text: [''], start: 0, end: 0 },
+      { text: ['A'], start: 0, end: 1 },
+      { text: [''], start: 1, end: 1 }
     ])
   })
 
@@ -217,10 +217,10 @@ describe('split', () => {
       chunkStrategy: 'paragraph'
     })
     assert.deepStrictEqual(result, [
-      { text: 'A', start: 0, end: 1 },
-      { text: 'B', start: 1, end: 2 },
-      { text: 'C', start: 2, end: 3 },
-      { text: 'D', start: 3, end: 4 }
+      { text: ['A'], start: 0, end: 1 },
+      { text: ['B'], start: 1, end: 2 },
+      { text: ['C'], start: 2, end: 3 },
+      { text: ['D'], start: 3, end: 4 }
     ])
   })
 
@@ -255,7 +255,9 @@ describe('split', () => {
       const chunkStr: string = Array.isArray(chunkFromGetChunk)
         ? chunkFromGetChunk.join('')
         : chunkFromGetChunk
-      const expectedText: string = chunk.text
+      const expectedText: string = Array.isArray(chunk.text)
+        ? chunk.text.join('')
+        : chunk.text
       assert.strictEqual(chunkStr, expectedText)
       offset += chunkLength
     }
@@ -391,12 +393,11 @@ describe('split (coverage edge cases)', () => {
   })
 
   // Test for chunker.ts:119 - array output for character-based chunking with array input
-  test('should handle array input and maintain string output format', () => {
+  test('should handle array input and maintain array output format', () => {
     const input: string[] = ['abc', 'def']
     const result: ChunkResult[] = split(input, { chunkSize: 2 })
-    assert.strictEqual(typeof result[0].text, 'string') // Should be string format
-    assert.strictEqual(result[0].text, 'ab')
-    assert.strictEqual(result[1].text, 'c')
+    assert.deepStrictEqual(result[0].text, ['ab']) // Should be array format
+    assert.deepStrictEqual(result[1].text, ['c'])
   })
 
   // Test for chunker.ts:99 - array input branch for paragraph strategy
@@ -409,12 +410,10 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 100,
       chunkStrategy: 'paragraph'
     })
-    assert.strictEqual(typeof result[0].text, 'string') // Should be string format
-    assert.strictEqual(
-      result[0].text,
+    assert.deepStrictEqual(result[0].text, [
       'Para1 line1\nPara1 line2\n\nPara2 line1'
-    )
-    assert.strictEqual(result[1].text, 'Para3\n\nPara4')
+    ]) // Should be array format
+    assert.deepStrictEqual(result[1].text, ['Para3\n\nPara4'])
   })
 
   // Test for utils.ts:85 - bestEnd === start case (force at least one character)
@@ -438,8 +437,8 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 2,
       splitter: charSplitter
     })
-    assert.strictEqual(result[0].text, '') // First chunk should be empty string
-    assert.strictEqual(result[1].text, 'ab')
+    assert.deepStrictEqual(result[0].text, ['']) // First chunk should be empty array element
+    assert.deepStrictEqual(result[1].text, ['ab'])
   })
 
   // Test for chunker.ts line 99 - array input with paragraph strategy and splitter
@@ -452,8 +451,7 @@ describe('split (coverage edge cases)', () => {
       chunkStrategy: 'paragraph',
       splitter: wordSplitter
     })
-    assert.strictEqual(typeof result[0].text, 'string') // Should be string format
-    assert.strictEqual(result[0].text, 'Para1\n\nPara2')
+    assert.deepStrictEqual(result[0].text, ['Para1\n\nPara2']) // Should use array format
   })
 
   // Test for chunker.ts line 119 - array input character chunking with splitter
@@ -465,7 +463,7 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 2,
       splitter: vowelSplitter
     })
-    assert.strictEqual(typeof result[0].text, 'string') // Should be string format
+    assert.deepStrictEqual(result[0].text, ['hello']) // Should maintain array format
   })
 
   // Test for chunker.ts:79 - specific array input with empty strings and custom splitter
@@ -476,7 +474,7 @@ describe('split (coverage edge cases)', () => {
       splitter: (text: string) => text.split('')
     })
     assert.ok(result.length > 0)
-    assert.strictEqual(result[0].text, '')
+    assert.deepStrictEqual(result[0].text, [''])
   })
 
   // Test for chunker.ts:119 - array character chunking with specific splitter that affects length
@@ -489,7 +487,7 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 1,
       splitter: customSplitter
     })
-    assert.strictEqual(typeof result[0].text, 'string') // Should be string format
+    assert.strictEqual(Array.isArray(result[0].text), true) // Should maintain array format
   })
 
   test('should verify split and getChunk consistency with tiktoken splitter on blog fixture', () => {

@@ -25,8 +25,8 @@ export interface ChunkUnit {
 }
 
 export interface ChunkResult {
-  /** The chunked text content.*/
-  text: string
+  /** The chunked text content. String for single text input, array for array input. */
+  text: string | string[]
   /** Starting character position in the original text. */
   start: number
   /** Ending character position in the original text. */
