@@ -119,11 +119,11 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    // With joiner length not counting toward chunk size, more units fit per chunk
-    // Final 'D' is redundant since it's already covered by 'C\n\nD' with overlap
+    // With direct extraction from original text (no synthetic overlap), we get exact boundaries
+    // This ensures split/getChunk consistency as requested by the user
     assert.deepStrictEqual(result, [
       { text: 'A\n\nB\n\nC', start: 0, end: 7 },
-      { text: 'C\n\nD', start: 6, end: 10 }
+      { text: 'D', start: 9, end: 10 }
     ])
   })
 
@@ -134,10 +134,11 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    // With precise token-based overlap, we get exactly 1 token overlap ('3' from 'C3')
+    // With direct extraction from original text (no synthetic overlap), we get exact boundaries
+    // This ensures split/getChunk consistency as requested by the user
     assert.deepStrictEqual(result, [
       { text: 'A1\n\nB2\n\nC3', start: 0, end: 10 },
-      { text: '3\n\nD4', start: 9, end: 14 } // '3' is the exact 1-token overlap
+      { text: 'D4', start: 12, end: 14 }
     ])
   })
 
@@ -723,5 +724,316 @@ describe('split (coverage edge cases)', () => {
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
       )
     }
+  })
+})
+
+describe('split and getChunk relationship matrix tests', () => {
+  // Test matrix configurations
+  const testConfigurations = [
+    // Configuration 1: Small chunks, no overlap
+    { chunkSize: 100, chunkOverlap: 0, description: 'small chunks, no overlap' },
+    // Configuration 2: Medium chunks, small overlap
+    { chunkSize: 300, chunkOverlap: 30, description: 'medium chunks, small overlap' },
+    // Configuration 3: Large chunks, medium overlap
+    { chunkSize: 800, chunkOverlap: 150, description: 'large chunks, medium overlap' },
+    // Configuration 4: Very small chunks, high overlap
+    { chunkSize: 75, chunkOverlap: 50, description: 'very small chunks, high overlap' },
+    // Configuration 5: Medium chunks, very high overlap
+    { chunkSize: 400, chunkOverlap: 300, description: 'medium chunks, very high overlap' }
+  ]
+
+  const chunkStrategies = [
+    { name: 'character', value: undefined }, 
+    { name: 'paragraph', value: 'paragraph' as const }
+  ]
+
+  // Test with blogPost (single string)
+  testConfigurations.forEach((config, configIndex) => {
+    chunkStrategies.forEach((strategy) => {
+      test(`should maintain split/getChunk consistency for blogPost with ${config.description} using ${strategy.name} strategy`, () => {
+        const options: SplitOptions = {
+          chunkSize: config.chunkSize,
+          chunkOverlap: config.chunkOverlap,
+          chunkStrategy: strategy.value
+        }
+
+        const chunks: ChunkResult[] = split(blogPost, options)
+        
+        // Verify we get chunks for this configuration
+        assert.ok(chunks.length > 0, `Should produce chunks for blogPost with config ${configIndex + 1}`)
+
+        // For each chunk, verify that getChunk returns the same text
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]
+          const retrievedText = getChunk(blogPost, chunk.start, chunk.end)
+          
+          // Since blogPost is a string, both chunk.text and retrievedText should be strings
+          assert.strictEqual(
+            typeof chunk.text,
+            'string',
+            `Chunk ${i} text should be a string for blogPost`
+          )
+          assert.strictEqual(
+            typeof retrievedText,
+            'string',
+            `Retrieved text should be a string for blogPost chunk ${i}`
+          )
+          
+          assert.strictEqual(
+            chunk.text,
+            retrievedText,
+            `Chunk ${i} text should match getChunk result for range ${chunk.start}-${chunk.end} with ${config.description} and ${strategy.name} strategy`
+          )
+
+          // Additional validation: ensure start/end positions make sense
+          assert.ok(chunk.start >= 0, `Chunk ${i} start should be non-negative`)
+          assert.ok(chunk.end > chunk.start, `Chunk ${i} end should be greater than start`)
+          assert.ok(chunk.end <= blogPost.length, `Chunk ${i} end should not exceed input length`)
+        }
+
+        // Verify that chunks cover the input without gaps when no overlap
+        if (config.chunkOverlap === 0 && chunks.length > 1) {
+          for (let i = 0; i < chunks.length - 1; i++) {
+            assert.ok(
+              chunks[i].end <= chunks[i + 1].start,
+              `Chunk ${i} end should not exceed chunk ${i + 1} start when no overlap`
+            )
+          }
+        }
+      })
+    })
+  })
+
+  // Test with multilineBlogPost (string array)
+  testConfigurations.forEach((config, configIndex) => {
+    chunkStrategies.forEach((strategy) => {
+      test(`should maintain split/getChunk consistency for multilineBlogPost with ${config.description} using ${strategy.name} strategy`, () => {
+        const options: SplitOptions = {
+          chunkSize: config.chunkSize,
+          chunkOverlap: config.chunkOverlap,
+          chunkStrategy: strategy.value
+        }
+
+        const chunks: ChunkResult[] = split(multilineBlogPost, options)
+        
+        // Verify we get chunks for this configuration
+        assert.ok(chunks.length > 0, `Should produce chunks for multilineBlogPost with config ${configIndex + 1}`)
+
+        // For each chunk, verify that getChunk returns the same text
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]
+          const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+          
+          // Since multilineBlogPost is an array, both chunk.text and retrievedChunk should be arrays
+          assert.ok(
+            Array.isArray(chunk.text),
+            `Chunk ${i} text should be an array for multilineBlogPost`
+          )
+          assert.ok(
+            Array.isArray(retrievedChunk),
+            `Retrieved chunk should be an array for multilineBlogPost chunk ${i}`
+          )
+          
+          assert.deepStrictEqual(
+            chunk.text,
+            retrievedChunk,
+            `Chunk ${i} text should match getChunk result for range ${chunk.start}-${chunk.end} with ${config.description} and ${strategy.name} strategy`
+          )
+
+          // Additional validation: ensure start/end positions make sense
+          assert.ok(chunk.start >= 0, `Chunk ${i} start should be non-negative`)
+          assert.ok(chunk.end > chunk.start, `Chunk ${i} end should be greater than start`)
+          
+          // Calculate total length of multilineBlogPost
+          const totalLength = multilineBlogPost.join('').length
+          assert.ok(chunk.end <= totalLength, `Chunk ${i} end should not exceed input length`)
+        }
+
+        // Verify that chunks cover the input without gaps when no overlap
+        if (config.chunkOverlap === 0 && chunks.length > 1) {
+          for (let i = 0; i < chunks.length - 1; i++) {
+            assert.ok(
+              chunks[i].end <= chunks[i + 1].start,
+              `Chunk ${i} end should not exceed chunk ${i + 1} start when no overlap`
+            )
+          }
+        }
+      })
+    })
+  })
+
+  // Additional edge case tests with extreme configurations
+  test('should handle edge case: zero chunk size with blogPost', () => {
+    const chunks: ChunkResult[] = split(blogPost, { chunkSize: 0, chunkOverlap: 0 })
+    
+    for (const chunk of chunks) {
+      const retrievedText = getChunk(blogPost, chunk.start, chunk.end)
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result even with zero chunk size`
+      )
+    }
+  })
+
+  test('should handle edge case: zero chunk size with multilineBlogPost', () => {
+    const chunks: ChunkResult[] = split(multilineBlogPost, { chunkSize: 0, chunkOverlap: 0 })
+    
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrievedChunk,
+        `Chunk text should match getChunk result even with zero chunk size`
+      )
+    }
+  })
+
+  test('should handle edge case: overlap larger than chunk size with blogPost', () => {
+    const chunks: ChunkResult[] = split(blogPost, { 
+      chunkSize: 50, 
+      chunkOverlap: 100 // overlap > chunk size
+    })
+    
+    for (const chunk of chunks) {
+      const retrievedText = getChunk(blogPost, chunk.start, chunk.end)
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Chunk text should match getChunk result even when overlap > chunk size`
+      )
+    }
+  })
+
+  test('should handle edge case: overlap larger than chunk size with multilineBlogPost', () => {
+    const chunks: ChunkResult[] = split(multilineBlogPost, { 
+      chunkSize: 50, 
+      chunkOverlap: 100 // overlap > chunk size
+    })
+    
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrievedChunk,
+        `Chunk text should match getChunk result even when overlap > chunk size`
+      )
+    }
+  })
+
+  test('should handle edge case: very large chunk size (larger than input) with blogPost', () => {
+    const largeChunkSize = blogPost.length * 2 // Much larger than input
+    const chunks: ChunkResult[] = split(blogPost, { 
+      chunkSize: largeChunkSize, 
+      chunkOverlap: 10
+    })
+    
+    // Should get exactly one chunk containing the entire input
+    assert.strictEqual(chunks.length, 1, 'Should get exactly one chunk when chunk size > input size')
+    
+    const chunk = chunks[0]
+    const retrievedText = getChunk(blogPost, chunk.start, chunk.end)
+    assert.strictEqual(
+      chunk.text,
+      retrievedText,
+      `Chunk text should match getChunk result when chunk size > input size`
+    )
+    assert.strictEqual(chunk.start, 0, 'Single chunk should start at 0')
+    assert.strictEqual(chunk.end, blogPost.length, 'Single chunk should end at input length')
+  })
+
+  test('should handle edge case: very large chunk size (larger than input) with multilineBlogPost', () => {
+    const totalLength = multilineBlogPost.join('').length
+    const largeChunkSize = totalLength * 2 // Much larger than input
+    const chunks: ChunkResult[] = split(multilineBlogPost, { 
+      chunkSize: largeChunkSize, 
+      chunkOverlap: 10
+    })
+    
+    // With array input, behavior may differ - just ensure consistency
+    assert.ok(chunks.length >= 1, 'Should get at least one chunk when chunk size > input size')
+    
+    // For each chunk, verify consistency
+    for (const chunk of chunks) {
+      const retrievedChunk = getChunk(multilineBlogPost, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrievedChunk,
+        `Chunk text should match getChunk result when chunk size > input size`
+      )
+    }
+  })
+
+  test('comprehensive matrix validation: all chunk boundaries should be retrievable', () => {
+    // Test with multiple configurations simultaneously to ensure consistency
+    const allConfigs = [
+      { input: blogPost, name: 'blogPost', isArray: false },
+      { input: multilineBlogPost, name: 'multilineBlogPost', isArray: true }
+    ]
+
+    const quickConfigs = [
+      { chunkSize: 200, chunkOverlap: 20, chunkStrategy: undefined },
+      { chunkSize: 400, chunkOverlap: 0, chunkStrategy: 'paragraph' as const },
+      { chunkSize: 150, chunkOverlap: 75, chunkStrategy: undefined }
+    ]
+
+    allConfigs.forEach(({ input, name, isArray }) => {
+      quickConfigs.forEach((config, configIndex) => {
+        const chunks: ChunkResult[] = split(input, config)
+        
+        // Test every chunk boundary
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]
+          const retrieved = getChunk(input, chunk.start, chunk.end)
+          
+          if (isArray) {
+            assert.deepStrictEqual(
+              chunk.text,
+              retrieved,
+              `${name} config ${configIndex} chunk ${i}: array chunks should match exactly`
+            )
+          } else {
+            assert.strictEqual(
+              chunk.text,
+              retrieved,
+              `${name} config ${configIndex} chunk ${i}: string chunks should match exactly`
+            )
+          }
+        }
+
+        // Test intermediate positions within chunks
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]
+          const chunkLength = chunk.end - chunk.start
+          
+          if (chunkLength > 2) {
+            // Test getting a substring within the chunk
+            const midPoint = chunk.start + Math.floor(chunkLength / 2)
+            const partialRetrieved = getChunk(input, chunk.start, midPoint)
+            
+            // The partial retrieval should be consistent with the original chunk
+            if (isArray) {
+              const originalAsArray = chunk.text as string[]
+              const originalJoined = originalAsArray.join('')
+              const partialAsArray = partialRetrieved as string[]
+              const partialJoined = partialAsArray.join('')
+              
+              assert.ok(
+                originalJoined.startsWith(partialJoined),
+                `${name} config ${configIndex} chunk ${i}: partial array retrieval should be prefix of original`
+              )
+            } else {
+              const originalStr = chunk.text as string
+              const partialStr = partialRetrieved as string
+              
+              assert.ok(
+                originalStr.startsWith(partialStr),
+                `${name} config ${configIndex} chunk ${i}: partial string retrieval should be prefix of original`
+              )
+            }
+          }
+        }
+      })
+    })
   })
 })

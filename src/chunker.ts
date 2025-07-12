@@ -104,10 +104,11 @@ export function* iterateChunks(
 
       // Apply paragraph-based chunking with automatic sub-chunking
       const chunks: ChunkResult[] = chunkByParagraph(
+        currentText,
         chunkUnits,
-        splitter,
         chunkSize,
-        chunkOverlap
+        chunkOverlap,
+        splitter
       )
       for (const chunk of chunks)
         yield {
