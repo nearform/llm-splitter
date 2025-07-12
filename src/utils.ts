@@ -28,7 +28,7 @@ export function getUnits(text: string): ChunkUnit[] {
     const end: number = match.index
     const rawUnit: string = text.slice(lastIndex, end)
     const unit: string = rawUnit.trim()
-    
+
     // Store non-empty paragraphs with their character positions
     if (unit) {
       // Calculate the actual start position after trimming
