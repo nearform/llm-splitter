@@ -2,13 +2,23 @@ import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
 import { chunkByCharacter, chunkByParagraph, getUnits } from './utils.js'
 
 /**
- * Extracts a substring or segments from the input text by character positions.
- * For string input, returns a substring. For array input, returns relevant segments.
+ * Extracts a chunk of text from the input by character positions, preserving input type.
  *
- * @param text - A string or array of strings to extract from.
- * @param start - Starting character position (inclusive, default: 0).
- * @param end - Ending character position (exclusive, default: end of input).
- * @returns The substring for string input, or array of segments for array input.
+ * For string input, returns a substring using slice(). For array input, returns an array
+ * of string segments that span the specified character range across multiple array elements.
+ * Uses precise character position calculations to determine which array elements to include
+ * and how to slice them at boundaries.
+ *
+ * **Array Processing Logic:**
+ * - Tracks cumulative character length across array elements
+ * - Handles extraction spanning single elements, adjacent elements, or multiple elements
+ * - Filters out empty strings from the result
+ * - Returns empty array when start position exceeds total text length
+ *
+ * @param text - A string or array of strings to extract from
+ * @param start - Starting character position (inclusive, default: 0)
+ * @param end - Ending character position (exclusive, default: end of input)
+ * @returns Substring for string input, or array of string segments for array input
  */
 export function getChunk(
   text: string | string[],
@@ -70,12 +80,29 @@ export function getChunk(
 }
 
 /**
- * Memory-efficient generator that yields chunks one at a time.
- * Supports both string and array inputs with consistent output format.
+ * Memory-efficient generator that yields text chunks one at a time with consistent type preservation.
  *
- * @param text - A string or array of strings to split into chunks.
- * @param options - Configuration options for chunking behavior.
- * @yields Chunk objects with text content and character position metadata.
+ * Processes input text(s) and generates chunks based on the specified strategy (character-based
+ * or paragraph-based). Maintains input type consistency by returning string chunks for string
+ * input and single-element array chunks for array input. Tracks global character positions
+ * across multiple text segments when processing arrays.
+ *
+ * **Processing Strategies:**
+ * - `chunkStrategy: 'paragraph'`: Uses paragraph-based chunking with automatic sub-chunking
+ * - Default: Uses character-based chunking with binary search optimization
+ *
+ * **Type Preservation:**
+ * - String input → yields chunks with `text` as string
+ * - Array input → yields chunks with `text` as single-element string array
+ *
+ * **Position Tracking:**
+ * - Maintains global character offset across array elements
+ * - Each chunk includes absolute start/end positions in the combined text
+ * - Handles empty text segments by yielding empty chunks at correct positions
+ *
+ * @param text - A string or array of strings to split into chunks
+ * @param options - Configuration options for chunking behavior
+ * @yields Chunk objects with text content and character position metadata
  */
 export function* iterateChunks(
   text: string | string[],
@@ -145,13 +172,31 @@ export function* iterateChunks(
 }
 
 /**
- * Splits text or array of texts into chunks optimized for LLM vectorization.
- * Uses paragraph-based chunking with automatic sub-chunking of long paragraphs.
- * Supports token-based size calculation and configurable overlap.
+ * Splits text or array of texts into optimized chunks for LLM processing and vectorization.
  *
- * @param text - A string or array of strings to split into chunks.
- * @param options - Configuration options for chunking behavior.
- * @returns Array of chunk objects with text content and character position metadata.
+ * Primary entry point for text chunking that converts the generator output into a concrete array.
+ * Supports both character-based and paragraph-based chunking strategies with configurable
+ * token-based size limits and overlap. Designed specifically for LLM workflows where consistent
+ * chunk sizes and semantic boundaries are important.
+ *
+ * **Default Behavior:**
+ * - Uses character-based chunking with binary search optimization
+ * - 512 token chunks with no overlap
+ * - Character-based token splitting (1 char = 1 token)
+ *
+ * **Paragraph Strategy Benefits:**
+ * - Preserves semantic paragraph boundaries when possible
+ * - Automatic sub-chunking of oversized paragraphs
+ * - Position-accurate overlap for chunk retrieval consistency
+ *
+ * **Input Type Handling:**
+ * - String input: Returns chunks with text as strings
+ * - Array input: Returns chunks with text as single-element arrays
+ * - Maintains absolute character positions across all input types
+ *
+ * @param text - A string or array of strings to split into chunks
+ * @param options - Configuration options for chunking behavior
+ * @returns Array of chunk objects with text content and character position metadata
  */
 export function split(
   text: string | string[],
