@@ -119,11 +119,11 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    // With direct extraction from original text (no synthetic overlap), we get exact boundaries
-    // This ensures split/getChunk consistency as requested by the user
+    // With position-accurate overlap, we get actual overlap from original text positions
+    // Second chunk starts at position 6 (where 'C' begins) to include 1 token overlap
     assert.deepStrictEqual(result, [
       { text: 'A\n\nB\n\nC', start: 0, end: 7 },
-      { text: 'D', start: 9, end: 10 }
+      { text: 'C\n\nD', start: 6, end: 10 }
     ])
   })
 
@@ -134,11 +134,11 @@ describe('split', () => {
       chunkOverlap: 1,
       chunkStrategy: 'paragraph'
     })
-    // With direct extraction from original text (no synthetic overlap), we get exact boundaries
-    // This ensures split/getChunk consistency as requested by the user
+    // With position-accurate overlap, second chunk includes 1 token overlap ('3')
+    // Starts at position 9 (where '3' begins in 'C3') to include the overlap
     assert.deepStrictEqual(result, [
       { text: 'A1\n\nB2\n\nC3', start: 0, end: 10 },
-      { text: 'D4', start: 12, end: 14 }
+      { text: '3\n\nD4', start: 9, end: 14 }
     ])
   })
 

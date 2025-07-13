@@ -109,64 +109,44 @@ export function chunkByCharacter(
  * When a single paragraph exceeds the limit, it's automatically broken into sub-chunks.
  *
  * **Important Behaviors**:
- * - Prevents duplicate/redundant final chunks when content is already covered by overlap
- * - Uses precise token-based overlap that can break paragraph boundaries for exact control
- * - Prioritizes exact overlap token count over paragraph boundary preservation
- * - Use `chunkByCharacter` for character-level control or if paragraph boundaries must be preserved
+ * - Uses position-accurate overlap that maintains split/getChunk consistency
+ * - Calculates overlap boundaries using actual character positions in original text
+ * - Ensures overlapped chunks can be retrieved exactly via getChunk()
+ * - Preserves paragraph boundaries when possible while respecting token limits
  *
- * @param chunkUnitsOrOriginalText - Array of paragraph units OR the original text (when used with 5 parameters).
- * @param splitterOrChunkUnits - Function to split text into tokens OR chunk units array (when used with 5 parameters).
+ * @param originalText - The original text to extract chunks from.
+ * @param chunkUnits - Array of paragraph units with their positions.
  * @param chunkSize - Maximum size of each chunk in tokens.
- * @param chunkOverlap - Exact number of tokens to overlap between chunks.
- * @param splitterWhen5Args - Splitter function (only used when 5 arguments are provided).
+ * @param chunkOverlap - Number of tokens to overlap between chunks.
+ * @param splitter - Function to split text into tokens for size calculation.
  * @returns Array of chunk objects with text and character positions.
  */
 export function chunkByParagraph(
-  chunkUnitsOrOriginalText: ChunkUnit[] | string,
-  splitterOrChunkUnits: ((text: string) => string[]) | ChunkUnit[],
+  originalText: string,
+  chunkUnits: ChunkUnit[],
   chunkSize: number,
   chunkOverlap: number,
-  splitterWhen5Args?: (text: string) => string[]
+  splitter: (text: string) => string[]
 ): ChunkResult[] {
-  // Handle both 4-argument and 5-argument forms
-  let originalText: string | undefined
-  let chunkUnits: ChunkUnit[]
-  let splitter: (text: string) => string[]
-
-  if (typeof chunkUnitsOrOriginalText === 'string' && splitterWhen5Args) {
-    // 5-argument form: chunkByParagraph(originalText, chunkUnits, splitter, chunkSize, chunkOverlap)
-    originalText = chunkUnitsOrOriginalText
-    chunkUnits = splitterOrChunkUnits as ChunkUnit[]
-    splitter = splitterWhen5Args
-  } else {
-    // 4-argument form: chunkByParagraph(chunkUnits, splitter, chunkSize, chunkOverlap)
-    originalText = undefined
-    chunkUnits = chunkUnitsOrOriginalText as ChunkUnit[]
-    splitter = splitterOrChunkUnits as (text: string) => string[]
-  }
   let i: number = 0
   const n: number = chunkUnits.length
   const chunks: ChunkResult[] = []
 
-  while (i < n) {
+  outerLoop: while (i < n) {
     let currentLen: number = 0
     let j: number = i
-    let overlapText: string = ''
-    let overlapTokenCount: number = 0
+    let chunkStart: number = chunkUnits[i].start
+    let overlapStart: number = chunkStart
 
-    // Calculate overlap text from previous chunk if needed
-    if (chunkOverlap > 0 && chunks.length > 0 && !originalText) {
-      // Only use overlap when we don't have original text (for backward compatibility)
+    // Calculate overlap start position from previous chunk if needed
+    if (chunkOverlap > 0 && chunks.length > 0) {
       const prevChunk: ChunkResult = chunks[chunks.length - 1]
-      const prevChunkTokens: string[] = splitter(prevChunk.text as string)
-
-      if (prevChunkTokens.length >= chunkOverlap) {
-        const overlapTokens: string[] = prevChunkTokens.slice(-chunkOverlap)
-        overlapText = overlapTokens.join('')
-        overlapTokenCount = overlapTokens.length
-        // Start with overlap tokens counted towards chunk size
-        currentLen = overlapTokenCount
-      }
+      overlapStart = calculateOverlapStart(originalText, prevChunk, chunkOverlap, splitter)
+      
+      // Count overlap tokens toward current chunk size
+      const overlapText: string = originalText.slice(overlapStart, prevChunk.end)
+      const overlapTokenCount: number = splitter(overlapText).length
+      currentLen = overlapTokenCount
     }
 
     // Expand window to include as many complete paragraphs as possible
@@ -179,27 +159,20 @@ export function chunkByParagraph(
 
       // Handle oversized single paragraph by breaking it into sub-chunks
       if (simulatedLen > chunkSize && j === i) {
-        // For single large paragraph, we need to handle overlap differently
-        const subChunks: ChunkResult[] = chunkSingleParagraph(
+        // For single large paragraph, create sub-chunks with position-accurate overlap
+        const subChunks: ChunkResult[] = chunkSingleParagraphWithOverlap(
+          originalText,
           chunkUnits[i],
           splitter,
           chunkSize,
-          chunkOverlap
+          chunkOverlap,
+          overlapStart
         )
-
-        // If we have overlap, prepend it to the first sub-chunk
-        if (overlapText && subChunks.length > 0) {
-          const firstSubChunk: ChunkResult = subChunks[0]
-          subChunks[0] = {
-            ...firstSubChunk,
-            text: overlapText + '\n\n' + firstSubChunk.text
-          }
-        }
 
         chunks.push(...subChunks)
         // Move to next paragraph after processing sub-chunks
         i++
-        continue
+        continue outerLoop
       }
       // Accept this paragraph and continue expanding
       currentLen = simulatedLen
@@ -208,42 +181,17 @@ export function chunkByParagraph(
 
     // Create chunk from the selected paragraph range
     if (j > i) {
-      let chunkStart: number = chunkUnits[i].start
-      let chunkEnd: number = chunkUnits[j - 1].end
-      let finalChunkText: string
+      const chunkEnd: number = chunkUnits[j - 1].end
 
-      // Extract text using the actual positions if we have the original text
-      if (originalText) {
-        // When using original text, extract exactly from positions to ensure consistency
-        // This prioritizes split/getChunk consistency over overlap functionality
-        finalChunkText = originalText.slice(chunkStart, chunkEnd)
-      } else {
-        // Fallback: construct text artificially and handle overlap for backward compatibility
-        const chunkStr: string = chunkUnits
-          .slice(i, j)
-          .map((u: ChunkUnit) => u.unit)
-          .join('\n\n')
-
-        if (overlapText) {
-          finalChunkText = overlapText + '\n\n' + chunkStr
-
-          // Calculate the character position where overlap starts in the original text
-          const prevChunk: ChunkResult = chunks[chunks.length - 1]
-          const prevChunkText: string = prevChunk.text as string
-          const prevTokens: string[] = splitter(prevChunkText)
-          const preOverlapTokens: string[] = prevTokens.slice(0, -chunkOverlap)
-          const preOverlapText: string = preOverlapTokens.join('')
-
-          // Adjust start position to account for overlap
-          chunkStart = prevChunk.start + preOverlapText.length
-        } else {
-          finalChunkText = chunkStr
-        }
-      }
+      // Use overlap start only if we actually have overlap, otherwise use natural chunk start
+      const finalChunkStart: number = (chunkOverlap > 0 && chunks.length > 0) ? overlapStart : chunkStart
+      
+      // Extract text directly from original positions to ensure consistency
+      const finalChunkText: string = originalText.slice(finalChunkStart, chunkEnd)
 
       chunks.push({
         text: finalChunkText,
-        start: chunkStart,
+        start: finalChunkStart,
         end: chunkEnd
       })
     }
@@ -252,6 +200,146 @@ export function chunkByParagraph(
     i = j
   }
 
+  return chunks
+}
+
+/**
+ * Calculates the character position where overlap should start based on token count.
+ * Uses binary search to find the exact character position that corresponds to the 
+ * desired number of overlap tokens from the end of the previous chunk.
+ *
+ * @param originalText - The original text to extract from.
+ * @param prevChunk - The previous chunk to calculate overlap from.
+ * @param chunkOverlap - Number of tokens to overlap.
+ * @param splitter - Function to split text into tokens.
+ * @returns Character position where overlap should start.
+ */
+function calculateOverlapStart(
+  originalText: string,
+  prevChunk: ChunkResult,
+  chunkOverlap: number,
+  splitter: (text: string) => string[]
+): number {
+  const prevText: string = originalText.slice(prevChunk.start, prevChunk.end)
+  const prevTokens: string[] = splitter(prevText)
+  
+  // If requested overlap is greater than available tokens, use all available
+  const actualOverlap: number = Math.min(chunkOverlap, prevTokens.length)
+  
+  if (actualOverlap === 0) {
+    return prevChunk.end
+  }
+  
+  // Use binary search to find the character position that gives us exactly the right number of tokens
+  let low: number = prevChunk.start
+  let high: number = prevChunk.end
+  let bestStart: number = prevChunk.end
+  
+  while (low <= high) {
+    const mid: number = Math.floor((low + high) / 2)
+    const testText: string = originalText.slice(mid, prevChunk.end)
+    const testTokens: string[] = splitter(testText)
+    
+    if (testTokens.length <= actualOverlap) {
+      bestStart = mid
+      high = mid - 1
+    } else {
+      low = mid + 1
+    }
+  }
+  
+  return bestStart
+}
+
+/**
+ * Breaks a single paragraph that exceeds the chunk size limit into smaller sub-chunks
+ * with position-accurate overlap that maintains split/getChunk consistency.
+ *
+ * @param originalText - The original text to extract from.
+ * @param unit - The paragraph unit that needs to be sub-chunked.
+ * @param splitter - Function to split text into tokens.
+ * @param chunkSize - Maximum size of each sub-chunk in tokens.
+ * @param chunkOverlap - Number of tokens to overlap between sub-chunks.
+ * @param firstChunkStart - Starting position for the first sub-chunk (may include overlap from previous chunk).
+ * @returns Array of sub-chunk objects with text and character positions.
+ */
+function chunkSingleParagraphWithOverlap(
+  originalText: string,
+  unit: ChunkUnit,
+  splitter: (text: string) => string[],
+  chunkSize: number,
+  chunkOverlap: number,
+  firstChunkStart: number
+): ChunkResult[] {
+  const unitText: string = unit.unit
+  const tokens: string[] = splitter(unitText)
+  const chunks: ChunkResult[] = []
+  let tokenIndex: number = 0
+  
+  // Calculate offset if first chunk starts before the unit (due to overlap)
+  const startOffset: number = firstChunkStart - unit.start
+  
+  while (tokenIndex < tokens.length) {
+    let currentChunkSize: number = 0
+    let chunkStart: number
+    let overlapTokenCount: number = 0
+    
+    // Calculate overlap for subsequent chunks
+    if (chunks.length > 0 && chunkOverlap > 0) {
+      const prevChunk: ChunkResult = chunks[chunks.length - 1]
+      chunkStart = calculateOverlapStart(originalText, prevChunk, chunkOverlap, splitter)
+      
+      // Count overlap tokens toward current chunk size
+      const overlapText: string = originalText.slice(chunkStart, prevChunk.end)
+      overlapTokenCount = splitter(overlapText).length
+      currentChunkSize = overlapTokenCount
+    } else {
+      // First chunk uses the provided start position
+      // For subsequent chunks with no overlap, calculate position from token progress
+      if (chunks.length > 0) {
+        // Calculate where this chunk should start based on tokens processed so far
+        const tokensProcessed: string[] = tokens.slice(0, tokenIndex)
+        const textProcessed: string = tokensProcessed.join('')
+        chunkStart = unit.start + textProcessed.length
+      } else {
+        chunkStart = firstChunkStart
+      }
+    }
+    
+    // Find how many additional tokens we can include
+    let endTokenIndex: number = tokenIndex
+    while (endTokenIndex < tokens.length && currentChunkSize < chunkSize) {
+      currentChunkSize++
+      endTokenIndex++
+    }
+    
+    // Ensure we make progress
+    if (endTokenIndex === tokenIndex) {
+      endTokenIndex = Math.min(tokenIndex + 1, tokens.length)
+    }
+    
+    // Calculate end position by finding character position corresponding to token boundary
+    const tokensForEnd: string[] = tokens.slice(0, endTokenIndex)
+    const textForEnd: string = tokensForEnd.join('')
+    const chunkEnd: number = Math.min(unit.start + textForEnd.length, unit.end)
+    
+    // Extract text from original positions
+    const chunkText: string = originalText.slice(chunkStart, chunkEnd)
+    
+    chunks.push({
+      text: chunkText,
+      start: chunkStart,
+      end: chunkEnd
+    })
+    
+    tokenIndex = endTokenIndex
+    
+    // Prevent infinite loops
+    if (currentChunkSize === 0) {
+      tokenIndex++
+    }
+  }
+  
   return chunks
 }
 
