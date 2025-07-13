@@ -4,7 +4,8 @@ import {
   chunkByCharacter,
   chunkByParagraph,
   getUnits,
-  calculateOverlapStart
+  calculateOverlapStart,
+  getTrimmedBounds
 } from '../src/utils.js'
 import type { ChunkResult, ChunkUnit } from '../src/types.js'
 
@@ -993,5 +994,194 @@ describe('getUnits', () => {
         `Unit ${index} positions should be accurate`
       )
     })
+  })
+})
+
+describe('getTrimmedBounds', () => {
+  test('handles text with no whitespace', () => {
+    const text = 'Hello world'
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello world')
+    assert.strictEqual(result?.start, 0)
+    assert.strictEqual(result?.end, 11)
+  })
+
+  test('trims leading whitespace', () => {
+    const text = '   Hello world'
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello world')
+    assert.strictEqual(result?.start, 3)
+    assert.strictEqual(result?.end, 14)
+  })
+
+  test('trims trailing whitespace', () => {
+    const text = 'Hello world   '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello world')
+    assert.strictEqual(result?.start, 0)
+    assert.strictEqual(result?.end, 11)
+  })
+
+  test('trims both leading and trailing whitespace', () => {
+    const text = '   Hello world   '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello world')
+    assert.strictEqual(result?.start, 3)
+    assert.strictEqual(result?.end, 14)
+  })
+
+  test('handles multiple types of whitespace', () => {
+    const text = ' \t\n Hello world \r\n\t '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello world')
+    assert.strictEqual(result?.start, 4)
+    assert.strictEqual(result?.end, 15)
+  })
+
+  test('preserves internal whitespace', () => {
+    const text = '  Hello   world  '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello   world')
+    assert.strictEqual(result?.start, 2)
+    assert.strictEqual(result?.end, 15)
+  })
+
+  test('handles text with newlines inside', () => {
+    const text = ' \n  First line\nSecond line  \n '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'First line\nSecond line')
+    assert.strictEqual(result?.start, 4)
+    assert.strictEqual(result?.end, 26)
+  })
+
+  test('returns null for empty string', () => {
+    const text = ''
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result, null)
+  })
+
+  test('returns null for whitespace-only string', () => {
+    const text = '   \t\n\r   '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result, null)
+  })
+
+  test('handles single character', () => {
+    const text = 'a'
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'a')
+    assert.strictEqual(result?.start, 0)
+    assert.strictEqual(result?.end, 1)
+  })
+
+  test('handles single character with whitespace', () => {
+    const text = '  a  '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'a')
+    assert.strictEqual(result?.start, 2)
+    assert.strictEqual(result?.end, 3)
+  })
+
+  test('handles tabs and various whitespace characters', () => {
+    const text = '\t\r\n Hello\tWorld   \t'
+    const result = getTrimmedBounds(text)
+
+    // The /\s/ regex matches standard whitespace but not all Unicode whitespace
+    assert.strictEqual(result?.unit, 'Hello\tWorld')
+    assert.strictEqual(result?.start, 4)
+    assert.strictEqual(result?.end, 15)
+  })
+
+  test('handles long text with whitespace', () => {
+    const longContent = 'A'.repeat(100)
+    const text = '    ' + longContent + '    '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, longContent)
+    assert.strictEqual(result?.start, 4)
+    assert.strictEqual(result?.end, 104)
+  })
+
+  test('handles text that is all one whitespace character', () => {
+    const text = '     '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result, null)
+  })
+
+  test('handles mixed whitespace at boundaries', () => {
+    const text = ' \t\n\r Content here \r\n\t '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Content here')
+    assert.strictEqual(result?.start, 5)
+    assert.strictEqual(result?.end, 17)
+  })
+
+  test('position accuracy verification', () => {
+    const text = '  \t Hello, world! \n  '
+    const result = getTrimmedBounds(text)
+
+    // Verify that extracting from original text using calculated positions gives the same result
+    const extracted = text.slice(result!.start, result!.end)
+    assert.strictEqual(extracted, result!.unit)
+    assert.strictEqual(extracted, 'Hello, world!')
+  })
+
+  test('handles unicode characters and whitespace', () => {
+    const text = '  Hello 世界 🌍  '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Hello 世界 🌍')
+    assert.strictEqual(result?.start, 2)
+    assert.strictEqual(result?.end, 13)
+
+    // Verify position accuracy with unicode
+    const extracted = text.slice(result!.start, result!.end)
+    assert.strictEqual(extracted, result!.unit)
+  })
+
+  test('handles text with only leading whitespace', () => {
+    const text = '    Content'
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Content')
+    assert.strictEqual(result?.start, 4)
+    assert.strictEqual(result?.end, 11)
+  })
+
+  test('handles text with only trailing whitespace', () => {
+    const text = 'Content    '
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, 'Content')
+    assert.strictEqual(result?.start, 0)
+    assert.strictEqual(result?.end, 7)
+  })
+
+  test('stress test with very long whitespace padding', () => {
+    const padding = ' '.repeat(1000)
+    const content = 'Middle content'
+    const text = padding + content + padding
+    const result = getTrimmedBounds(text)
+
+    assert.strictEqual(result?.unit, content)
+    assert.strictEqual(result?.start, 1000)
+    assert.strictEqual(result?.end, 1014)
+
+    // Verify extraction accuracy
+    const extracted = text.slice(result!.start, result!.end)
+    assert.strictEqual(extracted, content)
   })
 })

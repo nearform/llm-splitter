@@ -15,32 +15,75 @@ export function getUnits(text: string): ChunkUnit[] {
   const regex: RegExp = /\n{2,}/g
   let lastIndex: number = 0
   let match: RegExpExecArray | null
+
   // Search for paragraph boundaries marked by double newlines
   while ((match = regex.exec(text)) !== null) {
     const end: number = match.index
     const rawUnit: string = text.slice(lastIndex, end)
-    const unit: string = rawUnit.trim()
 
-    // Store non-empty paragraphs with their character positions
-    if (unit) {
-      // Calculate the actual start position after trimming
-      const trimmedStart = lastIndex + rawUnit.indexOf(unit)
-      const trimmedEnd = trimmedStart + unit.length
-      units.push({ unit, start: trimmedStart, end: trimmedEnd })
+    // Calculate trimmed boundaries without using indexOf
+    const trimmedBounds: ChunkUnit | null = getTrimmedBounds(rawUnit)
+
+    if (trimmedBounds) {
+      const { unit, start, end } = trimmedBounds
+      units.push({
+        unit,
+        start: lastIndex + start,
+        end: lastIndex + end
+      })
     }
+
     // Move past the current separator for next iteration
     lastIndex = regex.lastIndex
   }
+
   // Handle the final paragraph after the last separator
   const rawLastUnit: string = text.slice(lastIndex)
-  const lastUnit: string = rawLastUnit.trim()
-  if (lastUnit) {
-    // Calculate the actual start position after trimming
-    const trimmedStart = lastIndex + rawLastUnit.indexOf(lastUnit)
-    const trimmedEnd = trimmedStart + lastUnit.length
-    units.push({ unit: lastUnit, start: trimmedStart, end: trimmedEnd })
+  const trimmedBounds: ChunkUnit | null = getTrimmedBounds(rawLastUnit)
+
+  if (trimmedBounds) {
+    const { unit, start, end } = trimmedBounds
+    units.push({
+      unit,
+      start: lastIndex + start,
+      end: lastIndex + end
+    })
   }
+
   return units
+}
+
+/**
+ * Calculates trimmed text boundaries efficiently without using indexOf.
+ *
+ * @param text - Raw text segment to trim and calculate bounds for
+ * @returns Object with trimmed text and position offsets, or null if empty after trimming
+ */
+export function getTrimmedBounds(text: string): ChunkUnit | null {
+  const len = text.length
+  let start = 0
+  let end = len
+
+  // Find start of non-whitespace content
+  while (start < len && /\s/.test(text[start])) {
+    start++
+  }
+
+  // Find end of non-whitespace content
+  while (end > start && /\s/.test(text[end - 1])) {
+    end--
+  }
+
+  // Return null if no content after trimming
+  if (start === end) {
+    return null
+  }
+
+  return {
+    unit: text.slice(start, end),
+    start,
+    end
+  }
 }
 
 /**
