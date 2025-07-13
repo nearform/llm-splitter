@@ -1,6 +1,11 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert'
-import { chunkByCharacter, chunkByParagraph, getUnits } from '../src/utils.js'
+import {
+  chunkByCharacter,
+  chunkByParagraph,
+  getUnits,
+  calculateOverlapStart
+} from '../src/utils.js'
 import type { ChunkResult, ChunkUnit } from '../src/types.js'
 
 // Default character-based splitter used across tests
@@ -76,7 +81,8 @@ describe('chunkByCharacter', () => {
 
 describe('chunkByParagraph', () => {
   // Default character-based splitter for consistent testing
-  const charSplitter: (text: string) => string[] = (text: string) => text.split('')
+  const charSplitter: (text: string) => string[] = (text: string) =>
+    text.split('')
 
   // Word-based splitter for more realistic testing
   const wordSplitter: (text: string) => string[] = (text: string) =>
@@ -97,7 +103,8 @@ describe('chunkByParagraph', () => {
   })
 
   test('handles multiple small paragraphs within chunk size limit', () => {
-    const originalText = 'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
+    const originalText =
+      'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
     const units: ChunkUnit[] = [
       { unit: 'First paragraph.', start: 0, end: 16 },
       { unit: 'Second paragraph.', start: 18, end: 35 },
@@ -107,7 +114,10 @@ describe('chunkByParagraph', () => {
     const result = chunkByParagraph(originalText, units, 100, 0, charSplitter)
 
     assert.strictEqual(result.length, 1)
-    assert.strictEqual(result[0].text, 'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.')
+    assert.strictEqual(
+      result[0].text,
+      'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
+    )
     assert.strictEqual(result[0].start, 0)
     assert.strictEqual(result[0].end, 53)
   })
@@ -132,9 +142,7 @@ describe('chunkByParagraph', () => {
 
   test('sub-chunks oversized single paragraph with no overlap', () => {
     const originalText = 'A'.repeat(150) // 150 characters
-    const units: ChunkUnit[] = [
-      { unit: 'A'.repeat(150), start: 0, end: 150 }
-    ]
+    const units: ChunkUnit[] = [{ unit: 'A'.repeat(150), start: 0, end: 150 }]
 
     const result = chunkByParagraph(originalText, units, 100, 0, charSplitter)
 
@@ -193,7 +201,8 @@ describe('chunkByParagraph', () => {
   })
 
   test('handles overlap between multiple paragraphs', () => {
-    const originalText = 'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
+    const originalText =
+      'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
     const units: ChunkUnit[] = [
       { unit: 'First paragraph.', start: 0, end: 16 },
       { unit: 'Second paragraph.', start: 18, end: 35 },
@@ -205,7 +214,10 @@ describe('chunkByParagraph', () => {
     assert.ok(result.length >= 2)
     // Verify overlap exists between chunks
     if (result.length > 1) {
-      assert.ok(result[0].end > result[1].start, 'Should have overlap between chunks')
+      assert.ok(
+        result[0].end > result[1].start,
+        'Should have overlap between chunks'
+      )
     }
   })
 
@@ -231,10 +243,19 @@ describe('chunkByParagraph', () => {
   })
 
   test('works with word-based splitter', () => {
-    const originalText = 'This is the first paragraph with many words.\n\nThis is the second paragraph with many words too.'
+    const originalText =
+      'This is the first paragraph with many words.\n\nThis is the second paragraph with many words too.'
     const units: ChunkUnit[] = [
-      { unit: 'This is the first paragraph with many words.', start: 0, end: 45 },
-      { unit: 'This is the second paragraph with many words too.', start: 47, end: 97 }
+      {
+        unit: 'This is the first paragraph with many words.',
+        start: 0,
+        end: 45
+      },
+      {
+        unit: 'This is the second paragraph with many words too.',
+        start: 47,
+        end: 97
+      }
     ]
 
     const result = chunkByParagraph(originalText, units, 8, 0, wordSplitter) // 8 words max
@@ -243,7 +264,10 @@ describe('chunkByParagraph', () => {
     // Each chunk should respect word boundaries and token limits
     result.forEach(chunk => {
       const wordCount = wordSplitter(chunk.text as string).length
-      assert.ok(wordCount <= 8, `Chunk should have <= 8 words, got ${wordCount}`)
+      assert.ok(
+        wordCount <= 8,
+        `Chunk should have <= 8 words, got ${wordCount}`
+      )
     })
   })
 
@@ -259,15 +283,16 @@ describe('chunkByParagraph', () => {
     assert.ok(result.length >= 2)
     // Verify overlap exists
     if (result.length > 1) {
-      assert.ok(result[0].end > result[1].start, 'Should have positional overlap')
+      assert.ok(
+        result[0].end > result[1].start,
+        'Should have positional overlap'
+      )
     }
   })
 
   test('handles zero chunk size gracefully', () => {
     const originalText = 'Test paragraph.'
-    const units: ChunkUnit[] = [
-      { unit: 'Test paragraph.', start: 0, end: 15 }
-    ]
+    const units: ChunkUnit[] = [{ unit: 'Test paragraph.', start: 0, end: 15 }]
 
     const result = chunkByParagraph(originalText, units, 0, 0, charSplitter)
 
@@ -278,9 +303,7 @@ describe('chunkByParagraph', () => {
 
   test('handles overlap larger than chunk size', () => {
     const originalText = 'A'.repeat(100)
-    const units: ChunkUnit[] = [
-      { unit: 'A'.repeat(100), start: 0, end: 100 }
-    ]
+    const units: ChunkUnit[] = [{ unit: 'A'.repeat(100), start: 0, end: 100 }]
 
     const result = chunkByParagraph(originalText, units, 20, 30, charSplitter)
 
@@ -290,7 +313,8 @@ describe('chunkByParagraph', () => {
   })
 
   test('preserves exact character positions for getChunk compatibility', () => {
-    const originalText = 'First paragraph here.\n\nSecond paragraph there.\n\nThird paragraph everywhere.'
+    const originalText =
+      'First paragraph here.\n\nSecond paragraph there.\n\nThird paragraph everywhere.'
     const units = getUnits(originalText)
 
     const result = chunkByParagraph(originalText, units, 30, 5, charSplitter)
@@ -309,7 +333,8 @@ describe('chunkByParagraph', () => {
   test('handles complex mixed paragraph sizes', () => {
     const shortPara = 'Short.'
     const mediumPara = 'This is a medium length paragraph with some content.'
-    const longPara = 'This is a very long paragraph that definitely exceeds our chunk size limit and should be automatically sub-chunked into smaller pieces while maintaining proper character position tracking.'
+    const longPara =
+      'This is a very long paragraph that definitely exceeds our chunk size limit and should be automatically sub-chunked into smaller pieces while maintaining proper character position tracking.'
     const originalText = shortPara + '\n\n' + mediumPara + '\n\n' + longPara
 
     const units = getUnits(originalText)
@@ -331,9 +356,7 @@ describe('chunkByParagraph', () => {
 
   test('maintains overlap accuracy with binary search positioning', () => {
     const originalText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.repeat(5) // 130 chars
-    const units: ChunkUnit[] = [
-      { unit: originalText, start: 0, end: 130 }
-    ]
+    const units: ChunkUnit[] = [{ unit: originalText, start: 0, end: 130 }]
 
     const result = chunkByParagraph(originalText, units, 50, 15, charSplitter)
 
@@ -351,5 +374,408 @@ describe('chunkByParagraph', () => {
       const overlapText = originalText.slice(currentChunk.start, prevChunk.end)
       assert.ok(overlapText.length > 0, 'Overlap text should exist')
     }
+  })
+})
+
+describe('calculateOverlapStart', () => {
+  // Default character-based splitter
+  const charSplitter: (text: string) => string[] = (text: string) =>
+    text.split('')
+
+  // Word-based splitter for more realistic testing
+  const wordSplitter: (text: string) => string[] = (text: string) =>
+    text.split(/\s+/).filter(word => word.length > 0)
+
+  test('handles zero overlap', () => {
+    const originalText = 'ABCDEFGHIJKLMNOP'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGH',
+      start: 0,
+      end: 8
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      0,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      8,
+      'Should return end of previous chunk when overlap is 0'
+    )
+  })
+
+  test('handles overlap within available tokens - character splitter', () => {
+    const originalText = 'ABCDEFGHIJKLMNOP'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGH',
+      start: 0,
+      end: 8
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      5,
+      'Should return position 3 characters before end (8-3=5)'
+    )
+
+    // Verify the overlap text is exactly 3 characters
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText, 'FGH')
+    assert.strictEqual(charSplitter(overlapText).length, 3)
+  })
+
+  test('handles overlap equal to all available tokens', () => {
+    const originalText = 'ABCDEFGH'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGH',
+      start: 0,
+      end: 8
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      8,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      0,
+      'Should return start of chunk when overlap equals chunk size'
+    )
+
+    // Verify the overlap includes the entire chunk
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText, 'ABCDEFGH')
+    assert.strictEqual(charSplitter(overlapText).length, 8)
+  })
+
+  test('handles overlap larger than available tokens', () => {
+    const originalText = 'ABCDEFGH'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGH',
+      start: 0,
+      end: 8
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      15,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      0,
+      'Should return start of chunk when overlap exceeds available tokens'
+    )
+
+    // Verify we get all available tokens
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText, 'ABCDEFGH')
+    assert.strictEqual(charSplitter(overlapText).length, 8)
+  })
+
+  test('works with word-based splitter', () => {
+    const originalText = 'The quick brown fox jumps over the lazy dog'
+    const prevChunk: ChunkResult = {
+      text: 'The quick brown fox jumps',
+      start: 0,
+      end: 25
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      2,
+      wordSplitter
+    )
+
+    // Should overlap the last 2 words: "fox jumps"
+    // Note: may include preceding whitespace due to binary search finding exact position
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 2)
+    assert.deepStrictEqual(overlapWords, ['fox', 'jumps'])
+    // The overlap text should contain the two words, possibly with leading whitespace
+    assert.ok(overlapText.includes('fox jumps'))
+  })
+
+  test('handles single character tokens', () => {
+    const originalText = 'A B C D E F'
+    const prevChunk: ChunkResult = {
+      text: 'A B C D',
+      start: 0,
+      end: 7
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      2,
+      wordSplitter
+    )
+
+    // Should overlap the last 2 words: "C D"
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 2)
+    assert.deepStrictEqual(overlapWords, ['C', 'D'])
+  })
+
+  test('handles chunk not starting at position 0', () => {
+    const originalText = 'PREFIX_ABCDEFGHIJKLMNOP_SUFFIX'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGH',
+      start: 7,
+      end: 15
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      12,
+      'Should return position 3 characters before end (15-3=12)'
+    )
+
+    // Verify the overlap text
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText, 'FGH')
+    assert.strictEqual(charSplitter(overlapText).length, 3)
+  })
+
+  test('handles complex text with special characters', () => {
+    const originalText = 'Hello, world! How are you today? Fine, thanks.'
+    const prevChunk: ChunkResult = {
+      text: 'Hello, world! How are you',
+      start: 0,
+      end: 25
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      wordSplitter
+    )
+
+    // Should overlap the last 3 words: "How are you"
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 3)
+    assert.deepStrictEqual(overlapWords, ['How', 'are', 'you'])
+  })
+
+  test('handles empty previous chunk', () => {
+    const originalText = 'ABCDEFGH'
+    const prevChunk: ChunkResult = {
+      text: '',
+      start: 0,
+      end: 0
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      0,
+      'Should return end position when chunk is empty'
+    )
+  })
+
+  test('binary search finds exact token boundary', () => {
+    const originalText = 'word1 word2 word3 word4 word5'
+    const prevChunk: ChunkResult = {
+      text: 'word1 word2 word3 word4 word5',
+      start: 0,
+      end: 29
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      2,
+      wordSplitter
+    )
+
+    // Should find position that gives exactly 2 words ("word4 word5")
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 2)
+    assert.deepStrictEqual(overlapWords, ['word4', 'word5'])
+    // May include leading whitespace due to binary search precision
+    assert.ok(overlapText.includes('word4 word5'))
+  })
+
+  test('handles tokens with varying lengths', () => {
+    const originalText = 'I am a developer working on chunking algorithms'
+    const prevChunk: ChunkResult = {
+      text: 'I am a developer working',
+      start: 0,
+      end: 24
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      wordSplitter
+    )
+
+    // Should overlap the last 3 words: "a developer working"
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 3)
+    assert.deepStrictEqual(overlapWords, ['a', 'developer', 'working'])
+  })
+
+  test('handles chunk with only whitespace tokens', () => {
+    const originalText = 'word1   word2   word3'
+    const prevChunk: ChunkResult = {
+      text: 'word1   word2',
+      start: 0,
+      end: 13
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      1,
+      wordSplitter
+    )
+
+    // Should overlap the last word
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 1)
+    assert.deepStrictEqual(overlapWords, ['word2'])
+  })
+
+  test('maintains consistency across different token sizes', () => {
+    const originalText = 'a bb ccc dddd eeeee ffffff'
+    const prevChunk: ChunkResult = {
+      text: 'a bb ccc dddd',
+      start: 0,
+      end: 13
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      2,
+      wordSplitter
+    )
+
+    // Should overlap the last 2 words: "ccc dddd"
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 2)
+    assert.deepStrictEqual(overlapWords, ['ccc', 'dddd'])
+    // May include leading whitespace due to binary search precision
+    assert.ok(overlapText.includes('ccc dddd'))
+  })
+
+  test('handles overlap at exact word boundaries', () => {
+    const originalText = 'first second third fourth fifth'
+    const prevChunk: ChunkResult = {
+      text: 'first second third',
+      start: 0,
+      end: 18
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      1,
+      wordSplitter
+    )
+
+    // Should overlap the last 1 word: "third"
+    const overlapText = originalText.slice(result, prevChunk.end)
+    const overlapWords = wordSplitter(overlapText)
+
+    assert.strictEqual(overlapWords.length, 1)
+    assert.deepStrictEqual(overlapWords, ['third'])
+    // May include leading whitespace due to binary search precision
+    assert.ok(overlapText.includes('third'))
+  })
+
+  test('handles very small overlaps', () => {
+    const originalText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const prevChunk: ChunkResult = {
+      text: 'ABCDEFGHIJKLMNOP',
+      start: 0,
+      end: 16
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      1,
+      charSplitter
+    )
+
+    assert.strictEqual(
+      result,
+      15,
+      'Should return position for 1 character overlap'
+    )
+
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText, 'P')
+    assert.strictEqual(charSplitter(overlapText).length, 1)
+  })
+
+  test('stress test with large overlap', () => {
+    const originalText = 'A'.repeat(1000) + 'B'.repeat(1000)
+    const prevChunk: ChunkResult = {
+      text: 'A'.repeat(1000),
+      start: 0,
+      end: 1000
+    }
+
+    const result = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      500,
+      charSplitter
+    )
+
+    assert.strictEqual(result, 500, 'Should handle large overlaps correctly')
+
+    const overlapText = originalText.slice(result, prevChunk.end)
+    assert.strictEqual(overlapText.length, 500)
+    assert.strictEqual(charSplitter(overlapText).length, 500)
   })
 })
