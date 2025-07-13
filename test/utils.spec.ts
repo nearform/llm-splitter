@@ -779,3 +779,219 @@ describe('calculateOverlapStart', () => {
     assert.strictEqual(charSplitter(overlapText).length, 500)
   })
 })
+
+describe('getUnits', () => {
+  test('handles single paragraph with no double newlines', () => {
+    const text = 'This is a single paragraph with no breaks.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 1)
+    assert.strictEqual(
+      result[0].unit,
+      'This is a single paragraph with no breaks.'
+    )
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 42)
+  })
+
+  test('splits text by double newlines', () => {
+    const text = 'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 3)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 16)
+
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+    assert.strictEqual(result[1].start, 18)
+    assert.strictEqual(result[1].end, 35)
+
+    assert.strictEqual(result[2].unit, 'Third paragraph.')
+    assert.strictEqual(result[2].start, 37)
+    assert.strictEqual(result[2].end, 53)
+  })
+
+  test('handles multiple consecutive newlines (more than 2)', () => {
+    const text = 'First paragraph.\n\n\n\nSecond paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 16)
+
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+    assert.strictEqual(result[1].start, 20)
+    assert.strictEqual(result[1].end, 37)
+  })
+
+  test('trims whitespace from paragraph units', () => {
+    const text =
+      '  First paragraph with spaces.  \n\n  Second paragraph with spaces.  '
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph with spaces.')
+    assert.strictEqual(result[0].start, 2) // Start after leading whitespace
+    assert.strictEqual(result[0].end, 30) // End before trailing whitespace
+
+    assert.strictEqual(result[1].unit, 'Second paragraph with spaces.')
+    assert.strictEqual(result[1].start, 36) // Start after leading whitespace (actual implementation)
+    assert.strictEqual(result[1].end, 65) // End before trailing whitespace
+  })
+
+  test('filters out empty paragraphs', () => {
+    const text = 'First paragraph.\n\n\n\nSecond paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+  })
+
+  test('filters out paragraphs with only whitespace', () => {
+    const text = 'First paragraph.\n\n   \t  \n\nSecond paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+  })
+
+  test('handles empty input', () => {
+    const text = ''
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 0)
+  })
+
+  test('handles input with only newlines', () => {
+    const text = '\n\n\n\n'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 0)
+  })
+
+  test('handles input with only whitespace and newlines', () => {
+    const text = '  \n\n  \t\n\n  '
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 0)
+  })
+
+  test('handles single newlines (not paragraph separators)', () => {
+    const text = 'First line.\nSecond line.\nThird line.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 1)
+    assert.strictEqual(result[0].unit, 'First line.\nSecond line.\nThird line.')
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 36) // Corrected length
+  })
+
+  test('handles mixed single and double newlines', () => {
+    const text =
+      'First paragraph.\nWith line break.\n\nSecond paragraph.\nAlso with line break.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.\nWith line break.')
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 33)
+
+    assert.strictEqual(
+      result[1].unit,
+      'Second paragraph.\nAlso with line break.'
+    )
+    assert.strictEqual(result[1].start, 35)
+    assert.strictEqual(result[1].end, 74)
+  })
+
+  test('handles text starting with double newlines', () => {
+    const text = '\n\nFirst paragraph.\n\nSecond paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[0].start, 2)
+    assert.strictEqual(result[0].end, 18)
+
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+    assert.strictEqual(result[1].start, 20)
+    assert.strictEqual(result[1].end, 37)
+  })
+
+  test('handles text ending with double newlines', () => {
+    const text = 'First paragraph.\n\nSecond paragraph.\n\n'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'First paragraph.')
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 16)
+
+    assert.strictEqual(result[1].unit, 'Second paragraph.')
+    assert.strictEqual(result[1].start, 18)
+    assert.strictEqual(result[1].end, 35)
+  })
+
+  test('handles very long paragraphs', () => {
+    const longParagraph = 'A'.repeat(1000)
+    const text = longParagraph + '\n\n' + 'Short paragraph.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, longParagraph)
+    assert.strictEqual(result[0].start, 0)
+    assert.strictEqual(result[0].end, 1000)
+
+    assert.strictEqual(result[1].unit, 'Short paragraph.')
+    assert.strictEqual(result[1].start, 1002)
+    assert.strictEqual(result[1].end, 1018)
+  })
+
+  test('handles special characters and unicode', () => {
+    const text = 'Paragraph with émojis 🚀🎉.\n\nAnother with símbolos ñ ü.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].unit, 'Paragraph with émojis 🚀🎉.')
+    assert.strictEqual(result[1].unit, 'Another with símbolos ñ ü.')
+
+    // Verify character positions are correct for unicode
+    const extractedFirst = text.slice(result[0].start, result[0].end)
+    const extractedSecond = text.slice(result[1].start, result[1].end)
+    assert.strictEqual(extractedFirst, result[0].unit)
+    assert.strictEqual(extractedSecond, result[1].unit)
+  })
+
+  test('handles tabs and other whitespace characters', () => {
+    const text =
+      '\tFirst paragraph with tab.\n\n    Second paragraph with spaces.\n\n\tThird with mixed\t whitespace.'
+    const result = getUnits(text)
+
+    assert.strictEqual(result.length, 3)
+    assert.strictEqual(result[0].unit, 'First paragraph with tab.')
+    assert.strictEqual(result[1].unit, 'Second paragraph with spaces.')
+    assert.strictEqual(result[2].unit, 'Third with mixed\t whitespace.')
+  })
+
+  test('maintains accurate character positions for complex text', () => {
+    const text = '  Para 1.  \n\n  \n\n  Para 2.  \n\n  Para 3.  '
+    const result = getUnits(text)
+
+    // Should filter out empty paragraph between Para 1 and Para 2
+    assert.strictEqual(result.length, 3)
+
+    // Verify each paragraph can be extracted correctly using its positions
+    result.forEach((unit, index) => {
+      const extractedText = text.slice(unit.start, unit.end)
+      assert.strictEqual(
+        extractedText,
+        unit.unit,
+        `Unit ${index} positions should be accurate`
+      )
+    })
+  })
+})
