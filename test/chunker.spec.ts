@@ -386,14 +386,12 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[0], { text: 'a', start: 0, end: 1 })
   })
 
-  // Test for chunker.ts:38 - getChunk with startIndex === null
   test('getChunk should return empty array when start is beyond input length', () => {
     const input: string[] = ['abc', 'def']
     const result: string | string[] = getChunk(input, 100, 105) // start way beyond length
     assert.deepStrictEqual(result, [])
   })
 
-  // Test for chunker.ts:119 - array output for character-based chunking with array input
   test('should handle array input and maintain array output format', () => {
     const input: string[] = ['abc', 'def']
     const result: ChunkResult[] = split(input, { chunkSize: 2 })
@@ -401,7 +399,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[1].text, ['c'])
   })
 
-  // Test for chunker.ts:99 - array input branch for paragraph strategy
   test('should handle array input with paragraph strategy', () => {
     const input: string[] = [
       'Para1 line1\nPara1 line2\n\nPara2 line1',
@@ -417,7 +414,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[1].text, ['Para3\n\nPara4'])
   })
 
-  // Test for utils.ts:85 - bestEnd === start case (force at least one character)
   test('should handle edge case where splitter returns empty result', () => {
     const input: string = 'abc'
     // Custom splitter that returns empty array, forcing bestEnd === start
@@ -429,7 +425,6 @@ describe('split (coverage edge cases)', () => {
     assert.ok(result.length > 0) // Should still produce chunks
   })
 
-  // Test for chunker.ts line 79 - array input with empty string and splitter
   test('should handle array input with empty string and custom splitter', () => {
     const input: string[] = ['', 'abc']
     const charSplitter: (text: string) => string[] = (text: string) =>
@@ -442,7 +437,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[1].text, ['ab'])
   })
 
-  // Test for chunker.ts line 99 - array input with paragraph strategy and splitter
   test('should handle array input with paragraph strategy and custom splitter', () => {
     const input: string[] = ['Para1\n\nPara2', 'Para3']
     const wordSplitter: (text: string) => string[] = (text: string) =>
@@ -455,7 +449,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[0].text, ['Para1\n\nPara2']) // Should use array format
   })
 
-  // Test for chunker.ts line 119 - array input character chunking with splitter
   test('should handle array input character chunking with custom splitter', () => {
     const input: string[] = ['hello', 'world']
     const vowelSplitter: (text: string) => string[] = (text: string) =>
@@ -467,7 +460,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[0].text, ['hello']) // Should maintain array format
   })
 
-  // Test for chunker.ts:79 - specific array input with empty strings and custom splitter
   test('should handle complex array input with empty strings and custom splitter function', () => {
     const input: string[] = ['', 'test', '']
     const result: ChunkResult[] = split(input, {
@@ -478,7 +470,6 @@ describe('split (coverage edge cases)', () => {
     assert.deepStrictEqual(result[0].text, [''])
   })
 
-  // Test for chunker.ts:119 - array character chunking with specific splitter that affects length
   test('should handle array input with character strategy and length-affecting splitter', () => {
     const input: string[] = ['hello', 'world']
     // Splitter that changes effective length
