@@ -247,9 +247,8 @@ export function* iterateChunks(
           chunkOverlap,
           globalOffset
         )
-        for (const chunk of chunks) {
+        for (const chunk of chunks)
           yield yieldChunk([chunk.text as string], chunk.start, chunk.end)
-        }
       }
 
       // Reset chunk start for next aggregation
@@ -258,9 +257,8 @@ export function* iterateChunks(
       previousChunkEnd = globalOffset + currentText.length
     } else {
       // Add current element to aggregation
-      if (aggregatedElements.length === 0 && chunkOverlap === 0) {
+      if (aggregatedElements.length === 0 && chunkOverlap === 0)
         chunkStartOffset = globalOffset
-      }
       aggregatedElements.push(currentText)
       aggregatedTokenCount += currentTokenCount
     }
@@ -269,9 +267,8 @@ export function* iterateChunks(
   }
 
   // Yield any remaining aggregated content
-  if (aggregatedElements.length > 0) {
+  if (aggregatedElements.length > 0)
     yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
-  }
 }
 
 /**
