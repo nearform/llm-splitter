@@ -65,19 +65,13 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
   let end = len
 
   // Find start of non-whitespace content
-  while (start < len && /\s/.test(text[start])) {
-    start++
-  }
+  while (start < len && /\s/.test(text[start])) start++
 
   // Find end of non-whitespace content
-  while (end > start && /\s/.test(text[end - 1])) {
-    end--
-  }
+  while (end > start && /\s/.test(text[end - 1])) end--
 
   // Return null if no content after trimming
-  if (start === end) {
-    return null
-  }
+  if (start === end) return null
 
   return {
     unit: text.slice(start, end),
