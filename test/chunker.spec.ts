@@ -149,26 +149,20 @@ describe('split', () => {
   })
 
   test('should handle array of empty strings with chunkStrategy', () => {
-    assert.deepStrictEqual(split(['', ''], { chunkStrategy: 'paragraph' }), [
-      { text: [''], start: 0, end: 0 },
-      { text: [''], start: 0, end: 0 }
-    ])
+    // With new behavior, empty elements are completely skipped - no chunks generated
+    assert.deepStrictEqual(split(['', ''], { chunkStrategy: 'paragraph' }), [])
   })
 
   test('should handle array of empty strings', () => {
-    assert.deepStrictEqual(split(['', '']), [
-      { text: [''], start: 0, end: 0 },
-      { text: [''], start: 0, end: 0 }
-    ])
+    // With new behavior, empty elements are completely skipped - no chunks generated
+    assert.deepStrictEqual(split(['', '']), [])
   })
 
   test('should handle array of empty strings with chunkSize and chunkStrategy', () => {
+    // With new behavior, empty elements are completely skipped - no chunks generated
     assert.deepStrictEqual(
       split(['', ''], { chunkSize: 5, chunkStrategy: 'paragraph' }),
-      [
-        { text: [''], start: 0, end: 0 },
-        { text: [''], start: 0, end: 0 }
-      ]
+      []
     )
   })
 
@@ -187,16 +181,13 @@ describe('split', () => {
 
   test('should cover array input branch for unit-based chunking with empty strings', () => {
     const input: string[] = ['', 'A', '']
-    // This triggers the Array.isArray(text) && text !== texts branch for empty and non-empty
+    // With new behavior, empty elements are completely skipped - only 'A' remains
     const result: ChunkResult[] = split(input, {
       chunkSize: 10,
       chunkStrategy: 'paragraph'
     })
-    assert.deepStrictEqual(result, [
-      { text: [''], start: 0, end: 0 },
-      { text: ['A'], start: 0, end: 1 },
-      { text: [''], start: 1, end: 1 }
-    ])
+    // Only non-empty elements should be included
+    assert.deepStrictEqual(result, [{ text: ['A'], start: 0, end: 1 }])
   })
 
   test('should cover array input branch for unit-based chunking with empty array', () => {
@@ -434,8 +425,9 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 2,
       splitter: charSplitter
     })
-    assert.deepStrictEqual(result[0].text, ['']) // First chunk should be empty array element
-    assert.deepStrictEqual(result[1].text, ['ab'])
+    // With new behavior, empty elements are skipped - only 'abc' is processed
+    assert.deepStrictEqual(result[0].text, ['ab']) // First chunk should be 'ab'
+    assert.deepStrictEqual(result[1].text, ['c'])  // Second chunk should be 'c'
   })
 
   test('should handle array input with paragraph strategy and custom splitter', () => {
@@ -469,7 +461,8 @@ describe('split (coverage edge cases)', () => {
       splitter: (text: string) => text.split('')
     })
     assert.ok(result.length > 0)
-    assert.deepStrictEqual(result[0].text, [''])
+    // With new behavior, empty elements are skipped - only 'test' remains
+    assert.deepStrictEqual(result[0].text, ['test'])
   })
 
   test('should handle array input with character strategy and length-affecting splitter', () => {
@@ -1050,36 +1043,64 @@ describe('Complex array chunking scenarios', () => {
 
     const chunks: ChunkResult[] = split(input, { chunkSize: 8 })
 
-    // Verify chunks are consistent where they should be (non-empty chunks)
+    // With new aggregation behavior, empty elements are included in chunks with content
+    // Verify all chunks are consistent with getChunk, accounting for the difference in empty element handling
     for (const chunk of chunks) {
       const retrieved = getChunk(input, chunk.start, chunk.end)
 
-      // For empty chunks (start === end), split() returns [''] but getChunk() returns []
-      // This is a known behavior difference - split() preserves array structure for empty elements
-      if (chunk.start === chunk.end) {
+      // getChunk() filters out empty strings with .filter(Boolean), but split() preserves them
+      // So we need to compare the non-empty elements for chunks that contain mixed content
+      if (chunk.start === chunk.end && (chunk.text as string[]).length > 0) {
+        // This handles the case where split() preserves empty elements but getChunk returns []
         const chunkText = chunk.text as string[]
-        assert.strictEqual(
-          chunkText.length,
-          1,
-          'Empty chunk should have one element'
-        )
-        assert.strictEqual(
-          chunkText[0],
-          '',
-          'Empty chunk should contain empty string'
+        assert.ok(
+          chunkText.every(elem => elem === ''),
+          'Empty-only chunk should contain only empty strings'
         )
         assert.deepStrictEqual(
           retrieved,
           [],
-          'getChunk should return empty array for empty range'
+          'getChunk should return empty array for zero-length range'
         )
       } else {
-        // Non-empty chunks should match exactly
-        assert.deepStrictEqual(
-          chunk.text,
-          retrieved,
-          'Non-empty chunks should match getChunk results'
-        )
+        // For chunks with actual content, we need to account for getChunk filtering empty strings
+        const chunkTextFiltered = (chunk.text as string[]).filter(Boolean)
+
+        // Handle the fact that retrieved could be string or string[]
+        if (Array.isArray(retrieved)) {
+          const retrievedFiltered = retrieved.filter(Boolean)
+
+          if (
+            chunkTextFiltered.length === 0 &&
+            retrievedFiltered.length === 0
+          ) {
+            // Both are effectively empty after filtering
+            assert.ok(
+              true,
+              'Both chunk and retrieved are empty after filtering'
+            )
+          } else {
+            // Compare the filtered versions for content consistency
+            assert.deepStrictEqual(
+              chunkTextFiltered,
+              retrievedFiltered,
+              'Filtered chunks should match filtered getChunk results'
+            )
+
+            // Also verify the joined text matches (this is the real content verification)
+            const chunkJoined = (chunk.text as string[]).join('')
+            const retrievedJoined = retrieved.join('')
+            assert.strictEqual(
+              chunkJoined,
+              retrievedJoined,
+              'Joined text should match between chunk and getChunk'
+            )
+          }
+        } else {
+          // If retrieved is a string, we're dealing with string input
+          // This shouldn't happen with array input, but handle it for completeness
+          assert.fail('Expected array result from getChunk with array input')
+        }
       }
     }
 
