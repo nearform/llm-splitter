@@ -174,15 +174,14 @@ describe('split', () => {
 
   test('should cover array input branch for unit-based chunking', () => {
     const input: string[] = ['A', 'B', 'C']
-    // This triggers the Array.isArray(text) && text !== texts branch
+    // This triggers aggregation of multiple elements into single chunk
     const result: ChunkResult[] = split(input, {
       chunkSize: 10,
       chunkStrategy: 'paragraph'
     })
+    // With aggregation, all elements fit in one chunk
     assert.deepStrictEqual(result, [
-      { text: ['A'], start: 0, end: 1 },
-      { text: ['B'], start: 1, end: 2 },
-      { text: ['C'], start: 2, end: 3 }
+      { text: ['A', 'B', 'C'], start: 0, end: 3 }
     ])
   })
 
@@ -408,10 +407,12 @@ describe('split (coverage edge cases)', () => {
       chunkSize: 100,
       chunkStrategy: 'paragraph'
     })
+    // With aggregation, both elements fit in one chunk since total token count < 100
     assert.deepStrictEqual(result[0].text, [
-      'Para1 line1\nPara1 line2\n\nPara2 line1'
-    ]) // Should be array format
-    assert.deepStrictEqual(result[1].text, ['Para3\n\nPara4'])
+      'Para1 line1\nPara1 line2\n\nPara2 line1',
+      'Para3\n\nPara4'
+    ]) // Should be aggregated into single chunk
+    assert.strictEqual(result.length, 1, 'Should create one aggregated chunk')
   })
 
   test('should handle edge case where splitter returns empty result', () => {
@@ -446,7 +447,8 @@ describe('split (coverage edge cases)', () => {
       chunkStrategy: 'paragraph',
       splitter: wordSplitter
     })
-    assert.deepStrictEqual(result[0].text, ['Para1\n\nPara2']) // Should use array format
+    // With aggregation and word splitter, elements may be aggregated based on word count
+    assert.deepStrictEqual(result[0].text, ['Para1\n\nPara2', 'Para3']) // Should use aggregated array format
   })
 
   test('should handle array input character chunking with custom splitter', () => {
@@ -734,6 +736,493 @@ describe('split (coverage edge cases)', () => {
         chunk.text,
         retrievedChunk,
         `Chunk text should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+    }
+  })
+})
+
+describe('Complex array chunking scenarios', () => {
+  test('should handle multiple array elements in a single chunk', () => {
+    const input: string[] = ['short', 'tiny', 'small', 'brief', 'mini']
+    // Large chunk size should fit multiple elements (total length is 23 chars)
+    const chunks: ChunkResult[] = split(input, { chunkSize: 30 })
+
+    // With new aggregation behavior, all elements should be combined into one chunk
+    assert.strictEqual(chunks.length, 1, 'Should create one aggregated chunk')
+    assert.deepStrictEqual(
+      chunks[0].text,
+      input,
+      'All elements should be aggregated together'
+    )
+    assert.strictEqual(chunks[0].start, 0, 'Chunk should start at 0')
+    assert.strictEqual(chunks[0].end, 23, 'Chunk should end at total length')
+
+    // Verify chunk boundaries and consistency with getChunk
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'Chunk should match getChunk result'
+      )
+    }
+
+    // Test a case where we can force multiple chunks with very small chunk size
+    const chunks2: ChunkResult[] = split(input, { chunkSize: 3 })
+
+    // Verify all chunks are consistent
+    for (const chunk of chunks2) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'Small chunk size chunks should match getChunk result'
+      )
+    }
+  })
+
+  test('should handle chunks spanning partial-full-partial elements', () => {
+    const input: string[] = ['hello world', 'this is a test', 'final segment']
+    // Chunk size designed to create partial-full-partial pattern
+    const chunks: ChunkResult[] = split(input, { chunkSize: 20 })
+
+    // Find a chunk that spans multiple elements with partial boundaries
+    let foundComplexChunk = false
+    for (const chunk of chunks) {
+      const chunkText = chunk.text as string[]
+      if (chunkText.length >= 2) {
+        // Check if first element is partial (doesn't match full original element)
+        const firstElementIndex = input.findIndex(elem =>
+          elem.includes(chunkText[0])
+        )
+        const lastElementIndex = input.findIndex(elem =>
+          elem.includes(chunkText[chunkText.length - 1])
+        )
+
+        if (
+          firstElementIndex !== -1 &&
+          lastElementIndex !== -1 &&
+          firstElementIndex !== lastElementIndex
+        ) {
+          foundComplexChunk = true
+
+          // Verify this complex chunk is consistent with getChunk
+          const retrieved = getChunk(input, chunk.start, chunk.end)
+          assert.deepStrictEqual(
+            chunk.text,
+            retrieved,
+            'Complex chunk should match getChunk result'
+          )
+          break
+        }
+      }
+    }
+
+    // We should find at least one complex chunk or all chunks should be consistent
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'All chunks should match getChunk results'
+      )
+    }
+  })
+
+  test('should handle edge case: chunk starts in middle of element, spans full elements, ends in middle', () => {
+    const input: string[] = [
+      'abcdefghij',
+      'klmnopqrst',
+      'uvwxyz1234',
+      '567890abcd'
+    ]
+
+    // Test specific position that creates partial-full-full-partial pattern
+    const retrieved = getChunk(input, 5, 35) // Start mid-first, end mid-last
+
+    // Should get: 'fghij' + 'klmnopqrst' + 'uvwxyz1234' + '56789'
+    const expected = ['fghij', 'klmnopqrst', 'uvwxyz1234', '56789']
+    assert.deepStrictEqual(
+      retrieved,
+      expected,
+      'Should handle partial-full-full-partial pattern'
+    )
+
+    // Now verify this works with split() at various chunk sizes
+    const chunkSizes = [8, 15, 25, 30]
+    for (const chunkSize of chunkSizes) {
+      const chunks: ChunkResult[] = split(input, { chunkSize })
+
+      // Find chunk(s) that contain positions 5-35
+      const relevantChunks = chunks.filter(
+        chunk =>
+          (chunk.start <= 5 && chunk.end >= 35) ||
+          (chunk.start >= 5 && chunk.start < 35) ||
+          (chunk.end > 5 && chunk.end <= 35)
+      )
+
+      // Verify each relevant chunk is consistent
+      for (const chunk of relevantChunks) {
+        const chunkRetrieved = getChunk(input, chunk.start, chunk.end)
+        assert.deepStrictEqual(
+          chunk.text,
+          chunkRetrieved,
+          `Chunk ${chunk.start}-${chunk.end} should match getChunk with chunkSize ${chunkSize}`
+        )
+      }
+    }
+  })
+
+  test('should handle array elements with varying lengths in complex boundary scenarios', () => {
+    const input: string[] = [
+      'a', // length 1
+      'bb', // length 2
+      'ccc', // length 3
+      'dddd', // length 4
+      'eeeee', // length 5
+      'ffffff' // length 6
+    ]
+    // Total length: 21 characters
+
+    // Test various complex boundary scenarios
+    const testCases = [
+      {
+        start: 1,
+        end: 10,
+        description: 'spans from middle of first to middle of fourth'
+      },
+      {
+        start: 3,
+        end: 15,
+        description: 'spans from second element to middle of fifth'
+      },
+      {
+        start: 6,
+        end: 18,
+        description: 'spans from middle of third to middle of sixth'
+      },
+      { start: 0, end: 21, description: 'entire input' },
+      {
+        start: 2,
+        end: 20,
+        description: 'almost entire input with partial boundaries'
+      }
+    ]
+
+    for (const { start, end, description } of testCases) {
+      const retrieved = getChunk(input, start, end)
+
+      // Verify the retrieved chunk makes sense
+      assert.ok(
+        Array.isArray(retrieved),
+        `Retrieved chunk should be array for ${description}`
+      )
+
+      // Calculate expected result manually to verify correctness
+      let currentPos = 0
+      let startIdx = -1,
+        startOffset = 0
+      let endIdx = -1,
+        endOffset = 0
+
+      for (let i = 0; i < input.length; i++) {
+        const element = input[i]
+        const nextPos = currentPos + element.length
+
+        if (currentPos <= start && start < nextPos && startIdx === -1) {
+          startIdx = i
+          startOffset = start - currentPos
+        }
+
+        if (currentPos < end && end <= nextPos && endIdx === -1) {
+          endIdx = i
+          endOffset = end - currentPos
+        }
+
+        currentPos = nextPos
+      }
+
+      // Verify the positions make sense
+      assert.ok(
+        startIdx >= 0,
+        `Should find valid start index for ${description}`
+      )
+      if (end <= 21) {
+        assert.ok(endIdx >= 0, `Should find valid end index for ${description}`)
+      }
+
+      // Now test with split() to ensure consistency
+      const chunks: ChunkResult[] = split(input, { chunkSize: 7 }) // Small chunks to force boundaries
+
+      for (const chunk of chunks) {
+        const chunkRetrieved = getChunk(input, chunk.start, chunk.end)
+        assert.deepStrictEqual(
+          chunk.text,
+          chunkRetrieved,
+          `Chunk consistency failed for ${description}`
+        )
+      }
+    }
+  })
+
+  test('should handle complex overlapping scenarios with array boundaries', () => {
+    const input: string[] = ['first', 'second', 'third', 'fourth', 'fifth']
+    // lengths: 5, 6, 5, 6, 5 = total 27
+
+    const chunks: ChunkResult[] = split(input, {
+      chunkSize: 10,
+      chunkOverlap: 4
+    })
+
+    assert.ok(chunks.length > 1, 'Should create multiple overlapping chunks')
+
+    // Verify all chunks maintain consistency
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        `Chunk ${i} should match getChunk result`
+      )
+
+      // Verify chunk contains array elements
+      assert.ok(Array.isArray(chunk.text), `Chunk ${i} should be array`)
+      assert.ok(
+        (chunk.text as string[]).length > 0,
+        `Chunk ${i} should not be empty`
+      )
+
+      // Verify overlap with next chunk if it exists
+      if (i < chunks.length - 1) {
+        const nextChunk = chunks[i + 1]
+        const overlapSize = chunk.end - nextChunk.start
+        assert.ok(
+          overlapSize >= 0,
+          `Chunks ${i} and ${i + 1} should have valid overlap`
+        )
+      }
+    }
+  })
+
+  test('should handle single element that spans multiple chunks', () => {
+    const longElement = 'a'.repeat(100)
+    const input: string[] = [longElement, 'short']
+
+    const chunks: ChunkResult[] = split(input, { chunkSize: 30 })
+
+    // First element should be split across multiple chunks
+    const chunksWithFirstElement = chunks.filter(chunk => {
+      const chunkText = chunk.text as string[]
+      return chunkText.some(text => text.includes('a'))
+    })
+
+    assert.ok(
+      chunksWithFirstElement.length > 1,
+      'Long element should be split across multiple chunks'
+    )
+
+    // Verify all chunks are consistent
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'Long element chunks should match getChunk results'
+      )
+    }
+
+    // Verify no data is lost when reassembling
+    const allChunkText = chunks
+      .map(chunk => (chunk.text as string[]).join(''))
+      .join('')
+    const originalText = input.join('')
+    assert.strictEqual(
+      allChunkText,
+      originalText,
+      'Reassembled chunks should equal original text'
+    )
+  })
+
+  test('should handle empty elements mixed with content in complex boundaries', () => {
+    const input: string[] = ['', 'content', '', 'more', '', 'final', '']
+
+    const chunks: ChunkResult[] = split(input, { chunkSize: 8 })
+
+    // Verify chunks are consistent where they should be (non-empty chunks)
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+
+      // For empty chunks (start === end), split() returns [''] but getChunk() returns []
+      // This is a known behavior difference - split() preserves array structure for empty elements
+      if (chunk.start === chunk.end) {
+        const chunkText = chunk.text as string[]
+        assert.strictEqual(
+          chunkText.length,
+          1,
+          'Empty chunk should have one element'
+        )
+        assert.strictEqual(
+          chunkText[0],
+          '',
+          'Empty chunk should contain empty string'
+        )
+        assert.deepStrictEqual(
+          retrieved,
+          [],
+          'getChunk should return empty array for empty range'
+        )
+      } else {
+        // Non-empty chunks should match exactly
+        assert.deepStrictEqual(
+          chunk.text,
+          retrieved,
+          'Non-empty chunks should match getChunk results'
+        )
+      }
+    }
+
+    // Test specific boundary that crosses empty elements
+    const retrieved = getChunk(input, 2, 10) // Should span multiple elements including empty ones
+    assert.ok(Array.isArray(retrieved), 'Retrieved chunk should be array')
+
+    // Verify the result makes sense structurally
+    const retrievedJoined = retrieved.join('')
+    const expectedText = input.join('').slice(2, 10)
+    assert.strictEqual(
+      retrievedJoined,
+      expectedText,
+      'Retrieved chunk should match expected substring'
+    )
+
+    // Test various edge cases with empty elements
+    assert.deepStrictEqual(
+      getChunk(input, 0, 0),
+      [],
+      'Empty range at start should return empty array'
+    )
+    assert.deepStrictEqual(
+      getChunk(input, 1, 1),
+      [''],
+      'Empty range in first element content should return array with empty string'
+    )
+
+    // Test a range that includes empty elements
+    const rangeWithEmptyElements = getChunk(input, 0, 3)
+    assert.ok(
+      Array.isArray(rangeWithEmptyElements),
+      'Range with empty elements should be array'
+    )
+    assert.strictEqual(
+      rangeWithEmptyElements.join(''),
+      input.join('').slice(0, 3),
+      'Range with empty elements should match expected content'
+    )
+  })
+
+  test('should handle complex paragraph strategy with array boundaries', () => {
+    const input: string[] = [
+      'Para1 sentence1. Para1 sentence2.\n\nPara2 content.',
+      'Para3 start.\n\nPara4 content here.',
+      'Final paragraph content.'
+    ]
+
+    const chunks: ChunkResult[] = split(input, {
+      chunkSize: 50,
+      chunkStrategy: 'paragraph'
+    })
+
+    // Verify consistency for paragraph-based chunking
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'Paragraph chunks should match getChunk results'
+      )
+
+      // Verify each chunk contains array elements
+      assert.ok(Array.isArray(chunk.text), 'Paragraph chunk should be array')
+    }
+  })
+
+  test('should handle stress test with many small array elements', () => {
+    // Create array with many small elements
+    const input: string[] = Array.from({ length: 50 }, (_, i) => `item${i}`)
+
+    const chunks: ChunkResult[] = split(input, {
+      chunkSize: 25,
+      chunkOverlap: 5
+    })
+
+    assert.ok(
+      chunks.length > 1,
+      'Should create multiple chunks from many elements'
+    )
+
+    // Verify every chunk is consistent
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        `Stress test chunk ${i} should match getChunk result`
+      )
+
+      // Verify chunk structure
+      assert.ok(Array.isArray(chunk.text), `Chunk ${i} should be array`)
+      assert.ok(
+        (chunk.text as string[]).length > 0,
+        `Chunk ${i} should not be empty`
+      )
+    }
+
+    // Verify no gaps between chunks (accounting for overlap)
+    for (let i = 0; i < chunks.length - 1; i++) {
+      const currentChunk = chunks[i]
+      const nextChunk = chunks[i + 1]
+
+      assert.ok(
+        nextChunk.start <= currentChunk.end,
+        `Chunks ${i} and ${i + 1} should not have gaps`
+      )
+    }
+  })
+
+  test('boundary edge case: chunk exactly at element boundaries', () => {
+    const input: string[] = ['abc', 'def', 'ghi', 'jkl']
+    // Positions: 0-3, 3-6, 6-9, 9-12
+
+    // Test chunks that align exactly with element boundaries
+    const testCases = [
+      { start: 0, end: 3, expected: ['abc'] },
+      { start: 3, end: 6, expected: ['def'] },
+      { start: 0, end: 6, expected: ['abc', 'def'] },
+      { start: 3, end: 9, expected: ['def', 'ghi'] },
+      { start: 0, end: 12, expected: ['abc', 'def', 'ghi', 'jkl'] }
+    ]
+
+    for (const { start, end, expected } of testCases) {
+      const retrieved = getChunk(input, start, end)
+      assert.deepStrictEqual(
+        retrieved,
+        expected,
+        `Boundary-aligned chunk ${start}-${end} should match expected result`
+      )
+    }
+
+    // Now test with split() using sizes that align with boundaries
+    const chunks: ChunkResult[] = split(input, { chunkSize: 6 }) // Should align with 2 elements
+
+    for (const chunk of chunks) {
+      const retrieved = getChunk(input, chunk.start, chunk.end)
+      assert.deepStrictEqual(
+        chunk.text,
+        retrieved,
+        'Boundary-aligned split chunks should match getChunk results'
       )
     }
   })

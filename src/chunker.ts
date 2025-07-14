@@ -80,29 +80,35 @@ export function getChunk(
 }
 
 /**
- * Memory-efficient generator that yields text chunks one at a time with consistent type preservation.
+ * Memory-efficient generator that yields optimized text chunks with intelligent aggregation.
  *
- * Processes input text(s) and generates chunks based on the specified strategy (character-based
- * or paragraph-based). Maintains input type consistency by returning string chunks for string
- * input and single-element array chunks for array input. Tracks global character positions
- * across multiple text segments when processing arrays.
+ * Processes input text(s) and generates chunks based on the specified strategy. For array input,
+ * aggregates multiple elements together until the token count reaches the chunkSize limit,
+ * maximizing chunk utilization. For string input, uses standard chunking strategies.
  *
  * **Processing Strategies:**
  * - `chunkStrategy: 'paragraph'`: Uses paragraph-based chunking with automatic sub-chunking
  * - Default: Uses character-based chunking with binary search optimization
  *
+ * **Aggregation Behavior (Array Input):**
+ * - Combines multiple array elements into single chunks up to chunkSize token limit
+ * - Maintains element boundaries within aggregated chunks
+ * - Handles oversized elements by splitting them using the chosen strategy
+ * - Preserves empty elements as separate chunks
+ *
  * **Type Preservation:**
  * - String input → yields chunks with `text` as string
- * - Array input → yields chunks with `text` as single-element string array
+ * - Array input → yields chunks with `text` as array of aggregated elements
  *
  * **Position Tracking:**
  * - Maintains global character offset across array elements
- * - Each chunk includes absolute start/end positions in the combined text
- * - Handles empty text segments by yielding empty chunks at correct positions
+ * - Each chunk includes absolute start/end positions spanning all aggregated elements
+ * - Start position: beginning of first aggregated element
+ * - End position: end of last aggregated element
  *
  * @param text - A string or array of strings to split into chunks
  * @param options - Configuration options for chunking behavior
- * @yields Chunk objects with text content and character position metadata
+ * @yields Chunk objects with optimally aggregated text content and position metadata
  */
 export function* iterateChunks(
   text: string | string[],
@@ -113,61 +119,190 @@ export function* iterateChunks(
     chunkStrategy
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
-  // Normalize input to array format for consistent processing
-  const texts: string[] = Array.isArray(text) ? text : [text]
-  let globalOffset: number = 0
+  // For single string input, use existing chunking logic
+  if (typeof text === 'string') {
+    if (text.length === 0) {
+      yield { text: '', start: 0, end: 0 }
+      return
+    }
 
-  for (const currentText of texts) {
-    // Handle empty text segments by yielding empty chunks
-    if (currentText.length === 0)
-      yield {
-        text: Array.isArray(text) ? [''] : '',
-        start: globalOffset,
-        end: globalOffset
-      }
-    else if (chunkStrategy === 'paragraph') {
-      // Extract paragraph units for semantic chunking
-      const chunkUnits: ChunkUnit[] = getUnits(currentText)
-
-      // Apply paragraph-based chunking with automatic sub-chunking
+    if (chunkStrategy === 'paragraph') {
+      const chunkUnits: ChunkUnit[] = getUnits(text)
       const chunks: ChunkResult[] = chunkByParagraph(
-        currentText,
+        text,
         chunkUnits,
         chunkSize,
         chunkOverlap,
         splitter
       )
-      for (const chunk of chunks)
-        yield {
-          // Maintain input type consistency (string vs array)
-          text: Array.isArray(text)
-            ? [chunk.text as string]
-            : (chunk.text as string),
-          start: globalOffset + chunk.start,
-          end: globalOffset + chunk.end
-        }
+      for (const chunk of chunks) {
+        yield chunk
+      }
     } else {
-      // Apply character-based chunking as the default strategy
       const chunks: ChunkResult[] = chunkByCharacter(
-        currentText,
+        text,
         chunkSize,
         splitter,
         chunkOverlap,
-        globalOffset
+        0
       )
-      for (const chunk of chunks)
-        yield {
-          // Maintain input type consistency (string vs array)
-          text: Array.isArray(text)
-            ? [chunk.text as string]
-            : (chunk.text as string),
-          start: chunk.start,
-          end: chunk.end
-        }
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    }
+    return
+  }
+
+  // Array input: aggregate elements to maximize chunk utilization
+  const texts: string[] = text
+  if (texts.length === 0) return
+
+  let globalOffset: number = 0
+  let aggregatedElements: string[] = []
+  let aggregatedTokenCount: number = 0
+  let chunkStartOffset: number = 0
+  let previousChunkText: string[] = []
+  let previousChunkEnd: number = 0
+
+  const yieldChunk = (elements: string[], start: number, end: number) => {
+    return {
+      text: elements,
+      start,
+      end
+    }
+  }
+
+  for (let i = 0; i < texts.length; i++) {
+    const currentText = texts[i]
+
+    // Handle empty text segments
+    if (currentText.length === 0) {
+      // If we have accumulated content, yield it first
+      if (aggregatedElements.length > 0) {
+        yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+        previousChunkText = [...aggregatedElements]
+        previousChunkEnd = globalOffset
+        // Reset aggregation state
+        aggregatedElements = []
+        aggregatedTokenCount = 0
+        chunkStartOffset = globalOffset
+      }
+
+      // Yield empty element
+      yield yieldChunk([''], globalOffset, globalOffset)
+      continue
     }
 
-    // Update global position tracker for next text segment
+    // Calculate token count for current text
+    const currentTokens = splitter(currentText)
+    const currentTokenCount = currentTokens.length
+
+    // If adding this element would exceed chunk size and we have content, yield current chunk
+    if (
+      aggregatedTokenCount > 0 &&
+      aggregatedTokenCount + currentTokenCount > chunkSize
+    ) {
+      const chunkToYield = yieldChunk(
+        aggregatedElements,
+        chunkStartOffset,
+        globalOffset
+      )
+      yield chunkToYield
+
+      // Store for overlap calculation
+      previousChunkText = [...aggregatedElements]
+      previousChunkEnd = globalOffset
+
+      // Calculate overlap for next chunk if needed
+      if (chunkOverlap > 0 && previousChunkText.length > 0) {
+        // For array aggregation with overlap, we include some elements from previous chunk
+        const overlapElements: string[] = []
+        let overlapTokenCount = 0
+
+        // Add elements from the end of previous chunk until we reach overlap limit
+        for (let j = previousChunkText.length - 1; j >= 0; j--) {
+          const elementTokens = splitter(previousChunkText[j])
+          if (overlapTokenCount + elementTokens.length <= chunkOverlap) {
+            overlapElements.unshift(previousChunkText[j])
+            overlapTokenCount += elementTokens.length
+          } else {
+            break
+          }
+        }
+
+        // Start new chunk with overlap elements
+        aggregatedElements = [...overlapElements]
+        aggregatedTokenCount = overlapTokenCount
+        chunkStartOffset = previousChunkEnd - overlapElements.join('').length
+      } else {
+        // Reset aggregation state
+        aggregatedElements = []
+        aggregatedTokenCount = 0
+        chunkStartOffset = globalOffset
+      }
+    }
+
+    // If current element alone exceeds chunk size, need to split it
+    if (currentTokenCount > chunkSize) {
+      // First yield any accumulated content
+      if (aggregatedElements.length > 0) {
+        yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+        previousChunkText = [...aggregatedElements]
+        previousChunkEnd = globalOffset
+        aggregatedElements = []
+        aggregatedTokenCount = 0
+        chunkStartOffset = globalOffset
+      }
+
+      // Split the oversized element using character chunking
+      if (chunkStrategy === 'paragraph') {
+        const chunkUnits: ChunkUnit[] = getUnits(currentText)
+        const chunks: ChunkResult[] = chunkByParagraph(
+          currentText,
+          chunkUnits,
+          chunkSize,
+          chunkOverlap,
+          splitter
+        )
+        for (const chunk of chunks) {
+          yield yieldChunk(
+            [chunk.text as string],
+            globalOffset + chunk.start,
+            globalOffset + chunk.end
+          )
+        }
+      } else {
+        const chunks: ChunkResult[] = chunkByCharacter(
+          currentText,
+          chunkSize,
+          splitter,
+          chunkOverlap,
+          globalOffset
+        )
+        for (const chunk of chunks) {
+          yield yieldChunk([chunk.text as string], chunk.start, chunk.end)
+        }
+      }
+
+      // Reset chunk start for next aggregation
+      chunkStartOffset = globalOffset + currentText.length
+      previousChunkText = []
+      previousChunkEnd = globalOffset + currentText.length
+    } else {
+      // Add current element to aggregation
+      if (aggregatedElements.length === 0 && chunkOverlap === 0) {
+        chunkStartOffset = globalOffset
+      }
+      aggregatedElements.push(currentText)
+      aggregatedTokenCount += currentTokenCount
+    }
+
     globalOffset += currentText.length
+  }
+
+  // Yield any remaining aggregated content
+  if (aggregatedElements.length > 0) {
+    yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
   }
 }
 
@@ -176,8 +311,8 @@ export function* iterateChunks(
  *
  * Primary entry point for text chunking that converts the generator output into a concrete array.
  * Supports both character-based and paragraph-based chunking strategies with configurable
- * token-based size limits and overlap. Designed specifically for LLM workflows where consistent
- * chunk sizes and semantic boundaries are important.
+ * token-based size limits and overlap. For array input, intelligently aggregates multiple
+ * elements into optimally-sized chunks to maximize utilization of the chunkSize limit.
  *
  * **Default Behavior:**
  * - Uses character-based chunking with binary search optimization
@@ -191,12 +326,13 @@ export function* iterateChunks(
  *
  * **Input Type Handling:**
  * - String input: Returns chunks with text as strings
- * - Array input: Returns chunks with text as single-element arrays
- * - Maintains absolute character positions across all input types
+ * - Array input: Returns chunks with text as arrays of aggregated elements
+ * - Aggregation maximizes chunk size utilization up to token limit
+ * - Maintains absolute character positions across all aggregated content
  *
  * @param text - A string or array of strings to split into chunks
  * @param options - Configuration options for chunking behavior
- * @returns Array of chunk objects with text content and character position metadata
+ * @returns Array of chunk objects with optimally aggregated content and position metadata
  */
 export function split(
   text: string | string[],
