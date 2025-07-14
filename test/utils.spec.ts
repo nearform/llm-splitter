@@ -55,7 +55,6 @@ describe('chunkByCharacter', () => {
     assert.deepStrictEqual(result, [])
   })
 
-  // Test for utils.ts:85 - bestEnd === start case
   test('handles edge case in chunkByCharacter where bestEnd equals start', () => {
     const result: ChunkResult[] = chunkByCharacter(
       'abc',
@@ -68,7 +67,6 @@ describe('chunkByCharacter', () => {
     assert.strictEqual(result[0].text, 'a') // Should include at least one character
   })
 
-  // Test for chunkByCharacter should handle case where bestEnd equals start with custom splitter
   test('chunkByCharacter should handle case where bestEnd equals start with custom splitter', () => {
     // Create a splitter that always returns large lengths to force bestEnd === start
     const splitter: (text: string) => string[] = () => new Array(1000).fill('x') // Always large
