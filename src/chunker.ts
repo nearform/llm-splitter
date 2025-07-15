@@ -156,9 +156,9 @@ export function getChunk(
  *
  * // Array aggregation with overlap
  * const documents = ["Doc 1 content", "Doc 2 content", "Doc 3 content"]
- * for (const chunk of iterateChunks(documents, { 
- *   chunkSize: 50, 
- *   chunkOverlap: 10 
+ * for (const chunk of iterateChunks(documents, {
+ *   chunkSize: 50,
+ *   chunkOverlap: 10
  * })) {
  *   console.log(`Aggregated elements: ${chunk.text.length}`)
  * }

@@ -77,7 +77,7 @@ export function getUnits(text: string): ChunkUnit[] {
 
 /**
  * Calculates trimmed text boundaries efficiently without using indexOf.
- * 
+ *
  * Efficiently determines the bounds of non-whitespace content within a text segment
  * by scanning from both ends. Returns both the trimmed text and its position offsets
  * relative to the original string, enabling accurate position tracking in larger text
@@ -85,13 +85,13 @@ export function getUnits(text: string): ChunkUnit[] {
  *
  * @param text - Raw text segment to trim and calculate bounds for
  * @returns Object containing trimmed text and position offsets (start/end), or null if empty after trimming
- * 
+ *
  * @example
  * ```typescript
- * getTrimmedBounds("  hello world  ") 
+ * getTrimmedBounds("  hello world  ")
  * // Returns: { unit: "hello world", start: 2, end: 13 }
- * 
- * getTrimmedBounds("   ") 
+ *
+ * getTrimmedBounds("   ")
  * // Returns: null (empty after trimming)
  * ```
  */
@@ -141,7 +141,7 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
  * @param chunkOverlap - Number of characters to overlap between consecutive chunks (approximate)
  * @param startOffset - Starting character position offset for calculating absolute positions
  * @returns Array of chunk objects containing text content and absolute character positions
- * 
+ *
  * @example
  * ```typescript
  * const splitter = (text: string) => text.split(/\s+/);
@@ -222,7 +222,7 @@ export function chunkByCharacter(
  * @param chunkOverlap - Number of tokens to overlap between consecutive chunks
  * @param splitter - Tokenization function for calculating token counts and boundaries
  * @returns Array of chunk objects with text content and absolute character positions
- * 
+ *
  * @example
  * ```typescript
  * const units = getUnits(text, /\n\s*\n/);
@@ -356,7 +356,7 @@ export function chunkByParagraph(
  * @param chunkOverlap - Number of tokens to include in the overlap from the previous chunk
  * @param splitter - Tokenization function used for counting tokens and determining boundaries
  * @returns Absolute character position where the overlap should begin in the original text
- * 
+ *
  * @example
  * ```typescript
  * const prevChunk = { text: "example text", start: 0, end: 12 };

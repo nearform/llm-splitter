@@ -7,24 +7,28 @@ A production-ready TypeScript library that provides advanced text segmentation c
 ## 🚀 Key Features
 
 ### **Position-Accurate Overlap System**
+
 - **Exact Token Control**: Achieves precise overlap counts using binary search algorithms
 - **getChunk Consistency**: Ensures overlapped chunks can be retrieved exactly via character positions
 - **Boundary Precision**: Maintains token alignment while respecting semantic boundaries
 - **Original Text Anchoring**: All calculations reference absolute positions in source text
 
 ### **Intelligent Chunking Strategies**
+
 - **Paragraph-Aware Processing**: Preserves semantic boundaries with greedy paragraph expansion
 - **Automatic Sub-chunking**: Handles oversized paragraphs with position-accurate overlap
 - **Binary Search Optimization**: Efficiently finds optimal chunk boundaries within token constraints
 - **Forward Progress Guarantee**: Prevents infinite loops with guaranteed minimum advancement
 
 ### **Flexible Input Support**
+
 - **String & Array Processing**: Seamlessly handles both text strings and string arrays
 - **Custom Tokenization**: Supports any tokenization function (tiktoken, word-based, custom)
 - **Generator-Based Processing**: Memory-efficient streaming for large documents
 - **Rich Metadata**: Complete position tracking and configurable chunking parameters
 
 ### **Production-Ready Architecture**
+
 - **TypeScript Native**: Full type safety with comprehensive interfaces
 - **Performance Optimized**: Sub-linear complexity with minimal memory allocation
 - **Comprehensive Testing**: 166+ test cases covering edge cases and real-world scenarios
@@ -50,16 +54,18 @@ Conclusion paragraph summarizing key findings and recommendations.`
 
 // Paragraph-aware chunking with precise overlap
 const chunks = split(document, {
-  chunkSize: 100,      // Maximum 100 tokens per chunk
-  chunkOverlap: 20,    // Exactly 20 tokens overlap
+  chunkSize: 100, // Maximum 100 tokens per chunk
+  chunkOverlap: 20, // Exactly 20 tokens overlap
   chunkStrategy: 'paragraph'
 })
 
-console.log(chunks.map(chunk => ({
-  preview: chunk.text.slice(0, 60) + '...',
-  tokens: chunk.text.split(/\s+/).length,
-  position: `[${chunk.start}:${chunk.end}]`
-})))
+console.log(
+  chunks.map(chunk => ({
+    preview: chunk.text.slice(0, 60) + '...',
+    tokens: chunk.text.split(/\s+/).length,
+    position: `[${chunk.start}:${chunk.end}]`
+  }))
+)
 ```
 
 ## 📚 Core API
@@ -126,8 +132,8 @@ const tokenizer = (text: string) => {
 }
 
 const chunks = split(document, {
-  chunkSize: 4000,    // Fits within GPT-4 context window
-  chunkOverlap: 200,  // Meaningful overlap for context
+  chunkSize: 4000, // Fits within GPT-4 context window
+  chunkOverlap: 200, // Meaningful overlap for context
   splitter: tokenizer
 })
 
@@ -193,6 +199,7 @@ const overlappedText = getChunk(originalText, overlapStart, currentChunkEnd)
 ```
 
 **Key Benefits:**
+
 - **Retrieval Consistency**: Overlapped chunks can be extracted exactly using character positions
 - **Token Precision**: Achieves target token counts within ±1-2 tokens
 - **Boundary Respect**: Aligns with meaningful token boundaries when possible
@@ -212,12 +219,12 @@ The chunking engine uses a greedy algorithm with smart fallback strategies:
 while (paragraphIndex < totalParagraphs) {
   // Try to fit multiple paragraphs
   const candidateChunk = expandGreedily(paragraphs, currentIndex)
-  
+
   if (tokenCount(candidateChunk) <= chunkSize) {
     yield candidateChunk
   } else {
     // Fall back to sub-chunking with position-accurate overlap
-    yield* subChunkParagraph(oversizedParagraph, options)
+    yield * subChunkParagraph(oversizedParagraph, options)
   }
 }
 ```
@@ -286,11 +293,13 @@ npm run build         # TypeScript compilation
 ## 🚀 Performance Characteristics
 
 **Computational Complexity:**
+
 - Chunking: O(n log k) where n = text length, k = average chunk size
 - Overlap Calculation: O(log k) per chunk using binary search
 - Memory Usage: O(1) constant memory with generator-based processing
 
 **Benchmark Results:**
+
 - ~1000 chunks/second for typical documents (tested on modern hardware)
 - Minimal memory allocation through optimized string handling
 - Sub-linear scaling for large documents with generator usage
@@ -302,18 +311,21 @@ npm run build         # TypeScript compilation
 The v1.x series introduces position-accurate overlap with breaking changes:
 
 **Previous Approach (v0.x):**
+
 ```typescript
 // Approximate paragraph-boundary-based overlap
 chunkOverlap: 20 // Could result in 50+ token variance
 ```
 
 **New Approach (v1.x):**
+
 ```typescript
 // Precise token-based overlap with binary search
 chunkOverlap: 20 // Results in exactly 20-22 token overlap
 ```
 
 **Migration Steps:**
+
 1. Update overlap expectations for increased precision
 2. Verify that position-accurate overlap meets your use case requirements
 3. Test with your specific tokenizer for optimal results
@@ -345,7 +357,7 @@ We welcome contributions! Please ensure:
 The codebase follows a clean separation of concerns:
 
 - **`chunker.ts`**: Main API functions (`split`, `iterateChunks`, `getChunk`)
-- **`types.ts`**: TypeScript interfaces and type definitions  
+- **`types.ts`**: TypeScript interfaces and type definitions
 - **`utils.ts`**: Core algorithms (paragraph parsing, overlap calculation, chunking strategies)
 - **`test/`**: Comprehensive test suite with fixtures and edge cases
 
