@@ -36,9 +36,7 @@ describe('split', () => {
   })
 
   test('should handle empty string input', () => {
-    assert.deepStrictEqual(split('', { chunkSize: 5 }), [
-      { text: '', start: 0, end: 0 }
-    ])
+    assert.deepStrictEqual(split('', { chunkSize: 5 }), [])
   })
 
   test('should handle empty array input', () => {
@@ -143,9 +141,7 @@ describe('split', () => {
   })
 
   test('should handle empty string with chunkStrategy', () => {
-    assert.deepStrictEqual(split('', { chunkStrategy: 'paragraph' }), [
-      { text: '', start: 0, end: 0 }
-    ])
+    assert.deepStrictEqual(split('', { chunkStrategy: 'paragraph' }), [])
   })
 
   test('should handle array of empty strings with chunkStrategy', () => {
@@ -427,7 +423,7 @@ describe('split (coverage edge cases)', () => {
     })
     // With new behavior, empty elements are skipped - only 'abc' is processed
     assert.deepStrictEqual(result[0].text, ['ab']) // First chunk should be 'ab'
-    assert.deepStrictEqual(result[1].text, ['c'])  // Second chunk should be 'c'
+    assert.deepStrictEqual(result[1].text, ['c']) // Second chunk should be 'c'
   })
 
   test('should handle array input with paragraph strategy and custom splitter', () => {

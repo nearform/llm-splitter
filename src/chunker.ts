@@ -96,6 +96,10 @@ export function getChunk(
  * - Handles oversized elements by splitting them using the chosen strategy
  * - Skips empty elements entirely (zero-length strings are not included in chunks)
  *
+ * **Empty Input Handling:**
+ * - Empty string input: yields no chunks (returns empty generator)
+ * - Empty array input: yields no chunks (returns empty generator)
+ *
  * **Type Preservation:**
  * - String input → yields chunks with `text` as string
  * - Array input → yields chunks with `text` as array of aggregated elements
@@ -123,7 +127,6 @@ export function* iterateChunks(
   // For single string input, use existing chunking logic
   if (typeof text === 'string') {
     if (text.length === 0) {
-      yield { text: '', start: 0, end: 0 }
       return
     }
 
@@ -162,9 +165,7 @@ export function* iterateChunks(
     const currentText = texts[i]
 
     // Skip empty text segments entirely - they don't contribute to chunks or positions
-    if (currentText.length === 0) {
-      continue
-    }
+    if (currentText.length === 0) continue
 
     // Calculate token count for current text
     const currentTokens = splitter(currentText)
@@ -290,7 +291,7 @@ export function* iterateChunks(
  * - Position-accurate overlap for chunk retrieval consistency
  *
  * **Input Type Handling:**
- * - String input: Returns chunks with text as strings
+ * - String input: Returns chunks with text as strings, empty strings produce no chunks
  * - Array input: Returns chunks with text as arrays of aggregated elements
  * - Aggregation maximizes chunk size utilization up to token limit
  * - Maintains absolute character positions across all aggregated content
