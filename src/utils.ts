@@ -7,8 +7,30 @@ import { ChunkResult, ChunkUnit } from './types.js'
  * Each paragraph is trimmed of leading/trailing whitespace, and empty paragraphs are
  * filtered out. Returns precise character positions for each paragraph in the original text.
  *
+ * **Processing Logic:**
+ * - Splits on patterns of 2+ consecutive newlines (`\n{2,}`)
+ * - Trims whitespace from each paragraph while preserving original positions
+ * - Filters out empty paragraphs (whitespace-only content)
+ * - Maintains accurate character position tracking for chunk boundary calculations
+ *
+ * **Use Cases:**
+ * - Paragraph-aware chunking that respects document structure
+ * - Semantic boundary detection for improved chunking quality
+ * - Position-accurate text extraction and validation
+ *
  * @param text - The input text to split into paragraph units
- * @returns An array of paragraph units with their character positions in the original text
+ * @returns Array of paragraph units with their character positions in the original text
+ *
+ * @example
+ * ```typescript
+ * const text = "Para 1\n\nPara 2\n\n\nPara 3"
+ * const units = getUnits(text)
+ * // Returns: [
+ * //   { unit: "Para 1", start: 0, end: 6 },
+ * //   { unit: "Para 2", start: 8, end: 14 },
+ * //   { unit: "Para 3", start: 17, end: 23 }
+ * // ]
+ * ```
  */
 export function getUnits(text: string): ChunkUnit[] {
   const units: ChunkUnit[] = []
@@ -55,9 +77,23 @@ export function getUnits(text: string): ChunkUnit[] {
 
 /**
  * Calculates trimmed text boundaries efficiently without using indexOf.
+ * 
+ * Efficiently determines the bounds of non-whitespace content within a text segment
+ * by scanning from both ends. Returns both the trimmed text and its position offsets
+ * relative to the original string, enabling accurate position tracking in larger text
+ * processing operations.
  *
  * @param text - Raw text segment to trim and calculate bounds for
- * @returns Object with trimmed text and position offsets, or null if empty after trimming
+ * @returns Object containing trimmed text and position offsets (start/end), or null if empty after trimming
+ * 
+ * @example
+ * ```typescript
+ * getTrimmedBounds("  hello world  ") 
+ * // Returns: { unit: "hello world", start: 2, end: 13 }
+ * 
+ * getTrimmedBounds("   ") 
+ * // Returns: null (empty after trimming)
+ * ```
  */
 export function getTrimmedBounds(text: string): ChunkUnit | null {
   const len = text.length
@@ -83,22 +119,35 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
 /**
  * Chunks text using a sliding window approach with token-based size calculation.
  *
- * Uses binary search to find optimal chunk boundaries that respect token limits while
+ * Employs binary search to find optimal chunk boundaries that respect token limits while
  * maximizing chunk size. The algorithm ensures forward progress by guaranteeing at least
- * one character per chunk. Supports token-based overlap between consecutive chunks.
+ * one character per chunk even when individual characters exceed token limits. Provides
+ * character-level overlap between consecutive chunks for context preservation.
  *
- * **Key Features:**
- * - Binary search for optimal chunk boundaries within token limits
- * - Character-level overlap calculation (not position-accurate for token retrieval)
- * - Guaranteed forward progress to prevent infinite loops
- * - Absolute character position tracking with configurable start offset
+ * **Algorithm Details:**
+ * - Binary search optimization: Efficiently finds maximum text length within token constraints
+ * - Forward progress guarantee: Prevents infinite loops by ensuring minimum advancement
+ * - Character-level overlap: Provides approximate overlap (not position-accurate for retrieval)
+ * - Absolute position tracking: Maintains original character positions with configurable offset
  *
- * @param currentText - The text to chunk
- * @param chunkSize - Maximum size of each chunk in tokens
- * @param splitter - Function to split text into tokens for size calculation
- * @param chunkOverlap - Number of characters to overlap between chunks (approximate)
+ * **Use Cases:**
+ * - Raw text processing where paragraph structure is unavailable or unimportant
+ * - Character-level chunking for maximum text utilization within token limits
+ * - Fallback chunking when semantic boundaries cannot be determined
+ *
+ * @param currentText - The text segment to chunk into smaller pieces
+ * @param chunkSize - Maximum number of tokens allowed per chunk
+ * @param splitter - Tokenization function that splits text into countable units
+ * @param chunkOverlap - Number of characters to overlap between consecutive chunks (approximate)
  * @param startOffset - Starting character position offset for calculating absolute positions
- * @returns Array of chunk objects with text and character positions
+ * @returns Array of chunk objects containing text content and absolute character positions
+ * 
+ * @example
+ * ```typescript
+ * const splitter = (text: string) => text.split(/\s+/);
+ * const chunks = chunkByCharacter("Hello world example text", 2, splitter, 5, 0);
+ * // Returns chunks with max 2 tokens each, ~5 character overlap
+ * ```
  */
 export function chunkByCharacter(
   currentText: string,
@@ -144,28 +193,43 @@ export function chunkByCharacter(
 /**
  * Chunks text by paragraphs using a greedy sliding window approach with position-accurate overlap.
  *
- * Attempts to fit as many complete paragraphs as possible within the token limit while
- * preserving paragraph boundaries. When a single paragraph exceeds the limit, it is
- * automatically broken into sub-chunks using the same position-accurate overlap strategy.
+ * Implements an intelligent paragraph-aware chunking strategy that preserves semantic boundaries
+ * while respecting token limits. Uses a greedy algorithm to include as many complete paragraphs
+ * as possible per chunk, with automatic fallback to sub-chunking for oversized paragraphs.
+ * Features position-accurate overlap calculation that ensures consistency with getChunk operations.
  *
- * **Position-Accurate Overlap:**
- * - Uses binary search to find exact character positions that yield the desired token count
- * - Maintains split/getChunk consistency by ensuring overlapped chunks can be retrieved exactly
- * - Calculates overlap boundaries using actual character positions in the original text
- * - Overlap may include leading whitespace to achieve precise token counts
+ * **Intelligent Chunking Strategy:**
+ * - Greedy paragraph expansion: Maximizes content per chunk while preserving boundaries
+ * - Oversized paragraph handling: Automatically sub-chunks paragraphs exceeding token limits
+ * - Semantic preservation: Maintains paragraph integrity whenever possible
+ * - Efficient processing: Uses labeled loops for optimal paragraph iteration control
  *
- * **Chunking Strategy:**
- * - Greedy expansion: includes as many complete paragraphs as possible per chunk
- * - Oversized paragraph handling: automatically sub-chunks large paragraphs
- * - Labeled loop control: uses `outerLoop` for efficient paragraph processing
- * - Token counting: includes overlap tokens in current chunk size calculations
+ * **Position-Accurate Overlap System:**
+ * - Binary search precision: Finds exact character positions yielding desired token counts
+ * - getChunk consistency: Ensures overlapped chunks can be retrieved exactly via getChunk
+ * - Original text anchoring: Calculates overlap boundaries using absolute character positions
+ * - Whitespace inclusion: May include leading whitespace to achieve precise token targets
+ * - Token counting accuracy: Includes overlap tokens in current chunk size calculations
  *
- * @param originalText - The original text to extract chunks from
- * @param chunkUnits - Array of paragraph units with their character positions
- * @param chunkSize - Maximum size of each chunk in tokens
- * @param chunkOverlap - Number of tokens to overlap between chunks
- * @param splitter - Function to split text into tokens for size calculation
- * @returns Array of chunk objects with text and character positions
+ * **Performance Optimizations:**
+ * - Labeled loop control: Uses `outerLoop` for efficient paragraph processing flow
+ * - Position caching: Reuses calculated positions to minimize redundant computations
+ * - Token count optimization: Avoids redundant tokenization through smart accumulation
+ *
+ * @param originalText - The complete source text to extract chunks from
+ * @param chunkUnits - Pre-parsed array of paragraph units with character positions
+ * @param chunkSize - Maximum number of tokens allowed per chunk
+ * @param chunkOverlap - Number of tokens to overlap between consecutive chunks
+ * @param splitter - Tokenization function for calculating token counts and boundaries
+ * @returns Array of chunk objects with text content and absolute character positions
+ * 
+ * @example
+ * ```typescript
+ * const units = getUnits(text, /\n\s*\n/);
+ * const splitter = (text: string) => text.split(/\s+/);
+ * const chunks = chunkByParagraph(text, units, 100, 20, splitter);
+ * // Returns paragraph-aware chunks with 20-token overlap
+ * ```
  */
 export function chunkByParagraph(
   originalText: string,
@@ -264,26 +328,42 @@ export function chunkByParagraph(
 /**
  * Calculates the exact character position where overlap should start based on token count.
  *
- * Uses binary search to find the precise character position in the original text that
+ * Employs binary search to find the precise character position in the original text that
  * corresponds to the desired number of overlap tokens from the end of the previous chunk.
- * This ensures position-accurate overlap that maintains split/getChunk consistency.
+ * This position-accurate calculation ensures perfect consistency with split/getChunk operations,
+ * enabling reliable chunk retrieval and processing workflows.
  *
- * **Binary Search Algorithm:**
- * - Searches within the previous chunk's character range
- * - Tests character positions to find exact token count matches
- * - Handles cases where requested overlap exceeds available tokens
- * - Returns the leftmost position that yields the target token count
+ * **Binary Search Precision:**
+ * - Searches within the previous chunk's character boundaries for optimal overlap position
+ * - Tests candidate positions to find exact token count matches using the provided splitter
+ * - Returns the leftmost position that yields the target token count for consistent behavior
+ * - Handles token boundary complexities by working with actual character positions
  *
- * **Edge Cases:**
- * - If no overlap requested (chunkOverlap = 0), returns previous chunk's end position
- * - If requested overlap exceeds available tokens, uses all available tokens
- * - May include leading whitespace to achieve precise token counts
+ * **Position-Accurate Overlap Benefits:**
+ * - Maintains getChunk consistency: overlapped chunks can be retrieved exactly via getChunk
+ * - Preserves token boundaries: ensures overlap doesn't fragment important tokens
+ * - Supports whitespace inclusion: may include leading whitespace to achieve precise counts
+ * - Enables reliable processing: downstream operations can depend on exact positioning
  *
- * @param originalText - The original text to extract overlap from
- * @param prevChunk - The previous chunk to calculate overlap from
- * @param chunkOverlap - Number of tokens to overlap
- * @param splitter - Function to split text into tokens for counting
- * @returns Character position where overlap should start in the original text
+ * **Edge Case Handling:**
+ * - Zero overlap: Returns previous chunk's end position when no overlap requested
+ * - Excessive overlap: Uses all available tokens when request exceeds chunk content
+ * - Boundary conditions: Handles start/end edge cases gracefully
+ * - Token alignment: Ensures overlap boundaries align with meaningful token boundaries
+ *
+ * @param originalText - The complete source text to calculate overlap positions within
+ * @param prevChunk - The previous chunk object containing start/end positions for overlap calculation
+ * @param chunkOverlap - Number of tokens to include in the overlap from the previous chunk
+ * @param splitter - Tokenization function used for counting tokens and determining boundaries
+ * @returns Absolute character position where the overlap should begin in the original text
+ * 
+ * @example
+ * ```typescript
+ * const prevChunk = { text: "example text", start: 0, end: 12 };
+ * const splitter = (text: string) => text.split(/\s+/);
+ * const overlapStart = calculateOverlapStart(originalText, prevChunk, 1, splitter);
+ * // Returns character position for 1-token overlap from previous chunk
+ * ```
  */
 export function calculateOverlapStart(
   originalText: string,

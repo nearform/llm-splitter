@@ -2,23 +2,43 @@ import type { SplitOptions, ChunkUnit, ChunkResult } from './types.js'
 import { chunkByCharacter, chunkByParagraph, getUnits } from './utils.js'
 
 /**
- * Extracts a chunk of text from the input by character positions, preserving input type.
+ * Extracts a specific text segment from input by character positions.
  *
- * For string input, returns a substring using slice(). For array input, returns an array
- * of string segments that span the specified character range across multiple array elements.
- * Uses precise character position calculations to determine which array elements to include
- * and how to slice them at boundaries.
+ * This function provides precise text extraction that preserves the input type - string input
+ * returns a string, array input returns an array. For array inputs, it handles complex scenarios
+ * where the extraction range spans multiple array elements, calculating precise boundaries
+ * and character offsets within each element.
  *
- * **Array Processing Logic:**
- * - Tracks cumulative character length across array elements
- * - Handles extraction spanning single elements, adjacent elements, or multiple elements
- * - Filters out empty strings from the result
+ * **String Input:**
+ * - Returns a substring using standard slice() operation
+ * - Simple and efficient for single text extraction
+ *
+ * **Array Input:**
+ * - Tracks cumulative character positions across all array elements
+ * - Handles extraction that spans partial, complete, or multiple elements
+ * - Automatically filters out empty strings from results
  * - Returns empty array when start position exceeds total text length
  *
- * @param text - A string or array of strings to extract from
- * @param start - Starting character position (inclusive, default: 0)
- * @param end - Ending character position (exclusive, default: end of input)
- * @returns Substring for string input, or array of string segments for array input
+ * **Use Cases:**
+ * - Retrieving specific chunks by position for validation
+ * - Implementing consistent retrieval for chunked content
+ * - Cross-referencing chunk boundaries with original text
+ *
+ * @param text - Source text (string) or array of text segments (string[])
+ * @param start - Starting character position, inclusive (default: 0)
+ * @param end - Ending character position, exclusive (default: end of text)
+ * @returns Extracted text maintaining the same type as input
+ *
+ * @example
+ * ```typescript
+ * // String extraction
+ * const text = "Hello world example"
+ * const chunk = getChunk(text, 6, 11) // "world"
+ *
+ * // Array extraction spanning multiple elements
+ * const texts = ["Hello ", "world ", "example"]
+ * const chunk = getChunk(texts, 3, 12) // ["lo ", "world ", "ex"]
+ * ```
  */
 export function getChunk(
   text: string | string[],
@@ -80,40 +100,69 @@ export function getChunk(
 }
 
 /**
- * Memory-efficient generator that yields optimized text chunks with intelligent aggregation.
+ * Memory-efficient generator that produces optimized text chunks with intelligent aggregation.
  *
- * Processes input text(s) and generates chunks based on the specified strategy. For array input,
- * aggregates multiple elements together until the token count reaches the chunkSize limit,
- * maximizing chunk utilization. For string input, uses standard chunking strategies.
+ * This is the core chunking engine that processes input text and generates chunks based on
+ * the specified strategy. It supports both single strings and arrays of strings, with
+ * sophisticated aggregation logic for arrays that maximizes chunk utilization while
+ * respecting token limits and maintaining precise position tracking.
  *
  * **Processing Strategies:**
- * - `chunkStrategy: 'paragraph'`: Uses paragraph-based chunking with automatic sub-chunking
- * - Default: Uses character-based chunking with binary search optimization
+ * - `chunkStrategy: 'paragraph'`: Paragraph-aware chunking that respects document structure
+ * - Default (character-based): Uses binary search optimization for efficient chunking
  *
- * **Aggregation Behavior (Array Input):**
- * - Combines multiple array elements into single chunks up to chunkSize token limit
- * - Maintains element boundaries within aggregated chunks
- * - Handles oversized elements by splitting them using the chosen strategy
- * - Skips empty elements entirely (zero-length strings are not included in chunks)
+ * **Array Aggregation Logic:**
+ * - Combines multiple array elements into single chunks until token limit is reached
+ * - Maintains element boundaries within aggregated chunks for traceability
+ * - Handles oversized elements by automatically splitting them using the chosen strategy
+ * - Skips empty elements entirely - they do not appear in any chunks
  *
  * **Empty Input Handling:**
- * - Empty string input: yields no chunks (returns empty generator)
- * - Empty array input: yields no chunks (returns empty generator)
+ * - Empty string input: Returns immediately without yielding any chunks
+ * - Empty array input: Returns immediately without yielding any chunks
+ * - Zero-length elements in arrays: Completely skipped during processing
  *
  * **Type Preservation:**
- * - String input → yields chunks with `text` as string
- * - Array input → yields chunks with `text` as array of aggregated elements
+ * - String input → Yields chunks with `text` as string
+ * - Array input → Yields chunks with `text` as array of aggregated string elements
  *
  * **Position Tracking:**
- * - Maintains global character offset across non-empty array elements only
- * - Each chunk includes absolute start/end positions spanning all aggregated elements
- * - Start position: beginning of first aggregated element
- * - End position: end of last aggregated element
+ * - Maintains accurate global character offset across all non-empty elements
+ * - Each chunk includes absolute start/end positions spanning all aggregated content
+ * - Start position: Beginning of first aggregated element
+ * - End position: End of last aggregated element
  * - Empty elements do not contribute to position calculations
  *
- * @param text - A string or array of strings to split into chunks
- * @param options - Configuration options for chunking behavior
- * @yields Chunk objects with optimally aggregated text content and position metadata
+ * **Overlap Handling:**
+ * - For strings: Uses optimized algorithms from utils (chunkByCharacter/chunkByParagraph)
+ * - For arrays: Implements element-level overlap by including elements from previous chunks
+ * - Precise token counting ensures overlap targets are met within specified tolerance
+ *
+ * @param text - Input text (string) or array of text segments (string[]) to chunk
+ * @param options - Configuration options controlling chunking behavior
+ * @param options.chunkSize - Maximum tokens per chunk (default: 512)
+ * @param options.chunkOverlap - Number of tokens to overlap between chunks (default: 0)
+ * @param options.splitter - Custom tokenization function (default: character-based)
+ * @param options.chunkStrategy - Chunking strategy ('paragraph' or undefined for character-based)
+ * @yields Chunk objects with optimally aggregated text content and precise position metadata
+ *
+ * @example
+ * ```typescript
+ * // Basic string chunking
+ * for (const chunk of iterateChunks("Long text content...", { chunkSize: 100 })) {
+ *   console.log(`Chunk: ${chunk.text.slice(0, 50)}...`)
+ *   console.log(`Position: ${chunk.start}-${chunk.end}`)
+ * }
+ *
+ * // Array aggregation with overlap
+ * const documents = ["Doc 1 content", "Doc 2 content", "Doc 3 content"]
+ * for (const chunk of iterateChunks(documents, { 
+ *   chunkSize: 50, 
+ *   chunkOverlap: 10 
+ * })) {
+ *   console.log(`Aggregated elements: ${chunk.text.length}`)
+ * }
+ * ```
  */
 export function* iterateChunks(
   text: string | string[],
@@ -280,6 +329,14 @@ export function* iterateChunks(
  * token-based size limits and overlap. For array input, intelligently aggregates multiple
  * elements into optimally-sized chunks to maximize utilization of the chunkSize limit.
  *
+ * **Key Features:**
+ * - Intelligent array aggregation for optimal chunk utilization
+ * - Precise token-based overlap control with custom splitter support
+ * - Paragraph-aware chunking that preserves semantic boundaries
+ * - Automatic sub-chunking of oversized content
+ * - Complete position tracking for all chunks
+ * - Empty input handling (returns empty array for empty strings/arrays)
+ *
  * **Default Behavior:**
  * - Uses character-based chunking with binary search optimization
  * - 512 token chunks with no overlap
@@ -299,7 +356,38 @@ export function* iterateChunks(
  *
  * @param text - A string or array of strings to split into chunks
  * @param options - Configuration options for chunking behavior
+ * @param options.chunkSize - Maximum tokens per chunk (default: 512)
+ * @param options.chunkOverlap - Number of tokens to overlap between chunks (default: 0)
+ * @param options.splitter - Custom tokenization function (default: character-based)
+ * @param options.chunkStrategy - Chunking strategy ('paragraph' or undefined for character-based)
  * @returns Array of chunk objects with optimally aggregated content and position metadata
+ *
+ * @example
+ * ```typescript
+ * import { split } from '@nearform/llm-chunk'
+ *
+ * // Basic usage with default settings
+ * const chunks = split("Your long text content here...")
+ *
+ * // Paragraph-aware chunking with custom size and overlap
+ * const paragraphChunks = split(document, {
+ *   chunkSize: 200,
+ *   chunkOverlap: 20,
+ *   chunkStrategy: 'paragraph'
+ * })
+ *
+ * // Array aggregation
+ * const documents = ["Doc 1", "Doc 2", "Doc 3"]
+ * const aggregatedChunks = split(documents, { chunkSize: 100 })
+ *
+ * // Custom tokenization with tiktoken
+ * import { get_encoding } from 'tiktoken'
+ * const encoding = get_encoding('gpt2')
+ * const chunks = split(text, {
+ *   chunkSize: 100,
+ *   splitter: (text) => encoding.encode(text).map(t => encoding.decode([t]))
+ * })
+ * ```
  */
 export function split(
   text: string | string[],
