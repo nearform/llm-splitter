@@ -96,9 +96,9 @@ export function getUnits(text: string): ChunkUnit[] {
  * ```
  */
 export function getTrimmedBounds(text: string): ChunkUnit | null {
-  const len = text.length
-  let start = 0
-  let end = len
+  const len: number = text.length
+  let start: number = 0
+  let end: number = len
 
   // Find start of non-whitespace content
   while (start < len && /\s/.test(text[start])) start++

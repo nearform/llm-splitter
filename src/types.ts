@@ -38,14 +38,14 @@ export interface SplitOptions {
   splitter?: (text: string) => string[]
 
   /**
-   * Chunking strategy to use (default: character-based).
+   * Chunking strategy to use (default: 'character').
    *
+   * - `'character'`: Character-based chunking with binary search optimization for
+   *   precise token boundaries.
    * - `'paragraph'`: Splits text by paragraphs (double newlines), with automatic
    *   sub-chunking of long paragraphs. Preserves semantic document structure.
-   * - `undefined`: Character-based chunking with binary search optimization for
-   *   precise token boundaries.
    */
-  chunkStrategy?: 'paragraph'
+  chunkStrategy?: 'character' | 'paragraph'
 }
 
 /**

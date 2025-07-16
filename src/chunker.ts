@@ -109,7 +109,7 @@ export function getChunk(
  *
  * **Processing Strategies:**
  * - `chunkStrategy: 'paragraph'`: Paragraph-aware chunking that respects document structure
- * - Default (character-based): Uses binary search optimization for efficient chunking
+ * - `chunkStrategy: 'character'` (default): Uses binary search optimization for efficient chunking
  *
  * **Array Aggregation Logic:**
  * - Combines multiple array elements into single chunks until token limit is reached
@@ -143,7 +143,7 @@ export function getChunk(
  * @param options.chunkSize - Maximum tokens per chunk (default: 512)
  * @param options.chunkOverlap - Number of tokens to overlap between chunks (default: 0)
  * @param options.splitter - Custom tokenization function (default: character-based)
- * @param options.chunkStrategy - Chunking strategy ('paragraph' or undefined for character-based)
+ * @param options.chunkStrategy - Chunking strategy ('paragraph' or 'character', default: 'character')
  * @yields Chunk objects with optimally aggregated text content and precise position metadata
  *
  * @example
@@ -170,7 +170,7 @@ export function* iterateChunks(
     chunkSize = 512,
     chunkOverlap = 0,
     splitter = (text: string) => text.split(''),
-    chunkStrategy
+    chunkStrategy = 'character'
   }: SplitOptions = {}
 ): Generator<ChunkResult> {
   // For single string input, use existing chunking logic
@@ -202,23 +202,19 @@ export function* iterateChunks(
   let previousChunkText: string[] = []
   let previousChunkEnd: number = 0
 
-  const yieldChunk = (elements: string[], start: number, end: number) => {
-    return {
-      text: elements,
-      start,
-      end
-    }
-  }
+  const yieldChunk = (text: string[], start: number, end: number) => ({
+    text,
+    start,
+    end
+  })
 
-  for (let i = 0; i < texts.length; i++) {
-    const currentText = texts[i]
-
+  for (const currentText of texts) {
     // Skip empty text segments entirely - they don't contribute to chunks or positions
     if (currentText.length === 0) continue
 
     // Calculate token count for current text
-    const currentTokens = splitter(currentText)
-    const currentTokenCount = currentTokens.length
+    const currentTokens: string[] = splitter(currentText)
+    const currentTokenCount: number = currentTokens.length
 
     // If adding this element would exceed chunk size and we have content, yield current chunk
     if (
@@ -235,11 +231,11 @@ export function* iterateChunks(
       if (chunkOverlap > 0 && previousChunkText.length > 0) {
         // For array aggregation with overlap, we include some elements from previous chunk
         const overlapElements: string[] = []
-        let overlapTokenCount = 0
+        let overlapTokenCount: number = 0
 
         // Add elements from the end of previous chunk until we reach overlap limit
         for (let j = previousChunkText.length - 1; j >= 0; j--) {
-          const elementTokens = splitter(previousChunkText[j])
+          const elementTokens: string[] = splitter(previousChunkText[j])
           if (overlapTokenCount + elementTokens.length <= chunkOverlap) {
             overlapElements.unshift(previousChunkText[j])
             overlapTokenCount += elementTokens.length
@@ -272,7 +268,7 @@ export function* iterateChunks(
         chunkStartOffset = globalOffset
       }
 
-      // Split the oversized element using character chunking
+      // Split the oversized element using paragraph chunking
       if (chunkStrategy === 'paragraph') {
         const chunkUnits: ChunkUnit[] = getUnits(currentText)
         const chunks: ChunkResult[] = chunkByParagraph(
@@ -282,13 +278,12 @@ export function* iterateChunks(
           chunkOverlap,
           splitter
         )
-        for (const chunk of chunks) {
+        for (const chunk of chunks)
           yield yieldChunk(
             [chunk.text as string],
             globalOffset + chunk.start,
             globalOffset + chunk.end
           )
-        }
       } else {
         const chunks: ChunkResult[] = chunkByCharacter(
           currentText,
@@ -359,7 +354,7 @@ export function* iterateChunks(
  * @param options.chunkSize - Maximum tokens per chunk (default: 512)
  * @param options.chunkOverlap - Number of tokens to overlap between chunks (default: 0)
  * @param options.splitter - Custom tokenization function (default: character-based)
- * @param options.chunkStrategy - Chunking strategy ('paragraph' or undefined for character-based)
+ * @param options.chunkStrategy - Chunking strategy ('paragraph' or 'character', default: 'character')
  * @returns Array of chunk objects with optimally aggregated content and position metadata
  *
  * @example
