@@ -179,15 +179,31 @@ export function* iterateChunks(
       return
     }
 
-    if (chunkStrategy === 'paragraph')
-      yield* chunkByParagraph(
-        text,
-        getUnits(text),
-        chunkSize,
-        chunkOverlap,
-        splitter
-      )
-    else yield* chunkByCharacter(text, chunkSize, splitter, chunkOverlap, 0)
+    // Use generators to process chunks lazily without accumulating all chunks upfront
+    const chunkGenerator =
+      chunkStrategy === 'paragraph'
+        ? chunkByParagraph(
+            text,
+            getUnits(text),
+            chunkSize,
+            chunkOverlap,
+            splitter
+          )
+        : chunkByCharacter(text, chunkSize, splitter, chunkOverlap, 0)
+
+    // Apply trimming to each chunk and adjust positions
+    for (const chunk of chunkGenerator) {
+      const chunkText = chunk.text as string
+      const trimmed = chunkText.trim()
+      const startAdjustment = chunkText.length - chunkText.trimStart().length
+      const endAdjustment = chunkText.length - chunkText.trimEnd().length
+
+      yield {
+        text: trimmed,
+        start: chunk.start + startAdjustment,
+        end: chunk.end - endAdjustment
+      }
+    }
     return
   }
 
@@ -202,11 +218,53 @@ export function* iterateChunks(
   let previousChunkText: string[] = []
   let previousChunkEnd: number = 0
 
-  const yieldChunk = (text: string[], start: number, end: number) => ({
-    text,
-    start,
-    end
-  })
+  const yieldChunk = (text: string[], start: number, end: number) => {
+    // Handle empty input
+    if (text.length === 0) {
+      return null
+    }
+
+    // Trim leading empty strings and whitespace from first element
+    let trimmedText = [...text]
+    let startAdjustment = 0
+
+    // Remove leading empty strings
+    while (trimmedText.length > 0 && trimmedText[0] === '') trimmedText.shift()
+
+    // Trim leading whitespace from first non-empty element
+    if (trimmedText.length > 0) {
+      const firstElement = trimmedText[0]
+      const trimmedFirst = firstElement.trimStart()
+      startAdjustment = firstElement.length - trimmedFirst.length
+      trimmedText[0] = trimmedFirst
+    }
+
+    // Trim trailing empty strings and whitespace from last element
+    let endAdjustment = 0
+
+    // Remove trailing empty strings
+    while (trimmedText.length > 0 && trimmedText[trimmedText.length - 1] === '')
+      trimmedText.pop()
+
+    // Trim trailing whitespace from last non-empty element
+    if (trimmedText.length > 0) {
+      const lastElement = trimmedText[trimmedText.length - 1]
+      const trimmedLast = lastElement.trimEnd()
+      endAdjustment = lastElement.length - trimmedLast.length
+      trimmedText[trimmedText.length - 1] = trimmedLast
+    }
+
+    // If all elements were empty/whitespace, return null
+    if (trimmedText.length === 0 || trimmedText.every(elem => elem === '')) {
+      return null
+    }
+
+    return {
+      text: trimmedText,
+      start: start + startAdjustment,
+      end: end - endAdjustment
+    }
+  }
 
   for (const currentText of texts) {
     // Skip empty text segments entirely - they don't contribute to chunks or positions
@@ -221,7 +279,12 @@ export function* iterateChunks(
       aggregatedTokenCount > 0 &&
       aggregatedTokenCount + currentTokenCount > chunkSize
     ) {
-      yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+      const chunk = yieldChunk(
+        aggregatedElements,
+        chunkStartOffset,
+        globalOffset
+      )
+      if (chunk !== null) yield chunk
 
       // Store for overlap calculation
       previousChunkText = [...aggregatedElements]
@@ -260,7 +323,12 @@ export function* iterateChunks(
     if (currentTokenCount > chunkSize) {
       // First yield any accumulated content
       if (aggregatedElements.length > 0) {
-        yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+        const chunk = yieldChunk(
+          aggregatedElements,
+          chunkStartOffset,
+          globalOffset
+        )
+        if (chunk !== null) yield chunk
         previousChunkText = [...aggregatedElements]
         previousChunkEnd = globalOffset
         aggregatedElements = []
@@ -278,12 +346,19 @@ export function* iterateChunks(
           chunkOverlap,
           splitter
         )
-        for (const chunk of chunks)
-          yield yieldChunk(
-            [chunk.text as string],
-            globalOffset + chunk.start,
-            globalOffset + chunk.end
-          )
+        for (const chunk of chunks) {
+          const chunkText = chunk.text as string
+          const trimmed = chunkText.trim()
+          if (trimmed.length === 0) continue // Skip empty chunks
+          const startAdjustment =
+            chunkText.length - chunkText.trimStart().length
+          const endAdjustment = chunkText.length - chunkText.trimEnd().length
+          yield {
+            text: [trimmed],
+            start: globalOffset + chunk.start + startAdjustment,
+            end: globalOffset + chunk.end - endAdjustment
+          }
+        }
       } else {
         const chunks: ChunkResult[] = chunkByCharacter(
           currentText,
@@ -292,8 +367,20 @@ export function* iterateChunks(
           chunkOverlap,
           globalOffset
         )
-        for (const chunk of chunks)
-          yield yieldChunk([chunk.text as string], chunk.start, chunk.end)
+        for (const chunk of chunks) {
+          const chunkText = chunk.text as string
+          const trimmed = chunkText.trim()
+          if (trimmed.length === 0) continue // Skip empty chunks
+          const startAdjustment =
+            chunkText.length - chunkText.trimStart().length
+          const endAdjustment = chunkText.length - chunkText.trimEnd().length
+
+          yield {
+            text: [trimmed],
+            start: chunk.start + startAdjustment,
+            end: chunk.end - endAdjustment
+          }
+        }
       }
 
       // Reset chunk start for next aggregation
@@ -312,8 +399,10 @@ export function* iterateChunks(
   }
 
   // Yield any remaining aggregated content
-  if (aggregatedElements.length > 0)
-    yield yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+  if (aggregatedElements.length > 0) {
+    const chunk = yieldChunk(aggregatedElements, chunkStartOffset, globalOffset)
+    if (chunk !== null) yield chunk
+  }
 }
 
 /**
