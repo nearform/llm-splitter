@@ -513,15 +513,6 @@ describe('chunkByParagraph', () => {
       0,
       'First chunk should start at beginning'
     )
-
-    // Log the actual chunks for verification
-    console.log('chunkByParagraph results:')
-    result.forEach((chunk, index) => {
-      const tokens = wordSplitter(chunk.text as string)
-      console.log(
-        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)})`
-      )
-    })
   })
 })
 

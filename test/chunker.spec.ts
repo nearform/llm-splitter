@@ -1805,23 +1805,6 @@ describe('split and getChunk relationship matrix tests', () => {
       `Should have at least ${expectedParagraphChunks.length} paragraph chunks`
     )
 
-    // Log actual results for verification
-    console.log('Character-based chunking results:')
-    characterChunks.forEach((chunk, index) => {
-      const tokens = wordSplitter(chunk.text as string)
-      console.log(
-        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)}) [${chunk.start}-${chunk.end}]`
-      )
-    })
-
-    console.log('Paragraph-based chunking results:')
-    paragraphChunks.forEach((chunk, index) => {
-      const tokens = wordSplitter(chunk.text as string)
-      console.log(
-        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)}) [${chunk.start}-${chunk.end}]`
-      )
-    })
-
     // Verify total coverage - first chunk starts at 0, last chunk covers end of input
     assert.strictEqual(
       characterChunks[0].start,
@@ -1843,11 +1826,6 @@ describe('split and getChunk relationship matrix tests', () => {
       paragraphChunks[paragraphChunks.length - 1].end,
       input.length,
       'Last paragraph chunk should end at input end'
-    )
-
-    // Compare the two chunking strategies
-    console.log(
-      `Character chunking produced ${characterChunks.length} chunks, paragraph chunking produced ${paragraphChunks.length} chunks`
     )
 
     // Both should produce the same number of chunks for a single paragraph input
