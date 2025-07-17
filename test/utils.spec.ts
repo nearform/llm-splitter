@@ -145,15 +145,6 @@ describe('chunkByCharacter', () => {
       inputText.length,
       'Last chunk should end at text end'
     )
-
-    // Log the actual chunks for verification
-    console.log('chunkByCharacter results:')
-    result.forEach((chunk, index) => {
-      const tokens = wordSplitter(chunk.text as string)
-      console.log(
-        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)})`
-      )
-    })
   })
 })
 
