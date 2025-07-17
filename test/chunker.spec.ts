@@ -1697,23 +1697,73 @@ describe('split and getChunk relationship matrix tests', () => {
     const expectedCharacterChunks = [
       {
         tokens: ['The', 'quick', 'brown', 'fox', 'jumps'],
+        text: 'The quick brown fox jumps ',
+        start: 0,
+        end: 26,
         description: 'First 5 words'
       },
       {
         tokens: ['fox', 'jumps', 'over', 'the', 'lazy'],
+        text: ' fox jumps over the lazy ',
+        start: 15,
+        end: 40,
         description: 'Words 4-8 with 2-word overlap'
       },
       {
         tokens: ['the', 'lazy', 'dog.'],
+        text: ' the lazy dog.',
+        start: 30,
+        end: 44,
         description: 'Final words with 2-word overlap'
       }
     ]
 
-    // Verify expected structure matches actual results
-    assert.ok(
-      characterChunks.length >= expectedCharacterChunks.length,
-      `Should have at least ${expectedCharacterChunks.length} character chunks`
+    // Verify expected structure matches actual results and validate each chunk
+    assert.strictEqual(
+      characterChunks.length,
+      expectedCharacterChunks.length,
+      `Should have exactly ${expectedCharacterChunks.length} character chunks`
     )
+
+    // Validate each character chunk with expected positions and content
+    characterChunks.forEach((chunk, index) => {
+      const expected = expectedCharacterChunks[index]
+      
+      // Verify start and end positions
+      assert.strictEqual(
+        chunk.start,
+        expected.start,
+        `Character chunk ${index} should start at position ${expected.start}, got ${chunk.start}`
+      )
+      assert.strictEqual(
+        chunk.end,
+        expected.end,
+        `Character chunk ${index} should end at position ${expected.end}, got ${chunk.end}`
+      )
+      
+      // Verify chunk text matches expected
+      assert.strictEqual(
+        chunk.text,
+        expected.text,
+        `Character chunk ${index} text should be "${expected.text}", got "${chunk.text}"`
+      )
+      
+      // Verify getChunk returns the same text
+      const retrievedText = getChunk(input, chunk.start, chunk.end)
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Character chunk ${index} should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+      
+      // Verify tokens match expected
+      const actualTokens = wordSplitter(chunk.text as string)
+      assert.deepStrictEqual(
+        actualTokens,
+        expected.tokens,
+        `Character chunk ${index} should have tokens ${JSON.stringify(expected.tokens)}, got ${JSON.stringify(actualTokens)}`
+      )
+    })
 
     // Test paragraph-based chunking
     const paragraphChunks: ChunkResult[] = split(input, {
@@ -1793,23 +1843,88 @@ describe('split and getChunk relationship matrix tests', () => {
     const expectedParagraphChunks = [
       {
         tokens: ['The', 'quick', 'brown', 'fox', 'jumps'],
+        text: 'The quick brown fox jumps ',
+        start: 0,
+        end: 26,
         description: 'First 5 words'
       },
       {
         tokens: ['fox', 'jumps', 'over', 'the', 'lazy'],
+        text: ' fox jumps over the lazy ',
+        start: 15,
+        end: 40,
         description: 'Words 4-8 with exact 2-word overlap'
       },
       {
         tokens: ['the', 'lazy', 'dog.'],
+        text: ' the lazy dog.',
+        start: 30,
+        end: 44,
         description: 'Final words with exact 2-word overlap'
       }
     ]
 
     // Verify expected structure matches actual results for paragraph mode
-    assert.ok(
-      paragraphChunks.length >= expectedParagraphChunks.length,
-      `Should have at least ${expectedParagraphChunks.length} paragraph chunks`
+    assert.strictEqual(
+      paragraphChunks.length,
+      expectedParagraphChunks.length,
+      `Should have exactly ${expectedParagraphChunks.length} paragraph chunks`
     )
+
+    // Validate each paragraph chunk with expected positions and content
+    paragraphChunks.forEach((chunk, index) => {
+      const expected = expectedParagraphChunks[index]
+      
+      // Verify start and end positions
+      assert.strictEqual(
+        chunk.start,
+        expected.start,
+        `Paragraph chunk ${index} should start at position ${expected.start}, got ${chunk.start}`
+      )
+      assert.strictEqual(
+        chunk.end,
+        expected.end,
+        `Paragraph chunk ${index} should end at position ${expected.end}, got ${chunk.end}`
+      )
+      
+      // Verify chunk text matches expected
+      assert.strictEqual(
+        chunk.text,
+        expected.text,
+        `Paragraph chunk ${index} text should be "${expected.text}", got "${chunk.text}"`
+      )
+      
+      // Verify getChunk returns the same text
+      const retrievedText = getChunk(input, chunk.start, chunk.end)
+      assert.strictEqual(
+        chunk.text,
+        retrievedText,
+        `Paragraph chunk ${index} should match getChunk result for range ${chunk.start}-${chunk.end}`
+      )
+      
+      // Verify tokens match expected
+      const actualTokens = wordSplitter(chunk.text as string)
+      assert.deepStrictEqual(
+        actualTokens,
+        expected.tokens,
+        `Paragraph chunk ${index} should have tokens ${JSON.stringify(expected.tokens)}, got ${JSON.stringify(actualTokens)}`
+      )
+      
+      // For paragraph chunks, verify exact overlap precision
+      if (index > 0) {
+        const prevChunk = paragraphChunks[index - 1]
+        const overlapStart = chunk.start
+        const overlapEnd = prevChunk.end
+        const overlapText = input.slice(overlapStart, overlapEnd)
+        const overlapTokens = wordSplitter(overlapText)
+        
+        assert.strictEqual(
+          overlapTokens.length,
+          chunkOverlap,
+          `Paragraph chunk ${index} should have exactly ${chunkOverlap} token overlap with previous chunk, got ${overlapTokens.length} tokens: ${JSON.stringify(overlapTokens)}`
+        )
+      }
+    })
 
     // Verify total coverage - first chunk starts at 0, last chunk covers end of input
     assert.strictEqual(
