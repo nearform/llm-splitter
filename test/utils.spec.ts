@@ -637,10 +637,15 @@ describe('calculateOverlapStart', () => {
     }
 
     // Test overlap of 1 word
-    const result1 = calculateOverlapStart(originalText, prevChunk, 1, wordSplitter)
+    const result1 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      1,
+      wordSplitter
+    )
     const overlapText1 = originalText.slice(result1, prevChunk.end)
     const overlapWords1 = wordSplitter(overlapText1)
-    
+
     assert.strictEqual(overlapWords1.length, 1)
     assert.deepStrictEqual(overlapWords1, ['jumps'])
     assert.ok(overlapText1.includes('jumps'))
@@ -648,7 +653,12 @@ describe('calculateOverlapStart', () => {
     assert.strictEqual(overlapText1, ' jumps')
 
     // Test overlap of 2 words
-    const result2 = calculateOverlapStart(originalText, prevChunk, 2, wordSplitter)
+    const result2 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      2,
+      wordSplitter
+    )
     const overlapText2 = originalText.slice(result2, prevChunk.end)
     const overlapWords2 = wordSplitter(overlapText2)
 
@@ -659,7 +669,12 @@ describe('calculateOverlapStart', () => {
     assert.strictEqual(overlapText2, ' fox jumps')
 
     // Test overlap of 3 words
-    const result3 = calculateOverlapStart(originalText, prevChunk, 3, wordSplitter)
+    const result3 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      3,
+      wordSplitter
+    )
     const overlapText3 = originalText.slice(result3, prevChunk.end)
     const overlapWords3 = wordSplitter(overlapText3)
 
@@ -670,7 +685,12 @@ describe('calculateOverlapStart', () => {
     assert.strictEqual(overlapText3, ' brown fox jumps')
 
     // Test overlap of 4 words
-    const result4 = calculateOverlapStart(originalText, prevChunk, 4, wordSplitter)
+    const result4 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      4,
+      wordSplitter
+    )
     const overlapText4 = originalText.slice(result4, prevChunk.end)
     const overlapWords4 = wordSplitter(overlapText4)
 
@@ -681,47 +701,121 @@ describe('calculateOverlapStart', () => {
     assert.strictEqual(overlapText4, ' quick brown fox jumps')
 
     // Test overlap of all 5 words (entire chunk)
-    const result5 = calculateOverlapStart(originalText, prevChunk, 5, wordSplitter)
+    const result5 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      5,
+      wordSplitter
+    )
     const overlapText5 = originalText.slice(result5, prevChunk.end)
     const overlapWords5 = wordSplitter(overlapText5)
 
     assert.strictEqual(overlapWords5.length, 5)
-    assert.deepStrictEqual(overlapWords5, ['The', 'quick', 'brown', 'fox', 'jumps'])
+    assert.deepStrictEqual(overlapWords5, [
+      'The',
+      'quick',
+      'brown',
+      'fox',
+      'jumps'
+    ])
     assert.strictEqual(overlapText5, 'The quick brown fox jumps')
     assert.strictEqual(result5, 0) // Should start at beginning of chunk
 
     // Test overlap larger than available words (should use all available)
-    const result6 = calculateOverlapStart(originalText, prevChunk, 10, wordSplitter)
+    const result6 = calculateOverlapStart(
+      originalText,
+      prevChunk,
+      10,
+      wordSplitter
+    )
     const overlapText6 = originalText.slice(result6, prevChunk.end)
     const overlapWords6 = wordSplitter(overlapText6)
 
     assert.strictEqual(overlapWords6.length, 5) // Still only 5 words available
-    assert.deepStrictEqual(overlapWords6, ['The', 'quick', 'brown', 'fox', 'jumps'])
+    assert.deepStrictEqual(overlapWords6, [
+      'The',
+      'quick',
+      'brown',
+      'fox',
+      'jumps'
+    ])
     assert.strictEqual(overlapText6, 'The quick brown fox jumps')
     assert.strictEqual(result6, 0) // Should start at beginning of chunk
 
     // Verify that each overlap position is correct by checking character positions
-    assert.ok(result1 > result2, 'Position for 1-word overlap should be after 2-word overlap')
-    assert.ok(result2 > result3, 'Position for 2-word overlap should be after 3-word overlap')
-    assert.ok(result3 > result4, 'Position for 3-word overlap should be after 4-word overlap')
-    assert.ok(result4 > result5, 'Position for 4-word overlap should be after 5-word overlap')
-    assert.strictEqual(result5, result6, 'Excessive overlap should equal full chunk overlap')
+    assert.ok(
+      result1 > result2,
+      'Position for 1-word overlap should be after 2-word overlap'
+    )
+    assert.ok(
+      result2 > result3,
+      'Position for 2-word overlap should be after 3-word overlap'
+    )
+    assert.ok(
+      result3 > result4,
+      'Position for 3-word overlap should be after 4-word overlap'
+    )
+    assert.ok(
+      result4 > result5,
+      'Position for 4-word overlap should be after 5-word overlap'
+    )
+    assert.strictEqual(
+      result5,
+      result6,
+      'Excessive overlap should equal full chunk overlap'
+    )
 
     // Verify the binary search algorithm correctly identifies token boundaries
     // Each overlap should include exactly the requested number of tokens
-    assert.strictEqual(wordSplitter(overlapText1).length, 1, '1-word overlap should have exactly 1 token')
-    assert.strictEqual(wordSplitter(overlapText2).length, 2, '2-word overlap should have exactly 2 tokens')
-    assert.strictEqual(wordSplitter(overlapText3).length, 3, '3-word overlap should have exactly 3 tokens')
-    assert.strictEqual(wordSplitter(overlapText4).length, 4, '4-word overlap should have exactly 4 tokens')
-    assert.strictEqual(wordSplitter(overlapText5).length, 5, '5-word overlap should have exactly 5 tokens')
-    assert.strictEqual(wordSplitter(overlapText6).length, 5, 'Excessive overlap should have all available tokens')
+    assert.strictEqual(
+      wordSplitter(overlapText1).length,
+      1,
+      '1-word overlap should have exactly 1 token'
+    )
+    assert.strictEqual(
+      wordSplitter(overlapText2).length,
+      2,
+      '2-word overlap should have exactly 2 tokens'
+    )
+    assert.strictEqual(
+      wordSplitter(overlapText3).length,
+      3,
+      '3-word overlap should have exactly 3 tokens'
+    )
+    assert.strictEqual(
+      wordSplitter(overlapText4).length,
+      4,
+      '4-word overlap should have exactly 4 tokens'
+    )
+    assert.strictEqual(
+      wordSplitter(overlapText5).length,
+      5,
+      '5-word overlap should have exactly 5 tokens'
+    )
+    assert.strictEqual(
+      wordSplitter(overlapText6).length,
+      5,
+      'Excessive overlap should have all available tokens'
+    )
 
     // Verify that the overlap correctly preserves token boundaries and may include whitespace
     // for accurate token counting as expected by the binary search precision algorithm
-    assert.ok(overlapText1.startsWith(' '), '1-word overlap may include preceding whitespace for precision')
-    assert.ok(overlapText2.startsWith(' '), '2-word overlap may include preceding whitespace for precision')
-    assert.ok(overlapText3.startsWith(' '), '3-word overlap may include preceding whitespace for precision')
-    assert.ok(overlapText4.startsWith(' '), '4-word overlap may include preceding whitespace for precision')
+    assert.ok(
+      overlapText1.startsWith(' '),
+      '1-word overlap may include preceding whitespace for precision'
+    )
+    assert.ok(
+      overlapText2.startsWith(' '),
+      '2-word overlap may include preceding whitespace for precision'
+    )
+    assert.ok(
+      overlapText3.startsWith(' '),
+      '3-word overlap may include preceding whitespace for precision'
+    )
+    assert.ok(
+      overlapText4.startsWith(' '),
+      '4-word overlap may include preceding whitespace for precision'
+    )
   })
 
   test('handles single character tokens', () => {

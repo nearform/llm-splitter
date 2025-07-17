@@ -1653,7 +1653,10 @@ describe('split and getChunk relationship matrix tests', () => {
       )
 
       // Verify chunk positions are valid
-      assert.ok(chunk.start >= 0, `Character chunk ${index} start should be non-negative`)
+      assert.ok(
+        chunk.start >= 0,
+        `Character chunk ${index} start should be non-negative`
+      )
       assert.ok(
         chunk.end > chunk.start,
         `Character chunk ${index} end should be greater than start`
@@ -1745,7 +1748,10 @@ describe('split and getChunk relationship matrix tests', () => {
       )
 
       // Verify chunk positions are valid
-      assert.ok(chunk.start >= 0, `Paragraph chunk ${index} start should be non-negative`)
+      assert.ok(
+        chunk.start >= 0,
+        `Paragraph chunk ${index} start should be non-negative`
+      )
       assert.ok(
         chunk.end > chunk.start,
         `Paragraph chunk ${index} end should be greater than start`
