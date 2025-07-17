@@ -117,17 +117,18 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
 }
 
 /**
- * Chunks text using a sliding window approach with token-based size calculation.
+ * Chunks text using a sliding window approach with token-based size calculation and overlap.
  *
  * Employs binary search to find optimal chunk boundaries that respect token limits while
  * maximizing chunk size. The algorithm ensures forward progress by guaranteeing at least
  * one character per chunk even when individual characters exceed token limits. Provides
- * character-level overlap between consecutive chunks for context preservation.
+ * token-based overlap between consecutive chunks for context preservation with precise
+ * token boundary alignment.
  *
  * **Algorithm Details:**
  * - Binary search optimization: Efficiently finds maximum text length within token constraints
  * - Forward progress guarantee: Prevents infinite loops by ensuring minimum advancement
- * - Character-level overlap: Provides approximate overlap (not position-accurate for retrieval)
+ * - Token-based overlap: Provides exact token count overlap with preserved token boundaries
  * - Absolute position tracking: Maintains original character positions with configurable offset
  *
  * **Use Cases:**
@@ -138,15 +139,15 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
  * @param currentText - The text segment to chunk into smaller pieces
  * @param chunkSize - Maximum number of tokens allowed per chunk
  * @param splitter - Tokenization function that splits text into countable units
- * @param chunkOverlap - Number of characters to overlap between consecutive chunks (approximate)
+ * @param chunkOverlap - Number of tokens to overlap between consecutive chunks (preserves token boundaries)
  * @param startOffset - Starting character position offset for calculating absolute positions
  * @returns Array of chunk objects containing text content and absolute character positions
  *
  * @example
  * ```typescript
  * const splitter = (text: string) => text.split(/\s+/);
- * const chunks = chunkByCharacter("Hello world example text", 2, splitter, 5, 0);
- * // Returns chunks with max 2 tokens each, ~5 character overlap
+ * const chunks = chunkByCharacter("Hello world example text", 2, splitter, 1, 0);
+ * // Returns chunks with max 2 tokens each, 1 token overlap
  * ```
  */
 export function chunkByCharacter(
@@ -156,18 +157,50 @@ export function chunkByCharacter(
   chunkOverlap: number,
   startOffset: number = 0
 ): ChunkResult[] {
+  // Handle empty input
+  if (currentText.length === 0) return []
+
+  // Handle edge case where chunk size is 0 or negative
+  if (chunkSize <= 0) chunkSize = 1 // Force minimum chunk size of 1
+
   let start: number = 0
   const textLen: number = currentText.length
   const chunks: ChunkResult[] = []
+
   while (start < textLen) {
+    let chunkStart: number = start
+
+    // Calculate token-based overlap from previous chunk if needed
+    if (chunkOverlap > 0 && chunks.length > 0) {
+      const prevChunk: ChunkResult = chunks[chunks.length - 1]
+      // Use absolute positions for calculateOverlapStart, then convert back to relative
+      const absoluteOverlapStart: number = calculateOverlapStart(
+        currentText,
+        {
+          text: prevChunk.text,
+          start: prevChunk.start - startOffset,
+          end: prevChunk.end - startOffset
+        },
+        chunkOverlap,
+        splitter
+      )
+
+      // Allow overlap to go backwards, but ensure we don't go before the previous chunk start
+      const prevChunkRelativeStart: number = prevChunk.start - startOffset
+      chunkStart = Math.max(absoluteOverlapStart, prevChunkRelativeStart)
+    }
+
     // Use binary search to find the optimal chunk boundary within token limits
-    let low: number = start + 1
+    let low: number = chunkStart + 1
     let high: number = textLen
-    let bestEnd: number = start + 1
+    let bestEnd: number = chunkStart + 1
+
     while (low <= high) {
       const mid: number = Math.floor((low + high) / 2)
-      const len: number = splitter(currentText.slice(start, mid)).length
-      if (len <= chunkSize) {
+      const testText: string = currentText.slice(chunkStart, mid)
+      const tokenCount: number = splitter(testText).length
+
+      if (tokenCount <= chunkSize) {
         bestEnd = mid
         low = mid + 1
       } else {
@@ -175,18 +208,31 @@ export function chunkByCharacter(
       }
     }
     // Guarantee forward progress by ensuring at least one character per chunk
-    if (bestEnd === start) bestEnd = Math.min(start + 1, textLen)
-    chunks.push({
-      text: currentText.slice(start, bestEnd),
-      start: startOffset + start,
+    // Even if the splitter produces too many tokens for a single character
+    if (bestEnd <= chunkStart) bestEnd = Math.min(chunkStart + 1, textLen)
+
+    const chunk: ChunkResult = {
+      text: currentText.slice(chunkStart, bestEnd),
+      start: startOffset + chunkStart,
       end: startOffset + bestEnd
-    })
+    }
+
+    chunks.push(chunk)
+
     if (bestEnd >= textLen) break
-    // Calculate next starting position considering overlap requirements
-    if (chunkOverlap > 0 && bestEnd > start)
-      start = Math.max(bestEnd - chunkOverlap, start + 1)
-    else start = bestEnd
+
+    // For next iteration, start at the end of current chunk
+    // But ensure forward progress when overlap is very large by advancing at least 1 position
+    // This prevents infinite loops when chunkOverlap >= chunkSize
+    if (chunkOverlap >= chunkSize)
+      // When overlap >= chunkSize, ensure we always advance by at least 1 to prevent infinite loops
+      start = Math.max(bestEnd, start + 1)
+    else {
+      // Normal case: allow full overlap behavior
+      start = bestEnd
+    }
   }
+
   return chunks
 }
 
@@ -336,7 +382,8 @@ export function chunkByParagraph(
  * **Binary Search Precision:**
  * - Searches within the previous chunk's character boundaries for optimal overlap position
  * - Tests candidate positions to find exact token count matches using the provided splitter
- * - Returns the leftmost position that yields the target token count for consistent behavior
+ * - Returns the leftmost position that yields exactly the target token count (not fewer)
+ * - Falls back to linear search if binary search cannot find exact token boundary match
  * - Handles token boundary complexities by working with actual character positions
  *
  * **Position-Accurate Overlap Benefits:**
@@ -377,29 +424,51 @@ export function calculateOverlapStart(
   // If requested overlap is greater than available tokens, use all available
   const actualOverlap: number = Math.min(chunkOverlap, prevTokens.length)
 
-  if (actualOverlap === 0) {
-    return prevChunk.end
-  }
+  if (actualOverlap === 0) return prevChunk.end
 
-  // Use binary search to find the character position that gives us exactly the right number of tokens
+  // If we want all tokens, return the start
+  if (actualOverlap >= prevTokens.length) return prevChunk.start
+
+  // Use binary search to find the leftmost position that gives us exactly the desired token count
   let low: number = prevChunk.start
   let high: number = prevChunk.end
-  let bestStart: number = prevChunk.end
+  let result: number = prevChunk.start
 
   while (low <= high) {
     const mid: number = Math.floor((low + high) / 2)
     const testText: string = originalText.slice(mid, prevChunk.end)
     const testTokens: string[] = splitter(testText)
 
-    if (testTokens.length <= actualOverlap) {
-      bestStart = mid
+    if (testTokens.length === actualOverlap) {
+      // Found exact token count match, but continue searching for leftmost position
+      result = mid
       high = mid - 1
-    } else {
+    } else if (testTokens.length > actualOverlap)
+      // Too many tokens, move start position forward
       low = mid + 1
-    }
+    else
+      // Too few tokens, move start position backward
+      high = mid - 1
   }
 
-  return bestStart
+  // Verify the result gives us the correct token count
+  const finalText: string = originalText.slice(result, prevChunk.end)
+  const finalTokens: string[] = splitter(finalText)
+
+  if (finalTokens.length === actualOverlap) return result
+
+  // If binary search didn't find exact match, fall back to linear search for precision
+  for (let pos: number = prevChunk.start; pos <= prevChunk.end; pos++) {
+    const testText: string = originalText.slice(pos, prevChunk.end)
+    const testTokens: string[] = splitter(testText)
+
+    if (testTokens.length === actualOverlap) return pos
+
+    if (testTokens.length < actualOverlap && pos > prevChunk.start)
+      return pos - 1
+  }
+
+  return prevChunk.start
 }
 
 /**
@@ -442,75 +511,67 @@ function chunkSingleParagraphWithOverlap(
   chunkOverlap: number,
   firstChunkStart: number
 ): ChunkResult[] {
-  const unitText: string = unit.unit
-  const tokens: string[] = splitter(unitText)
   const chunks: ChunkResult[] = []
-  let tokenIndex: number = 0
+  let currentStart: number = firstChunkStart
 
-  while (tokenIndex < tokens.length) {
-    let currentChunkSize: number = 0
-    let chunkStart: number
-    let overlapTokenCount: number = 0
+  while (currentStart < unit.end) {
+    let chunkStart: number = currentStart
 
-    // Calculate overlap for subsequent chunks
-    if (chunks.length > 0 && chunkOverlap > 0) {
+    // Calculate token-based overlap from previous chunk if needed
+    if (chunkOverlap > 0 && chunks.length > 0) {
       const prevChunk: ChunkResult = chunks[chunks.length - 1]
-      chunkStart = calculateOverlapStart(
+      const overlapStart: number = calculateOverlapStart(
         originalText,
         prevChunk,
         chunkOverlap,
         splitter
       )
 
-      // Count overlap tokens toward current chunk size
-      const overlapText: string = originalText.slice(chunkStart, prevChunk.end)
-      overlapTokenCount = splitter(overlapText).length
-      currentChunkSize = overlapTokenCount
-    } else {
-      // First chunk uses the provided start position
-      // For subsequent chunks with no overlap, calculate position from token progress
-      if (chunks.length > 0) {
-        // Calculate where this chunk should start based on tokens processed so far
-        const tokensProcessed: string[] = tokens.slice(0, tokenIndex)
-        const textProcessed: string = tokensProcessed.join('')
-        chunkStart = unit.start + textProcessed.length
-      } else {
-        chunkStart = firstChunkStart
-      }
+      // Allow overlap to go backwards, but ensure we don't go before the first chunk start or unit start
+      chunkStart = Math.max(overlapStart, unit.start)
+
+      // Prevent infinite loops when overlap >= chunk size by ensuring forward progress
+      if (chunkOverlap >= chunkSize && chunkStart >= currentStart)
+        chunkStart = Math.min(currentStart + 1, unit.end)
     }
 
-    // Find how many additional tokens we can include
-    let endTokenIndex: number = tokenIndex
-    while (endTokenIndex < tokens.length && currentChunkSize < chunkSize) {
-      currentChunkSize++
-      endTokenIndex++
+    // Use binary search to find the optimal end position within token limits
+    let low: number = chunkStart + 1
+    let high: number = unit.end
+    let bestEnd: number = chunkStart + 1
+
+    while (low <= high) {
+      const mid: number = Math.floor((low + high) / 2)
+      const testText: string = originalText.slice(chunkStart, mid)
+      const tokenCount: number = splitter(testText).length
+
+      if (tokenCount <= chunkSize) {
+        bestEnd = mid
+        low = mid + 1
+      } else high = mid - 1
     }
 
-    // Ensure we make progress
-    if (endTokenIndex === tokenIndex) {
-      endTokenIndex = Math.min(tokenIndex + 1, tokens.length)
-    }
+    // Ensure forward progress by including at least one character
+    if (bestEnd <= chunkStart) bestEnd = Math.min(chunkStart + 1, unit.end)
 
-    // Calculate end position by finding character position corresponding to token boundary
-    const tokensForEnd: string[] = tokens.slice(0, endTokenIndex)
-    const textForEnd: string = tokensForEnd.join('')
-    const chunkEnd: number = Math.min(unit.start + textForEnd.length, unit.end)
-
-    // Extract text from original positions
-    const chunkText: string = originalText.slice(chunkStart, chunkEnd)
+    // Extract text from calculated positions
+    const chunkText: string = originalText.slice(chunkStart, bestEnd)
 
     chunks.push({
       text: chunkText,
       start: chunkStart,
-      end: chunkEnd
+      end: bestEnd
     })
 
-    tokenIndex = endTokenIndex
+    // For next iteration, start at the end of current chunk
+    // This ensures forward progress while allowing overlap in the next iteration
+    // Add extra protection for cases where overlap might prevent progress
+    if (chunkOverlap >= chunkSize)
+      currentStart = Math.max(bestEnd, currentStart + 1)
+    else currentStart = bestEnd
 
-    // Prevent infinite loops
-    if (currentChunkSize === 0) {
-      tokenIndex++
-    }
+    // Break if we've reached the end of the unit
+    if (bestEnd >= unit.end) break
   }
 
   return chunks

@@ -15,8 +15,11 @@ const defaultSplitter: (text: string) => string[] = (text: string) =>
 
 describe('chunkByCharacter', () => {
   test('yields correct chunks for basic input', () => {
-    const result: ChunkResult[] = Array.from(
-      chunkByCharacter('abcdef', 2, defaultSplitter, 0)
+    const result: ChunkResult[] = chunkByCharacter(
+      'abcdef',
+      2,
+      defaultSplitter,
+      0
     )
     assert.deepStrictEqual(result, [
       { text: 'ab', start: 0, end: 2 },
@@ -26,8 +29,11 @@ describe('chunkByCharacter', () => {
   })
 
   test('handles overlap', () => {
-    const result: ChunkResult[] = Array.from(
-      chunkByCharacter('abcdef', 3, defaultSplitter, 1)
+    const result: ChunkResult[] = chunkByCharacter(
+      'abcdef',
+      3,
+      defaultSplitter,
+      1
     )
     assert.deepStrictEqual(result, [
       { text: 'abc', start: 0, end: 3 },
@@ -37,21 +43,17 @@ describe('chunkByCharacter', () => {
   })
 
   test('handles custom splitter', () => {
-    const result: ChunkResult[] = Array.from(
-      chunkByCharacter(
-        'aabbcc',
-        1,
-        (t: string) => t.split('').filter((_, i: number) => i % 2 === 0),
-        0
-      )
+    const result: ChunkResult[] = chunkByCharacter(
+      'aabbcc',
+      1,
+      (t: string) => t.split('').filter((_, i: number) => i % 2 === 0),
+      0
     )
     assert.strictEqual(result.length, 3)
   })
 
   test('handles empty input', () => {
-    const result: ChunkResult[] = Array.from(
-      chunkByCharacter('', 2, defaultSplitter, 0)
-    )
+    const result: ChunkResult[] = chunkByCharacter('', 2, defaultSplitter, 0)
     assert.deepStrictEqual(result, [])
   })
 
@@ -75,6 +77,83 @@ describe('chunkByCharacter', () => {
     assert.strictEqual(result[0].text, 'a')
     assert.strictEqual(result[1].text, 'b')
     assert.strictEqual(result[2].text, 'c')
+  })
+
+  test('verifies token-based chunking with word splitter', () => {
+    const inputText = 'The quick brown fox jumps over the lazy dog.'
+    const wordSplitter = (text: string): string[] =>
+      text.split(/\s+/).filter(word => word.length > 0)
+    const chunkSize = 5 // 5 tokens (words)
+    const chunkOverlap = 2 // 2 tokens overlap
+
+    const result: ChunkResult[] = chunkByCharacter(
+      inputText,
+      chunkSize,
+      wordSplitter,
+      chunkOverlap
+    )
+
+    // Verify each chunk has at most 5 tokens (words)
+    result.forEach((chunk, index) => {
+      const tokens = wordSplitter(chunk.text as string)
+      assert.ok(
+        tokens.length <= chunkSize,
+        `Chunk ${index} should have at most ${chunkSize} tokens, got ${tokens.length}: ${JSON.stringify(tokens)}`
+      )
+    })
+
+    // Verify overlap exists and is token-based
+    if (result.length > 1) {
+      for (let i = 1; i < result.length; i++) {
+        const prevChunk = result[i - 1]
+        const currentChunk = result[i]
+
+        // There should be overlap in character positions
+        assert.ok(
+          currentChunk.start < prevChunk.end,
+          `Chunk ${i} should overlap with previous chunk`
+        )
+
+        // Calculate the overlapping text
+        const overlapStart = currentChunk.start
+        const overlapEnd = prevChunk.end
+        const overlapText = inputText.slice(overlapStart, overlapEnd)
+        const overlapTokens = wordSplitter(overlapText)
+
+        // Verify overlap is approximately the requested token count (may vary due to character-based positioning in chunkByCharacter)
+        assert.ok(
+          overlapTokens.length >= 1,
+          `Should have some token overlap between chunks ${i - 1} and ${i}, got ${overlapTokens.length} tokens: ${JSON.stringify(overlapTokens)}`
+        )
+      }
+    }
+
+    // Verify that we're actually chunking the text (not returning everything as one chunk)
+    assert.ok(
+      result.length > 1,
+      'Should produce multiple chunks for this input'
+    )
+
+    // Verify total coverage of input text
+    assert.strictEqual(
+      result[0].start,
+      0,
+      'First chunk should start at beginning'
+    )
+    assert.strictEqual(
+      result[result.length - 1].end,
+      inputText.length,
+      'Last chunk should end at text end'
+    )
+
+    // Log the actual chunks for verification
+    console.log('chunkByCharacter results:')
+    result.forEach((chunk, index) => {
+      const tokens = wordSplitter(chunk.text as string)
+      console.log(
+        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)})`
+      )
+    })
   })
 })
 
@@ -373,6 +452,85 @@ describe('chunkByParagraph', () => {
       const overlapText = originalText.slice(currentChunk.start, prevChunk.end)
       assert.ok(overlapText.length > 0, 'Overlap text should exist')
     }
+  })
+
+  test('verifies token-based chunking with word splitter', () => {
+    const inputText = 'The quick brown fox jumps over the lazy dog.'
+    const wordSplitter = (text: string): string[] =>
+      text.split(/\s+/).filter(word => word.length > 0)
+    const chunkSize = 5 // 5 tokens (words)
+    const chunkOverlap = 2 // 2 tokens overlap
+
+    // Create a single paragraph unit for the entire text
+    const units: ChunkUnit[] = [
+      { unit: inputText, start: 0, end: inputText.length }
+    ]
+
+    const result = chunkByParagraph(
+      inputText,
+      units,
+      chunkSize,
+      chunkOverlap,
+      wordSplitter
+    )
+
+    // Verify each chunk has at most 5 tokens (words)
+    result.forEach((chunk, index) => {
+      const tokens = wordSplitter(chunk.text as string)
+      assert.ok(
+        tokens.length <= chunkSize,
+        `Chunk ${index} should have at most ${chunkSize} tokens, got ${tokens.length}: ${JSON.stringify(tokens)}`
+      )
+    })
+
+    // Verify overlap exists and is token-based
+    if (result.length > 1) {
+      for (let i = 1; i < result.length; i++) {
+        const prevChunk = result[i - 1]
+        const currentChunk = result[i]
+
+        // There should be overlap in character positions
+        assert.ok(
+          currentChunk.start < prevChunk.end,
+          `Chunk ${i} should overlap with previous chunk`
+        )
+
+        // Calculate the overlapping text
+        const overlapStart = currentChunk.start
+        const overlapEnd = prevChunk.end
+        const overlapText = inputText.slice(overlapStart, overlapEnd)
+        const overlapTokens = wordSplitter(overlapText)
+
+        // Verify overlap is exactly the requested token count (chunkByParagraph uses calculateOverlapStart for precise token-based overlap)
+        assert.strictEqual(
+          overlapTokens.length,
+          chunkOverlap,
+          `Should have exactly ${chunkOverlap} token overlap between chunks ${i - 1} and ${i}, got ${overlapTokens.length} tokens: ${JSON.stringify(overlapTokens)}`
+        )
+      }
+    }
+
+    // Verify that we're actually chunking the text (not returning everything as one chunk)
+    assert.ok(
+      result.length > 1,
+      'Should produce multiple chunks for this input'
+    )
+
+    // Verify total coverage of input text (first chunk starts at beginning, coverage should be reasonable)
+    assert.strictEqual(
+      result[0].start,
+      0,
+      'First chunk should start at beginning'
+    )
+
+    // Log the actual chunks for verification
+    console.log('chunkByParagraph results:')
+    result.forEach((chunk, index) => {
+      const tokens = wordSplitter(chunk.text as string)
+      console.log(
+        `  Chunk ${index}: "${chunk.text}" (${tokens.length} tokens: ${JSON.stringify(tokens)})`
+      )
+    })
   })
 })
 

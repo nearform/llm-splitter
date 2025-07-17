@@ -15,9 +15,8 @@
     "lint": "eslint .",
     "prebuild": "rm -rf dist",
     "prepare": "husky",
-    "pretest": "npm run build",
     "test": "npm run test:unit",
-    "test:unit": "node --test dist/test/utils.spec.js dist/test/chunker.spec.js"
+    "test:unit": "node --loader ts-node/esm --test test/utils.spec.ts test/chunker.spec.ts"
   },
   "repository": {
     "type": "git",
