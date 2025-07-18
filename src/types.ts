@@ -26,14 +26,24 @@ export interface SplitOptions {
   /**
    * Function to split text into tokens for size calculation.
    *
+   * **CRITICAL REQUIREMENT:** The splitter must be lossless - the concatenation
+   * of all returned tokens must exactly reconstruct the original input text.
+   * No characters should be lost, modified, filtered, trimmed, or added during tokenization.
+   * The splitter can only split text on boundaries, not mutate the content.
+   *
    * If omitted, defaults to character-based splitting where each character is one token.
-   * Custom splitters enable integration with various tokenizers:
-   * - Word-based: `(text) => text.split(/\s+/)`
+   *
+   * Valid splitters (lossless):
+   * - Character-based: `(text) => text.split('')`
+   * - Word-preserving: `(text) => text.split(/(\s+)/).filter(Boolean)`
    * - Tiktoken: `(text) => encoding.encode(text).map(t => encoding.decode([t]))`
-   * - Sentence-based: Custom regex-based splitting
+   *
+   * Invalid splitters (lossy - these will cause inconsistencies):
+   * - `(text) => text.split(/\s+/)` - loses whitespace
+   * - `(text) => text.split(/[.!?]+/).filter(s => s.trim().length > 0)` - loses punctuation and whitespace
    *
    * @param text - The text to tokenize
-   * @returns Array of token strings
+   * @returns Array of token strings that when concatenated exactly reconstruct the input
    */
   splitter?: (text: string) => string[]
 

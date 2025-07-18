@@ -250,7 +250,10 @@ interface SplitOptions {
   /** Exact tokens to overlap between chunks (default: 0) */
   chunkOverlap?: number
 
-  /** Custom tokenization function for counting and splitting */
+  /**
+   * Custom tokenization function for counting and splitting.
+   * MUST be lossless - concatenating returned tokens must recreate original text.
+   */
   splitter?: (text: string) => string[]
 
   /** Chunking strategy - currently supports 'paragraph' (default) */
