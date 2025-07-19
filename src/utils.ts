@@ -163,73 +163,65 @@ export function chunkByCharacter(
   // Handle edge case where chunk size is 0 or negative
   if (chunkSize <= 0) chunkSize = 1 // Force minimum chunk size of 1
 
-  let start: number = 0
-  const textLen: number = currentText.length
-  const chunks: ChunkResult[] = []
+  // Optimize by tokenizing the entire text once upfront
+  const tokens: string[] = splitter(currentText)
+  const totalTokens: number = tokens.length
 
-  while (start < textLen) {
-    let chunkStart: number = start
+  // Handle case where entire text fits in one chunk
+  if (totalTokens <= chunkSize) {
+    return [
+      {
+        text: currentText,
+        start: startOffset,
+        end: startOffset + currentText.length
+      }
+    ]
+  }
+
+  const chunks: ChunkResult[] = []
+  let tokenStart: number = 0
+
+  while (tokenStart < totalTokens) {
+    let chunkTokenStart: number = tokenStart
 
     // Calculate token-based overlap from previous chunk if needed
     if (chunkOverlap > 0 && chunks.length > 0) {
-      const prevChunk: ChunkResult = chunks[chunks.length - 1]
-      // Use absolute positions for calculateOverlapStart, then convert back to relative
-      const absoluteOverlapStart: number = calculateOverlapStart(
-        currentText,
-        {
-          text: prevChunk.text,
-          start: prevChunk.start - startOffset,
-          end: prevChunk.end - startOffset
-        },
-        chunkOverlap,
-        splitter
-      )
-
-      // Allow overlap to go backwards, but ensure we don't go before the previous chunk start
-      const prevChunkRelativeStart: number = prevChunk.start - startOffset
-      chunkStart = Math.max(absoluteOverlapStart, prevChunkRelativeStart)
+      chunkTokenStart = Math.max(tokenStart - chunkOverlap, 0)
     }
 
-    // Use binary search to find the optimal chunk boundary within token limits
-    let low: number = chunkStart + 1
-    let high: number = textLen
-    let bestEnd: number = chunkStart + 1
+    // Determine chunk end in token space
+    const chunkTokenEnd: number = Math.min(
+      chunkTokenStart + chunkSize,
+      totalTokens
+    )
 
-    while (low <= high) {
-      const mid: number = Math.floor((low + high) / 2)
-      const testText: string = currentText.slice(chunkStart, mid)
-      const tokenCount: number = splitter(testText).length
+    // Convert token indices to character positions
+    const chunkStartChar: number =
+      chunkTokenStart === 0
+        ? 0
+        : tokens.slice(0, chunkTokenStart).join('').length
+    const chunkEndChar: number =
+      chunkTokenEnd === totalTokens
+        ? currentText.length
+        : tokens.slice(0, chunkTokenEnd).join('').length
 
-      if (tokenCount <= chunkSize) {
-        bestEnd = mid
-        low = mid + 1
-      } else {
-        high = mid - 1
-      }
-    }
-    // Guarantee forward progress by ensuring at least one character per chunk
-    // Even if the splitter produces too many tokens for a single character
-    if (bestEnd <= chunkStart) bestEnd = Math.min(chunkStart + 1, textLen)
-
+    // Create chunk with absolute positions
     const chunk: ChunkResult = {
-      text: currentText.slice(chunkStart, bestEnd),
-      start: startOffset + chunkStart,
-      end: startOffset + bestEnd
+      text: currentText.slice(chunkStartChar, chunkEndChar),
+      start: startOffset + chunkStartChar,
+      end: startOffset + chunkEndChar
     }
 
     chunks.push(chunk)
 
-    if (bestEnd >= textLen) break
+    if (chunkTokenEnd >= totalTokens) break
 
-    // For next iteration, start at the end of current chunk
-    // But ensure forward progress when overlap is very large by advancing at least 1 position
-    // This prevents infinite loops when chunkOverlap >= chunkSize
-    if (chunkOverlap >= chunkSize)
-      // When overlap >= chunkSize, ensure we always advance by at least 1 to prevent infinite loops
-      start = Math.max(bestEnd, start + 1)
-    else {
-      // Normal case: allow full overlap behavior
-      start = bestEnd
+    // Advance to next chunk position in token space
+    // Ensure forward progress when overlap is very large by advancing at least 1 token
+    if (chunkOverlap >= chunkSize) {
+      tokenStart = Math.max(chunkTokenEnd, tokenStart + 1)
+    } else {
+      tokenStart = chunkTokenEnd
     }
   }
 
