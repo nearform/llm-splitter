@@ -276,6 +276,9 @@ export function chunkByParagraph(
   chunkOverlap: number,
   splitter: (text: string) => string[]
 ): ChunkResult[] {
+  // Optimize by pre-tokenizing all paragraphs once to avoid repeated splitter calls
+  const paragraphTokenCounts: number[] = chunkUnits.map(unit => splitter(unit.unit).length)
+  
   let i: number = 0
   const n: number = chunkUnits.length
   const chunks: ChunkResult[] = []
@@ -307,7 +310,7 @@ export function chunkByParagraph(
 
     // Expand window to include as many complete paragraphs as possible
     while (j < n) {
-      const unitLen: number = splitter(chunkUnits[j].unit).length
+      const unitLen: number = paragraphTokenCounts[j] // Use pre-computed token count
       const simulatedLen: number = currentLen + unitLen
 
       // Stop expanding if adding this paragraph would exceed the limit
