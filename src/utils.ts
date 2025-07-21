@@ -119,21 +119,21 @@ export function getTrimmedBounds(text: string): ChunkUnit | null {
 /**
  * Chunks text using a sliding window approach with token-based size calculation and overlap.
  *
- * Employs binary search to find optimal chunk boundaries that respect token limits while
- * maximizing chunk size. The algorithm ensures forward progress by guaranteeing at least
- * one character per chunk even when individual characters exceed token limits. Provides
- * token-based overlap between consecutive chunks for context preservation with precise
- * token boundary alignment.
+ * Processes tokens one at a time to build chunks up to the specified token limit. When adding
+ * the next token would exceed the chunk size, the current chunk is completed. The following
+ * chunk includes the last N tokens (where N = chunkOverlap) from the previous chunk at its
+ * beginning, ensuring precise token-based overlap and forward progress.
  *
  * **Algorithm Details:**
- * - Binary search optimization: Efficiently finds maximum text length within token constraints
- * - Forward progress guarantee: Prevents infinite loops by ensuring minimum advancement
- * - Token-based overlap: Provides exact token count overlap with preserved token boundaries
- * - Absolute position tracking: Maintains original character positions with configurable offset
+ * - Token-by-token processing: Builds chunks incrementally by adding one token at a time
+ * - Precise token limits: Respects exact token count constraints without exceeding chunkSize
+ * - Token-based overlap: Includes exactly chunkOverlap tokens from the end of the previous chunk
+ * - Character position mapping: Maintains accurate character positions by mapping token indices to text positions
+ * - Forward progress guarantee: Ensures algorithm terminates by advancing at least one token per iteration
  *
  * **Use Cases:**
  * - Raw text processing where paragraph structure is unavailable or unimportant
- * - Character-level chunking for maximum text utilization within token limits
+ * - Token-level chunking for maximum precision within token limits
  * - Fallback chunking when semantic boundaries cannot be determined
  *
  * @param currentText - The text segment to chunk into smaller pieces
@@ -163,7 +163,7 @@ export function chunkByCharacter(
   // Handle edge case where chunk size is 0 or negative
   if (chunkSize <= 0) chunkSize = 1 // Force minimum chunk size of 1
 
-  // Optimize by tokenizing the entire text once upfront
+  // Tokenize the entire text once upfront
   const tokens: string[] = splitter(currentText)
   const totalTokens: number = tokens.length
 
@@ -178,51 +178,62 @@ export function chunkByCharacter(
     ]
   }
 
+  // Build a mapping from token indices to character positions in the original text
+  const tokenToCharMap: number[] = []
+  let charPos = 0
+  let tokenIndex = 0
+
+  // Find character positions for each token in the original text
+  while (tokenIndex < tokens.length && charPos < currentText.length) {
+    const token = tokens[tokenIndex]
+    const tokenStart = currentText.indexOf(token, charPos)
+    
+    if (tokenStart !== -1) {
+      tokenToCharMap[tokenIndex] = tokenStart
+      charPos = tokenStart + token.length
+      tokenIndex++
+    } else {
+      // If we can't find the token, it might be due to overlapping patterns
+      // Fall back to advancing character by character
+      charPos++
+    }
+  }
+  
+  // Make sure we have an end position for the last token
+  tokenToCharMap[tokens.length] = currentText.length
+
   const chunks: ChunkResult[] = []
-  let tokenStart: number = 0
+  let currentTokenIndex = 0
 
-  while (tokenStart < totalTokens) {
-    let chunkTokenStart: number = tokenStart
+  while (currentTokenIndex < totalTokens) {
+    let chunkTokenStart = currentTokenIndex
+    let chunkTokenEnd = Math.min(currentTokenIndex + chunkSize, totalTokens)
 
-    // Calculate token-based overlap from previous chunk if needed
+    // Include overlap tokens from previous chunk if needed
     if (chunkOverlap > 0 && chunks.length > 0) {
-      chunkTokenStart = Math.max(tokenStart - chunkOverlap, 0)
+      chunkTokenStart = Math.max(currentTokenIndex - chunkOverlap, 0)
+      chunkTokenEnd = Math.min(chunkTokenStart + chunkSize, totalTokens)
     }
 
-    // Determine chunk end in token space
-    const chunkTokenEnd: number = Math.min(
-      chunkTokenStart + chunkSize,
-      totalTokens
-    )
-
-    // Convert token indices to character positions
-    const chunkStartChar: number =
-      chunkTokenStart === 0
-        ? 0
-        : tokens.slice(0, chunkTokenStart).join('').length
-    const chunkEndChar: number =
-      chunkTokenEnd === totalTokens
-        ? currentText.length
-        : tokens.slice(0, chunkTokenEnd).join('').length
+    // Calculate character positions for this chunk
+    const chunkStartChar = tokenToCharMap[chunkTokenStart]
+    const chunkEndChar = tokenToCharMap[chunkTokenEnd] || currentText.length
 
     // Create chunk with absolute positions
+    const chunkText = currentText.slice(chunkStartChar, chunkEndChar)
     const chunk: ChunkResult = {
-      text: currentText.slice(chunkStartChar, chunkEndChar),
+      text: chunkText,
       start: startOffset + chunkStartChar,
       end: startOffset + chunkEndChar
     }
 
     chunks.push(chunk)
 
-    if (chunkTokenEnd >= totalTokens) break
+    // Advance to the next chunk position
+    currentTokenIndex = chunkTokenEnd
 
-    // Advance to next chunk position in token space
-    // Ensure forward progress when overlap is very large by advancing at least 1 token
-    if (chunkOverlap >= chunkSize) {
-      tokenStart = Math.max(chunkTokenEnd, tokenStart + 1)
-    } else {
-      tokenStart = chunkTokenEnd
-    }
+    // If we've processed all tokens, break
+    if (currentTokenIndex >= totalTokens) break
   }
 
   return chunks
@@ -506,6 +517,150 @@ export function chunkByParagraph(
 
     // Move to next set of paragraphs
     i = j
+  }
+
+  return chunks
+}
+
+export function mapPartsToText(
+  parts: string[],
+  text: string
+): Array<{ text: string | null; start: number; end: number }> {
+  const result: Array<{ text: string | null; start: number; end: number }> = []
+
+  let partIdx = 0
+  let i = 0
+  while (i < text.length && partIdx < parts.length) {
+    const part = parts[partIdx]
+    if (text.startsWith(part, i)) {
+      result.push({
+        text: part,
+        start: i,
+        end: i + part.length
+      })
+      i += part.length
+      partIdx++
+    } else {
+      result.push({
+        text: null,
+        start: i,
+        end: i + 1
+      })
+      i += 1
+    }
+  }
+  // If there are leftover unmatched characters in text, mark them as text: null
+  while (i < text.length) {
+    result.push({
+      text: null,
+      start: i,
+      end: i + 1
+    })
+    i += 1
+  }
+
+  return result
+}
+
+export function chunkByCharacterLinear(
+  currentText: string,
+  chunkSize: number,
+  splitter: (text: string) => string[],
+  chunkOverlap: number,
+  startOffset: number = 0
+): ChunkResult[] {
+  // Helpers
+  const chunks: ChunkResult[] = []
+  let lastChunkEnd = null
+  const addChunk = ({
+    text,
+    start,
+    end
+  }: {
+    text: string
+    start: number
+    end: number
+  }) => {
+    chunks.push({
+      text,
+      start: startOffset + start,
+      end: startOffset + end
+    })
+
+    // Update last chunk end for overlap calculations
+    lastChunkEnd = end
+  }
+
+  // Do a prep single pass to split, map, and prepare for a single iteration pass.
+  const parts = splitter(currentText)
+  const partsIdxsToText = mapPartsToText(parts, currentText)
+
+  // Iterate.
+  let chunkStart = 0
+  let chunkEnd = 1
+  let chunkParts: { text: string | null; start: number; end: number }[] = []
+  for (let i = 0; i < partsIdxsToText.length; i++) {
+    const part = partsIdxsToText[i]
+
+    // console.log("TODO: REMOVE", {
+    //   part,
+    //   chunkStart,
+    //   chunkEnd,
+    //   chunkSize,
+    //   chunkOverlap
+    // })
+
+    // Ignored part from splitter.
+    if (part.text === null) {
+      continue
+    }
+
+    // See if we can fit the part in the chunk.
+    if (chunkParts.length < chunkSize) {
+      chunkEnd = part.end
+
+      // Track non-ignored parts (for later overlap handling).
+      chunkParts.push(part)
+    } else {
+      // TODO: HANDLE SPLITTING THE PART WHEN OVER THE CHUNK SIZE.
+
+      // We can't fit the part in the chunk.
+      // Add the chunk and start a new one.
+      const chunk = {
+        text: currentText.slice(chunkStart, chunkEnd),
+        start: chunkStart,
+        end: chunkEnd
+      }
+      addChunk(chunk)
+
+      // Handle the overlap by potentially resetting the start to earlier.
+      if (chunkOverlap > 0) {
+        const overlapParts = chunkParts.slice(-chunkOverlap)
+        if (overlapParts.length > 0) {
+          chunkStart = overlapParts[0].start
+          chunkParts = overlapParts
+        }
+      } else {
+        // Restart the chunk.
+        chunkStart = part.start
+        chunkParts = []
+      }
+
+      chunkParts.push(part)
+      chunkEnd = part.end
+    }
+  }
+
+  // Add the last chunk.
+  if (
+    chunkStart < currentText.length &&
+    (lastChunkEnd === null || lastChunkEnd < chunkEnd)
+  ) {
+    addChunk({
+      text: currentText.slice(chunkStart, chunkEnd),
+      start: chunkStart,
+      end: chunkEnd
+    })
   }
 
   return chunks
