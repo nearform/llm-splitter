@@ -1643,7 +1643,7 @@ describe('split and getChunk relationship matrix tests', () => {
         const overlapText = input.slice(overlapStart, overlapEnd)
         const overlapTokens = wordSplitter(overlapText)
 
-        // Paragraph chunking uses calculateOverlapStart for precise token-based overlap
+        // Paragraph chunking uses precise token-based overlap calculation
         // With lossless word splitters, overlap may vary slightly due to whitespace tokens
         assert.ok(
           overlapTokens.length >= 1,

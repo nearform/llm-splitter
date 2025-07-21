@@ -4,7 +4,6 @@ import {
   chunkByCharacter,
   chunkByParagraph,
   getUnits,
-  calculateOverlapStart,
   getTrimmedBounds
 } from '../src/utils.js'
 import type { ChunkResult, ChunkUnit } from '../src/types.js'
@@ -152,41 +151,6 @@ describe('chunkByParagraph', () => {
   test('handles empty input', () => {
     const result = chunkByParagraph('', [], 10, 0, charSplitter)
     assert.deepStrictEqual(result, [])
-  })
-})
-
-describe('calculateOverlapStart', () => {
-  const charSplitter: (text: string) => string[] = (text: string) =>
-    text.split('')
-
-  test('calculates correct overlap start position', () => {
-    const originalText = 'abcdefghij'
-    const prevChunk: ChunkResult = { text: 'abcde', start: 0, end: 5 }
-    const overlapSize = 2
-
-    const result = calculateOverlapStart(
-      originalText,
-      prevChunk,
-      overlapSize,
-      charSplitter
-    )
-
-    assert.strictEqual(result, 3) // 5 - 2 = 3
-  })
-
-  test('handles overlap larger than chunk', () => {
-    const originalText = 'abc'
-    const prevChunk: ChunkResult = { text: 'abc', start: 0, end: 3 }
-    const overlapSize = 5 // Larger than chunk
-
-    const result = calculateOverlapStart(
-      originalText,
-      prevChunk,
-      overlapSize,
-      charSplitter
-    )
-
-    assert.strictEqual(result, 0) // Should not go below 0
   })
 })
 
