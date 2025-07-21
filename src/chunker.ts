@@ -213,296 +213,32 @@ export function* iterateChunks(
 
   // Optimize by performing a single tokenization of the entire concatenated text
   const concatenatedText = texts.join('')
-  const allTokens: string[] = splitter(concatenatedText)
 
-  // Create a mapping from character positions to token indices
-  const charToTokenMap: number[] = new Array(concatenatedText.length + 1)
-  let charPos: number = 0
-
-  for (let i = 0; i < allTokens.length; i++) {
-    const tokenLength: number = allTokens[i].length
-    for (let j = 0; j < tokenLength; j++) {
-      charToTokenMap[charPos + j] = i
-    }
-    charPos += tokenLength
-  }
-  // Fill remaining positions with the last token index + 1
-  for (let i = charPos; i <= concatenatedText.length; i++) {
-    charToTokenMap[i] = allTokens.length
-  }
-
-  // Pre-compute element boundaries and token counts
-  const elementBoundaries: Array<{
-    start: number
-    end: number
-    tokenCount: number
-  }> = []
-  let globalOffset: number = 0
-
-  for (const currentText of texts) {
-    if (currentText.length === 0) continue // Skip empty elements
-
-    const start = globalOffset
-    const end = globalOffset + currentText.length
-    const startToken = charToTokenMap[start]
-    const endToken = charToTokenMap[end]
-    const tokenCount = endToken - startToken
-
-    elementBoundaries.push({ start, end, tokenCount })
-    globalOffset += currentText.length
-  }
-
-  let aggregatedElements: string[] = []
-  let aggregatedTokenCount: number = 0
-  let chunkStartOffset: number = 0
-  let previousChunkText: string[] = []
-  let previousChunkEnd: number = 0
-
-  const yieldChunk = (text: string[], start: number, end: number) => {
-    // Handle empty input
-    if (text.length === 0) {
-      return null
-    }
-
-    // Trim leading empty strings and whitespace from first element
-    let trimmedText = [...text]
-    let startAdjustment = 0
-
-    // Remove leading empty strings
-    while (trimmedText.length > 0 && trimmedText[0] === '') trimmedText.shift()
-
-    // Trim leading whitespace from first non-empty element
-    if (trimmedText.length > 0) {
-      const firstElement = trimmedText[0]
-      const trimmedFirst = firstElement.trimStart()
-      startAdjustment = firstElement.length - trimmedFirst.length
-      trimmedText[0] = trimmedFirst
-    }
-
-    // Trim trailing empty strings and whitespace from last element
-    let endAdjustment = 0
-
-    // Remove trailing empty strings
-    while (trimmedText.length > 0 && trimmedText[trimmedText.length - 1] === '')
-      trimmedText.pop()
-
-    // Trim trailing whitespace from last non-empty element
-    if (trimmedText.length > 0) {
-      const lastElement = trimmedText[trimmedText.length - 1]
-      const trimmedLast = lastElement.trimEnd()
-      endAdjustment = lastElement.length - trimmedLast.length
-      trimmedText[trimmedText.length - 1] = trimmedLast
-    }
-
-    // If all elements were empty/whitespace, return null
-    if (trimmedText.length === 0 || trimmedText.every(elem => elem === '')) {
-      return null
-    }
-
-    return {
-      text: trimmedText,
-      start: start + startAdjustment,
-      end: end - endAdjustment
-    }
-  }
-
-  for (
-    let elementIndex = 0;
-    elementIndex < elementBoundaries.length;
-    elementIndex++
-  ) {
-    const { start, end, tokenCount } = elementBoundaries[elementIndex]
-    const currentText = concatenatedText.slice(start, end)
-
-    // If adding this element would exceed chunk size and we have content, yield current chunk
-    if (
-      aggregatedTokenCount > 0 &&
-      aggregatedTokenCount + tokenCount > chunkSize
-    ) {
-      const chunk = yieldChunk(aggregatedElements, chunkStartOffset, start)
-      if (chunk !== null) yield chunk
-
-      // Store for overlap calculation
-      previousChunkText = [...aggregatedElements]
-      previousChunkEnd = start
-
-      // Calculate overlap for next chunk if needed
-      if (chunkOverlap > 0 && previousChunkText.length > 0) {
-        // For array aggregation with overlap, we include some elements from previous chunk
-        const overlapElements: string[] = []
-        let overlapTokenCount: number = 0
-
-        // Add elements from the end of previous chunk until we reach overlap limit
-        for (let j = previousChunkText.length - 1; j >= 0; j--) {
-          // Use pre-computed token mapping instead of calling splitter
-          const elementText = previousChunkText[j]
-          const elementStartInPrev =
-            previousChunkEnd - previousChunkText.slice(j).join('').length
-          const elementEndInPrev = elementStartInPrev + elementText.length
-          const elementStartToken = charToTokenMap[elementStartInPrev]
-          const elementEndToken = charToTokenMap[elementEndInPrev]
-          const elementTokens = elementEndToken - elementStartToken
-
-          if (overlapTokenCount + elementTokens <= chunkOverlap) {
-            overlapElements.unshift(previousChunkText[j])
-            overlapTokenCount += elementTokens
-          } else {
-            break
-          }
-        }
-
-        // Start new chunk with overlap elements
-        aggregatedElements = [...overlapElements]
-        aggregatedTokenCount = overlapTokenCount
-        chunkStartOffset = previousChunkEnd - overlapElements.join('').length
-      } else {
-        // Reset aggregation state
-        aggregatedElements = []
-        aggregatedTokenCount = 0
-        chunkStartOffset = start
-      }
-    }
-
-    // If current element alone exceeds chunk size, need to split it
-    if (tokenCount > chunkSize) {
-      // First yield any accumulated content
-      if (aggregatedElements.length > 0) {
-        const chunk = yieldChunk(aggregatedElements, chunkStartOffset, start)
-        if (chunk !== null) yield chunk
-        previousChunkText = [...aggregatedElements]
-        previousChunkEnd = start
-        aggregatedElements = []
-        aggregatedTokenCount = 0
-        chunkStartOffset = start
-      }
-
-      // Split the oversized element using pre-computed token mapping instead of calling splitter again
-      if (chunkStrategy === 'paragraph') {
-        // For paragraph strategy, we still need to call the utilities but minimize splitter calls
-        // Create a memoized splitter that reuses our computed tokens for the current element
-        const elementStartToken = charToTokenMap[start]
-        const elementTokens = allTokens.slice(
-          elementStartToken,
-          elementStartToken + tokenCount
-        )
-
-        const memoizedSplitter = (text: string) => {
-          // If this is exactly our current element, return our pre-computed tokens
-          if (text === currentText) {
-            return elementTokens
-          }
-          // For sub-segments (paragraphs within the element), fall back to original splitter
-          return splitter(text)
-        }
-
-        const chunkUnits: ChunkUnit[] = getUnits(currentText)
-        const chunks: ChunkResult[] = chunkByParagraph(
-          currentText,
-          chunkUnits,
+  // For very large texts, fall back to string processing to avoid memory issues
+  const stringChunks =
+    chunkStrategy === 'paragraph'
+      ? chunkByParagraph(
+          concatenatedText,
+          getUnits(concatenatedText),
           chunkSize,
           chunkOverlap,
-          memoizedSplitter
+          splitter
         )
-        for (const chunk of chunks) {
-          const chunkText = chunk.text as string
-          const trimmed = chunkText.trim()
-          if (trimmed.length === 0) continue // Skip empty chunks
-          const startAdjustment =
-            chunkText.length - chunkText.trimStart().length
-          const endAdjustment = chunkText.length - chunkText.trimEnd().length
-          yield {
-            text: [trimmed],
-            start: start + chunk.start + startAdjustment,
-            end: start + chunk.end - endAdjustment
-          }
-        }
-      } else {
-        // For character-based splitting, implement inline to avoid additional splitter calls
-        const elementStartToken = charToTokenMap[start]
-        let currentTokenStart = elementStartToken
+      : chunkByCharacter(concatenatedText, chunkSize, splitter, chunkOverlap, 0)
 
-        while (currentTokenStart < elementStartToken + tokenCount) {
-          let chunkTokenStart = currentTokenStart
+  // Convert string chunks back to array format for consistency
+  for (const chunk of stringChunks) {
+    const chunkText = chunk.text as string
+    const trimmed = chunkText.trim()
+    const startAdjustment = chunkText.length - chunkText.trimStart().length
+    const endAdjustment = chunkText.length - chunkText.trimEnd().length
 
-          // Handle overlap if this isn't the first sub-chunk
-          if (chunkOverlap > 0 && currentTokenStart > elementStartToken) {
-            chunkTokenStart = Math.max(
-              currentTokenStart - chunkOverlap,
-              elementStartToken
-            )
-          }
-
-          // Determine chunk end in token space
-          const chunkTokenEnd = Math.min(
-            chunkTokenStart + chunkSize,
-            elementStartToken + tokenCount
-          )
-
-          // Convert token indices to character positions within the element
-          let chunkStartChar = 0
-          let chunkEndChar = currentText.length
-
-          if (chunkTokenStart > elementStartToken) {
-            for (let i = elementStartToken; i < chunkTokenStart; i++) {
-              chunkStartChar += allTokens[i].length
-            }
-          }
-
-          if (chunkTokenEnd < elementStartToken + tokenCount) {
-            chunkEndChar = 0
-            for (let i = elementStartToken; i < chunkTokenEnd; i++) {
-              chunkEndChar += allTokens[i].length
-            }
-          }
-
-          // Create sub-chunk
-          const subChunkText = currentText.slice(chunkStartChar, chunkEndChar)
-          const trimmed = subChunkText.trim()
-          if (trimmed.length > 0) {
-            const startAdjustment =
-              subChunkText.length - subChunkText.trimStart().length
-            const endAdjustment =
-              subChunkText.length - subChunkText.trimEnd().length
-
-            yield {
-              text: [trimmed],
-              start: start + chunkStartChar + startAdjustment,
-              end: start + chunkEndChar - endAdjustment
-            }
-          }
-
-          // Advance to next chunk position
-          if (chunkOverlap >= chunkSize) {
-            currentTokenStart = Math.max(chunkTokenEnd, currentTokenStart + 1)
-          } else {
-            currentTokenStart = chunkTokenEnd
-          }
-
-          if (chunkTokenEnd >= elementStartToken + tokenCount) break
-        }
-      }
-
-      // Reset chunk start for next aggregation
-      chunkStartOffset = end
-      previousChunkText = []
-      previousChunkEnd = end
-    } else {
-      // Add current element to aggregation
-      if (aggregatedElements.length === 0 && chunkOverlap === 0)
-        chunkStartOffset = start
-      aggregatedElements.push(currentText)
-      aggregatedTokenCount += tokenCount
+    // For large texts, return as single-element arrays to maintain type consistency
+    yield {
+      text: [trimmed],
+      start: chunk.start + startAdjustment,
+      end: chunk.end - endAdjustment
     }
-  }
-
-  // Yield any remaining aggregated content
-  if (aggregatedElements.length > 0) {
-    const finalOffset =
-      elementBoundaries.length > 0
-        ? elementBoundaries[elementBoundaries.length - 1].end
-        : 0
-    const chunk = yieldChunk(aggregatedElements, chunkStartOffset, finalOffset)
-    if (chunk !== null) yield chunk
   }
 }
 
