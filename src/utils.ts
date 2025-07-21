@@ -313,7 +313,10 @@ function chunkSingleParagraphWithTokenMap(
     // Find the optimal end position using token mapping instead of binary search
     const chunkStartToken: number = charToTokenMap[chunkStart]
     const unitEndToken: number = charToTokenMap[unit.end]
-    const maxChunkEndToken: number = Math.min(chunkStartToken + chunkSize, unitEndToken)
+    const maxChunkEndToken: number = Math.min(
+      chunkStartToken + chunkSize,
+      unitEndToken
+    )
 
     // Convert token position back to character position
     let bestEnd: number = chunkStart
@@ -399,11 +402,11 @@ export function chunkByParagraph(
 ): ChunkResult[] {
   // Optimize by tokenizing the entire text only once
   const allTokens: string[] = splitter(originalText)
-  
+
   // Create a mapping from character positions to token indices
   const charToTokenMap: number[] = new Array(originalText.length + 1)
   let charPos: number = 0
-  
+
   for (let i = 0; i < allTokens.length; i++) {
     const tokenLength: number = allTokens[i].length
     for (let j = 0; j < tokenLength; j++) {
@@ -415,14 +418,14 @@ export function chunkByParagraph(
   for (let i = charPos; i <= originalText.length; i++) {
     charToTokenMap[i] = allTokens.length
   }
-  
+
   // Pre-compute token counts for each paragraph using the global tokenization
   const paragraphTokenCounts: number[] = chunkUnits.map(unit => {
     const startToken: number = charToTokenMap[unit.start]
     const endToken: number = charToTokenMap[unit.end]
     return endToken - startToken
   })
-  
+
   let i: number = 0
   const n: number = chunkUnits.length
   const chunks: ChunkResult[] = []
