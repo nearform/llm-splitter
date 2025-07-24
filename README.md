@@ -271,8 +271,6 @@ tokenizer.free()
 
 </details>
 
-#### TikToken
-
 ### Working with Overlaps
 
 Chunk overlap is useful for maintaining context between chunks:
