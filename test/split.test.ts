@@ -15,6 +15,11 @@ const tokenSplitter = (text: string): string[] =>
   Array.from(tokenizer.encode(text)).map(token =>
     td.decode(tokenizer.decode([token] as any))
   )
+// Remove all non-ascii characters
+const tokenAsciiSplitter = (text: string): string[] =>
+  Array.from(tokenizer.encode(text.replace(/[^\x00-\x7F]/g, ''))).map(token =>
+    td.decode(tokenizer.decode([token] as any))
+  )
 
 // Tests
 let tokenizer: Tiktoken
@@ -1224,6 +1229,22 @@ describe('split', () => {
           )
           assert.deepStrictEqual(result, [
             { text: 'hello\n\nworld', start: 0, end: 12 }
+          ])
+        })
+
+        // See if we can switch to `tokenSplitter` once we have a better solution for non-ascii characters.
+        // in  https://github.com/nearform/llm-splitter/issues/36
+        it('should handle paragraph strategy with special token splitter for non-ascii characters', async () => {
+          const input = ['hello', 'world', '👋🏻', ' ¦']
+          const result = await Array.fromAsync(
+            split(input, {
+              chunkSize: 2,
+              splitter: tokenAsciiSplitter // Note: `tokenSplitter` will throw an error.
+            })
+          )
+          assert.deepStrictEqual(result, [
+            { text: ['hello', 'world'], start: 0, end: 10 },
+            { text: [' '], start: 14, end: 15 } // Ommited the "👋🏻" (10-14) and "¦"
           ])
         })
 
