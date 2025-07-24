@@ -2,6 +2,15 @@
 
 A JavaScript library for splitting text into configurable chunks with overlap support.
 
+## Features
+
+- 📖 **Paragraph-Aware Chunking**: Respects document structure while maintaining token limits
+- 🧠 **LLM Optimized**: Designed for vectorization with tiktoken and other tokenizers
+- 📊 **Rich Metadata**: Complete character position tracking for all chunks
+- ⚡ **High Performance**: Single pass greedy algorithms for optimized processing
+- 🎨 **Flexible Input**: Supports strings, arrays, and custom tokenization
+- 📝 **TypeScript**: Full type safety with comprehensive interfaces
+
 ## Installation
 
 ```sh
@@ -56,7 +65,10 @@ Returns an array of chunk objects with the following structure:
 ```js
 const text = 'Hello world! This is a test.'
 const chunks = split(text)
-// Splits into character-level chunks of 512 characters
+
+// =>
+// Splits into character-level chunks of 512 characters, which is just the original string here ;)
+;[{ text: 'Hello world! This is a test.', start: 0, end: 28 }]
 ```
 
 **Custom chunk size and overlap:**
@@ -115,6 +127,9 @@ const chunks = split(texts, {
 
 By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk, but not splitting up paragraphs unless the paragraph of tokens is at the start of the chunk, in which case we then split across as many subsequent chunks as we need to. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
 
+<details>
+  <summary>See example...</summary>
+
 ```js
 // Mix of paragraphs across array items and within items with `\n\n` marker.
 const texts = [
@@ -160,6 +175,8 @@ const chunks = split(text10, {
 ]
 ```
 
+</details>
+
 ### `getChunk(input, start, end)`
 
 Extracts a specific chunk of text from the original input based on start and end positions. For array `input` the positions are treated as if all elements in the array were concatenated into a single long string.
@@ -197,6 +214,8 @@ const chunk = getChunk(texts, 0, 16)
 
 You can create custom splitter functions for different tokenization strategies:
 
+#### Sentences
+
 Split by sentences using a regular expression.
 
 ```js
@@ -211,7 +230,12 @@ const chunks = split(text, {
 ;[{ text: 'Hello world! This is a test', start: 0, end: 27 }]
 ```
 
+#### TikToken
+
 Split using the TikToken tokenizer with the commonly used `text-embedding-ada-002` model.
+
+<details>
+  <summary>See example...</summary>
 
 ```js
 import tiktoken from 'tiktoken'
@@ -245,9 +269,14 @@ tokenizer.free()
 ]
 ```
 
+</details>
+
 ### Working with Overlaps
 
 Chunk overlap is useful for maintaining context between chunks:
+
+<details>
+  <summary>See example...</summary>
 
 ```js
 const text = 'This is a very long document that needs to be split into chunks.'
@@ -267,6 +296,29 @@ const chunks = split(text, {
   { text: 'needs to be split into chunks.', start: 34, end: 64 }
 ]
 ```
+
+</details>
+
+### Multibyte / Unicode Strings
+
+Splitting on multibyte / unicode strings can cause malformed chunks and internal errors to be thrown if `start`/`end` token or chunk positions can't be determined. We are presently tracking this in [an issue](https://github.com/nearform/llm-splitter/issues/36).
+
+If your input has these characters, at present we recommend pre-processing and stripping them out before calling `split` like:
+
+```js
+const input = 'Hello there! 👋🏻'
+const removeNonAscii = str => str.replace(/[^\x00-\x7F]/g, '')
+const strippedInput = removeNonAscii(input) // => "Hello there! "
+
+const chunks = split(strippedInput)
+for (const { start, end } of chunks) {
+  // Use `strippedInput`, not `input` for the correct string retrieval!
+  const retrieved = getChunk(strippedInput, start, end)
+  console.log('Retrieved chunk:', { retrieved, start, end })
+}
+```
+
+Note then that calls with `start` and `end` to `getChunk` must use your processed/stripped input and not the original input!
 
 ## License
 

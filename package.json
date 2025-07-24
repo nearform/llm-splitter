@@ -11,15 +11,15 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "check": "npm run lint && npm run test:unit && npm run check-format",
+    "check": "npm run lint && npm run test && npm run check-format",
     "check-format": "prettier --check .",
     "check-lint": "eslint .",
     "format": "prettier --write . && eslint --cache --fix .",
     "lint": "eslint .",
     "prebuild": "rm -rf dist",
     "prepare": "husky",
-    "test": "npm run test:unit",
-    "test:unit": "node --loader ts-node/esm/transpile-only --test test/get-chunk.test.ts test/split.test.ts test/index.test.ts"
+    "test": "node --loader ts-node/esm/transpile-only --test",
+    "test:only": "npm run test -- --test-only"
   },
   "repository": {
     "type": "git",
