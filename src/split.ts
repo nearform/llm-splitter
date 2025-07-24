@@ -171,9 +171,9 @@ class ChunkParts {
     return this.parts.length
   }
 
-  push(chunk: Chunk): void {
-    this.parts.push(chunk)
-    if (chunk.isBoundary) this.lastBoundaryPart = chunk
+  push(part: Chunk): void {
+    this.parts.push(part)
+    if (part.isBoundary) this.lastBoundaryPart = part
   }
 
   hasUnEmittedParts(): boolean {
