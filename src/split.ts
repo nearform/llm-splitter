@@ -251,7 +251,7 @@ export function split(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter = text => text.split(''),
+    splitter = (text: string): string[] => [...text],
     chunkStrategy = ChunkStrategy.character
   }: SplitOptions = {}
 ) {

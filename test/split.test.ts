@@ -7,7 +7,7 @@ import type { Chunk } from '../src/split.js'
 import { ChunkStrategy } from '../src/split.js'
 
 // Helpers
-const charSplitter = (text: string): string[] => text.split('')
+const charSplitter = (text: string): string[] => [...text]
 const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
 
 const td = new TextDecoder()
