@@ -1,11 +1,14 @@
 {
-  "name": "@nearform/llm-splitter",
+  "name": "llm-splitter",
   "private": false,
   "version": "0.1.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "check": "npm run lint && npm run test:unit && npm run check-format",
@@ -22,7 +25,13 @@
     "type": "git",
     "url": "git+https://github.com/nearform/llm-splitter.git"
   },
-  "keywords": [],
+  "keywords": [
+    "llm",
+    "splitter",
+    "chunking",
+    "text",
+    "vectorization"
+  ],
   "author": "Ryan Roemer <ryan.roemer@nearform.com>",
   "license": "MIT",
   "bugs": {
