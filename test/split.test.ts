@@ -2,12 +2,7 @@
 import { describe, it, after, before } from 'node:test'
 import assert from 'node:assert'
 import tiktoken, { type Tiktoken } from 'tiktoken'
-import {
-  splitToParts,
-  split,
-  ChunkStrategy,
-  type Chunk
-} from '../src/split.js'
+import { splitToParts, split, ChunkStrategy, type Chunk } from '../src/split.js'
 
 // Helpers
 const charSplitter = (text: string): string[] => [...text]

@@ -271,6 +271,8 @@ tokenizer.free()
 
 </details>
 
+#### TikToken
+
 ### Working with Overlaps
 
 Chunk overlap is useful for maintaining context between chunks:
@@ -298,6 +300,27 @@ const chunks = split(text, {
 ```
 
 </details>
+
+### Multibyte / Unicode Strings
+
+Splitting on multibyte / unicode strings can cause malformed chunks and internal errors to be thrown if `start`/`end` token or chunk positions can't be determined. We are presently tracking this in [an issue](https://github.com/nearform/llm-splitter/issues/36).
+
+If your input has these characters, at present we recommend pre-processing and stripping them out before calling `split` like:
+
+```js
+const input = 'Hello there! 👋🏻'
+const removeNonAscii = str => str.replace(/[^\x00-\x7F]/g, '')
+const strippedInput = removeNonAscii(input) // => "Hello there! "
+
+const chunks = split(strippedInput)
+for (const { start, end } of chunks) {
+  // Use `strippedInput`, not `input` for the correct string retrieval!
+  const retrieved = getChunk(strippedInput, start, end)
+  console.log('Retrieved chunk:', { retrieved, start, end })
+}
+```
+
+Note then that calls with `start` and `end` to `getChunk` must use your processed/stripped input and not the original input!
 
 ## License
 
