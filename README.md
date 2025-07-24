@@ -1,350 +1,273 @@
-# @nearform/llm-chunk
+# `llm-splitter`
 
-Precision text chunking for LLM vectorization with exact token-based overlap control. Built for production use with sophisticated chunking algorithms and comprehensive metadata.
-
-## Features
-
-- 🎯 **Precise Token Control**: Exact token-based overlap with minimal variance (±10%)
-- 📖 **Paragraph-Aware Chunking**: Respects document structure while maintaining token limits
-- 🔄 **Smart Sub-Chunking**: Automatically breaks long paragraphs at optimal boundaries
-- 🧠 **LLM Optimized**: Designed for vectorization with tiktoken and other tokenizers
-- 📊 **Rich Metadata**: Complete character position tracking for all chunks
-- ⚡ **High Performance**: Binary search algorithms and optimized processing
-- 🎨 **Flexible Input**: Supports strings, arrays, and custom tokenization
-- 💾 **Memory Efficient**: Generator-based processing for large documents
-- 📝 **TypeScript**: Full type safety with comprehensive interfaces
+A JavaScript library for splitting text into configurable chunks with overlap support.
 
 ## Installation
 
-```bash
-npm install @nearform/llm-chunk
+```sh
+$ npm install llm-splitter
 ```
 
-## Quick Start
+## Usage
 
-```typescript
-import split from '@nearform/llm-chunk'
-
-const document = `Introduction paragraph with important context.
-
-Main content paragraph that contains detailed information and analysis.
-
-Conclusion paragraph with key takeaways and summary.`
-
-// Paragraph-based chunking with precise overlap
-const chunks = split(document, {
-  chunkSize: 100, // Maximum 100 tokens per chunk
-  chunkOverlap: 10, // Exactly 10 tokens overlap between chunks
-  chunkStrategy: 'paragraph'
-})
-
-console.log(
-  chunks.map(c => ({
-    text: c.text.slice(0, 50) + '...',
-    length: c.text.length,
-    position: `${c.start}-${c.end}`
-  }))
-)
+```js
+import { split, getChunk } from 'llm-splitter'
 ```
 
-## API Reference
+## API
 
-### Core Functions
+### `split(input, options)`
 
-#### `split(text, options?): ChunkResult[]`
+Splits text into chunks based on a custom splitter function.
 
-Splits text into chunks with metadata. Returns all chunks as an array.
+Each chunk contains positional data (`start` and `end`) that may be used to separately retrieve the chunk string (or array of strings) from those arguments alone via `getChunk()`. The purpose of this pairing is for the common scenario of wanting to store embeddings for a chunk in a data (e.g. `pgvector`) but not wanting to also directly store the chunk -- yet being able to get the full text of the chunk later if you have the original string input.
 
-**Parameters:**
+#### Parameters
 
-- `text`: `string | string[]` - Text to chunk
-- `options`: `SplitOptions` - Configuration options
+- `input` (string|string[]) - The text or array of texts to split
+- `options` (Object) - Configuration options
+  - `chunkSize` (number) - Maximum number of tokens per chunk (default: 512)
+  - `chunkOverlap` (number) - Number of overlapping tokens between chunks (default: 0)
+  - `splitter` (Function) - Function to split text into tokens (default: character-by-character)
 
-**Returns:** `ChunkResult[]` - Array of chunks with text and position metadata
+Notes:
 
-#### `iterateChunks(text, options?): Generator<ChunkResult>`
+- `chunkSize` must be a positive integer ≥ 1
+- `chunkOverlap` must be a non-negative integer ≥ 0
+- `chunkOverlap` must be less than `chunkSize`
+- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`).
 
-Memory-efficient streaming chunker. Yields chunks one at a time.
+#### Returns
 
-**Parameters:**
+Returns an array of chunk objects with the following structure:
 
-- `text`: `string | string[]` - Text to chunk
-- `options`: `SplitOptions` - Configuration options
-
-**Returns:** `Generator<ChunkResult>` - Lazy chunk generator
-
-#### `getChunk(text, start?, end?): string | string[]`
-
-Extracts text by character positions. Handles both strings and arrays.
-
-**Parameters:**
-
-- `text`: `string | string[]` - Source text
-- `start`: `number` - Start position (default: 0)
-- `end`: `number` - End position (default: text.length)
-
-**Returns:** Extracted text maintaining input type
-
-### Types
-
-#### `SplitOptions`
-
-```typescript
-interface SplitOptions {
-  /** Maximum tokens per chunk (default: 512) */
-  chunkSize?: number
-
-  /** Exact tokens to overlap between chunks (default: 0) */
-  chunkOverlap?: number
-
-  /** Custom tokenization function (default: character-based) */
-  splitter?: (text: string) => string[]
-
-  /** Chunking strategy - currently only 'paragraph' supported (default: 'paragraph') */
-  chunkStrategy?: 'paragraph'
+```js
+{
+  text: string | string[], // The chunk text
+  start: number,           // Start position in the original text
+  end: number              // End position in the original text
 }
 ```
 
-#### `ChunkResult`
+#### Examples
 
-```typescript
-interface ChunkResult {
-  /** Chunked text content (string for single input, string[] for array input) */
-  text: string | string[]
+**Basic usage with default options:**
 
-  /** Starting character position in original text */
-  start: number
-
-  /** Ending character position in original text */
-  end: number
-}
+```js
+const text = 'Hello world! This is a test.'
+const chunks = split(text)
+// Splits into character-level chunks of 512 characters
 ```
 
-## Usage Examples
+**Custom chunk size and overlap:**
 
-### Tiktoken Integration (Recommended)
-
-```typescript
-import split from '@nearform/llm-chunk'
-import { get_encoding } from 'tiktoken'
-
-// Use GPT tokenizer for accurate LLM token counting
-const encoding = get_encoding('gpt2')
-const tokenizer = (text: string) => {
-  const tokens = encoding.encode(text)
-  return tokens.map(token => encoding.decode([token]))
-}
-
-const chunks = split(longDocument, {
-  chunkSize: 100, // 100 actual LLM tokens
-  chunkOverlap: 10, // Exactly 10 tokens overlap
-  splitter: tokenizer
-})
-
-// Clean up encoding when done
-encoding.free()
-```
-
-### Word-Based Chunking
-
-```typescript
-import split from '@nearform/llm-chunk'
-
-const wordTokenizer = (text: string) =>
-  text.split(/\s+/).filter(word => word.length > 0)
-
-const chunks = split(document, {
-  chunkSize: 50, // 50 words per chunk
-  chunkOverlap: 5, // 5 words overlap
-  splitter: wordTokenizer
-})
-```
-
-### Processing Large Documents
-
-```typescript
-import { iterateChunks } from '@nearform/llm-chunk'
-
-// Memory-efficient processing
-for (const chunk of iterateChunks(hugeDocument, {
-  chunkSize: 200,
-  chunkOverlap: 20
-})) {
-  // Process one chunk at a time
-  await vectorizeChunk(chunk.text)
-}
-```
-
-### Array Input Processing
-
-```typescript
-import split from '@nearform/llm-chunk'
-
-const documents = [
-  'First document content...',
-  'Second document content...',
-  'Third document content...'
-]
-
-const chunks = split(documents, {
-  chunkSize: 100,
-  chunkOverlap: 10
-})
-
-// Each chunk.text will be a string array
-console.log(chunks[0].text) // ['chunk content from first doc']
-```
-
-## Advanced Features
-
-### Precise Token-Based Overlap
-
-The chunking algorithm provides exact token control:
-
-```typescript
+```js
+const text = 'Hello world! This is a test.'
 const chunks = split(text, {
-  chunkSize: 100,
-  chunkOverlap: 10, // Exactly 10 tokens, not "approximately"
-  splitter: tiktoken_tokenizer
+  chunkSize: 10,
+  chunkOverlap: 2
 })
 
-// Overlap variance is typically ±1-2 tokens due to tokenizer boundaries
-// Much more precise than paragraph-boundary-based approaches
+// =>
+;[
+  { text: 'Hello worl', start: 0, end: 10 },
+  { text: 'rld! This ', start: 8, end: 18 },
+  { text: 's is a tes', start: 16, end: 26 },
+  { text: 'est.', start: 24, end: 28 }
+]
 ```
 
-### Automatic Sub-Paragraph Chunking
+**Word-based splitting:**
 
-Long paragraphs are automatically broken while maintaining overlap:
-
-```typescript
-const longParagraph = 'Very long paragraph that exceeds chunk size...'
-
-const chunks = split(longParagraph, {
-  chunkSize: 50,
-  chunkOverlap: 5,
-  chunkStrategy: 'paragraph'
+```js
+const text = 'Hello world! This is a test.'
+const chunks = split(text, {
+  chunkSize: 3,
+  chunkOverlap: 1,
+  splitter: text => text.split(/\s+/)
 })
 
-// Results in multiple sub-chunks with 5-token overlap between each
+// =>
+;[
+  { text: 'Hello world! This', start: 0, end: 17 },
+  { text: 'This is a', start: 13, end: 22 },
+  { text: 'a test.', start: 21, end: 28 }
+]
 ```
 
-### Custom Tokenization Strategies
+**Array of strings:**
 
-```typescript
-// Sentence-based chunking
-const sentenceTokenizer = (text: string) =>
-  text.split(/[.!?]+/).filter(s => s.trim().length > 0)
+```js
+const texts = ['Hello world!', 'This is a test.']
+const chunks = split(texts, {
+  chunkSize: 5,
+  splitter: text => text.split(' ')
+})
 
-// Character-based (default)
-const charTokenizer = (text: string) => text.split('')
-
-// Custom neural tokenizer
-const neuralTokenizer = (text: string) => yourTokenizer.encode(text)
+// =>
+;[
+  { text: ['Hello world!', 'This is a'], start: 0, end: 21 },
+  { text: ['test.'], start: 22, end: 27 }
+]
 ```
 
-## Key Algorithm Features
+**Paragraph chunking**
 
-### Token-First Design
+By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk, but not splitting up paragraphs unless the paragraph of tokens is at the start of the chunk, in which case we then split across as many subsequent chunks as we need to. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
 
-- **Precise Overlap**: Extracts exact token count from previous chunks
-- **Boundary Breaking**: Willing to break paragraph boundaries for precision
-- **Size Accounting**: Includes overlap tokens in chunk size calculations
-- **Minimal Variance**: Typically ±10% of requested overlap (vs 500%+ in naive approaches)
+```js
+// Mix of paragraphs across array items and within items with `\n\n` marker.
+const texts = [
+  'Who has seen the wind?\n\nNeither I nor you.',
+  'But when the leaves hang trembling,',
+  'The wind is passing through.',
+  'Who has seen the wind?\n\nNeither you nor I.',
+  'But when the trees bow down their heads,',
+  'The wind is passing by.'
+]
+const chunks = split(text10, {
+  chunkSize: 20,
+  chunkOverlap: 2,
+  chunkStrategy: 'paragraph',
+  splitter: text => text.split(/\s+/)
+})
 
-### Smart Paragraph Handling
-
-- **Greedy Expansion**: Fits maximum complete paragraphs per chunk
-- **Auto Sub-chunking**: Breaks oversized paragraphs at token boundaries
-- **Context Preservation**: Maintains overlap across paragraph breaks
-- **Position Tracking**: Accurate character positions throughout
-
-### Performance Optimizations
-
-- **Binary Search**: Efficient chunk boundary detection
-- **Minimal Copying**: Optimized string operations
-- **Generator Support**: Lazy evaluation for large datasets
-- **Memory Efficient**: Constant memory usage regardless of input size
-
-## Behavior Notes
-
-- **Overlap Precision**: Achieves ±1-2 token variance for most tokenizers
-- **Paragraph Respect**: Preserves paragraph boundaries when possible
-- **Automatic Fallback**: Breaks boundaries when necessary for size limits
-- **Position Accuracy**: Character positions remain accurate after overlap
-- **Forward Progress**: Guarantees advancement even with edge cases
-
-## Migration from v0.x
-
-The overlap algorithm was completely redesigned for precision:
-
-**Before (v0.x):**
-
-```typescript
-// Imprecise paragraph-boundary-based overlap
-chunkOverlap: 10 // Could result in 50+ token overlap
+// =>
+;[
+  {
+    text: [
+      'Who has seen the wind?\n\nNeither I nor you.',
+      'But when the leaves hang trembling,',
+      'The wind is passing through.'
+    ],
+    start: 0,
+    end: 105
+  },
+  {
+    text: [
+      'passing through.',
+      'Who has seen the wind?\n\nNeither you nor I.',
+      'But when the trees bow down their heads,'
+    ],
+    start: 89,
+    end: 187
+  },
+  {
+    text: ['their heads,', 'The wind is passing by.'],
+    start: 175,
+    end: 210
+  }
+]
 ```
 
-**After (v1.x):**
+### `getChunk(input, start, end)`
 
-```typescript
-// Precise token-based overlap
-chunkOverlap: 10 // Results in exactly 10-12 token overlap
+Extracts a specific chunk of text from the original input based on start and end positions. For array `input` the positions are treated as if all elements in the array were concatenated into a single long string.
+
+Note that for arrays, the returned result will be an array and that the first and/or last element of the array may be a substring of that array item's text.
+
+#### Parameters
+
+- `input` (string|string[]) - The original input text or array of texts
+- `start` (number) - Start position in the original text
+- `end` (number) - End position in the original text
+
+#### Returns
+
+- `string` - For single string input
+- `string[]` - For array of strings input
+
+#### Examples
+
+```js
+const text = 'Hello world! This is a test.'
+const chunk = getChunk(text, 0, 12)
+// =>
+;('Hello world!')
+
+const texts = ['Hello world!', 'This is a test.']
+const chunk = getChunk(texts, 0, 16)
+// =>
+;['Hello world!', 'This']
 ```
 
-Update your expectations for more precise overlap control.
+## Advanced Usage
 
-## Performance
+### Custom Splitter Functions
 
-Optimized for production use with:
+You can create custom splitter functions for different tokenization strategies:
 
-- **Sub-linear complexity** for most chunking operations
-- **Constant memory** usage with generator-based processing
-- **Minimal allocations** through optimized string handling
-- **Binary search** for efficient boundary detection
+Split by sentences using a regular expression.
 
-Benchmark: ~1000 chunks/second for typical documents on modern hardware.
+```js
+// Sentence-based splitting
+const sentenceSplitter = text => text.split(/[.!?]+/)
+const chunks = split(text, {
+  chunkSize: 5,
+  splitter: sentenceSplitter
+})
 
-## Testing
-
-```bash
-npm test        # Run all tests
-npm run build   # Build TypeScript
-npm run lint    # Check code style
+// =>
+;[{ text: 'Hello world! This is a test', start: 0, end: 27 }]
 ```
 
-The library includes 67+ comprehensive tests covering:
+Split using the TikToken tokenizer with the commonly used `text-embedding-ada-002` model.
 
-- Tiktoken integration and real-world scenarios
-- Edge cases and boundary conditions
-- Overlap precision validation
-- Performance regression tests
+```js
+import tiktoken from 'tiktoken'
 
-## Contributing
+// Create a tokenizer for a specific model
+const tokenizer = tiktoken.encoding_for_model('text-embedding-ada-002')
+const td = new TextDecoder()
 
-We welcome contributions! Please:
+// Create a token splitter function
+const tokenSplitter = text =>
+  Array.from(tokenizer.encode(text)).map(token =>
+    td.decode(tokenizer.decode([token]))
+  )
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+const text = 'Hello world! This is a test.'
+const chunks = split(text, {
+  chunkSize: 3,
+  chunkOverlap: 1,
+  splitter: tokenSplitter
+})
 
-For major changes, please open an issue first to discuss the approach.
+// Don't forget to free the tokenizer when done
+tokenizer.free()
 
-## Development Philosophy
+// =>
+;[
+  { text: 'Hello world!', start: 0, end: 12 },
+  { text: '! This is', start: 11, end: 20 },
+  { text: ' is a test', start: 17, end: 27 },
+  { text: ' test.', start: 22, end: 28 }
+]
+```
 
-This project demonstrates modern AI-assisted development:
+### Working with Overlaps
 
-- **GitHub Copilot**: Code generation and completion
-- **Claude Sonnet**: Architecture design and optimization
-- **Human oversight**: Quality control and integration
+Chunk overlap is useful for maintaining context between chunks:
 
-The result is production-ready code with comprehensive testing and documentation.
+```js
+const text = 'This is a very long document that needs to be split into chunks.'
+const chunks = split(text, {
+  chunkSize: 10,
+  chunkOverlap: 3,
+  splitter: text => text.split(' ')
+})
+// Each chunk will share 3 words with the previous chunk
+// =>
+;[
+  {
+    text: 'This is a very long document that needs to be',
+    start: 0,
+    end: 45
+  },
+  { text: 'needs to be split into chunks.', start: 34, end: 64 }
+]
+```
 
 ## License
 
-MIT License - see LICENSE file for details.
-
----
-
-**Production Ready**: Used in LLM vectorization pipelines processing millions of documents daily.
+MIT

@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
     "declaration": true,
-    "lib": ["ES2022"],
+    "lib": ["ESNext"],
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "outDir": "./dist",
     "sourceMap": true,
     "strict": true,
-    "target": "ES2022"
+    "target": "ESNext"
   },
   "exclude": ["node_modules/**/*"],
-  "include": ["index.ts", "src/**/*.ts", "test/**/*.ts", "./package.json"]
+  "include": ["src/**/*.ts"]
 }
