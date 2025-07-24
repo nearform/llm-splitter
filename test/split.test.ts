@@ -11,15 +11,10 @@ const charSplitter = (text: string): string[] => [...text]
 const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
 
 const td = new TextDecoder()
-const tokenSplitter = (text: string): string[] => {
-  const tokens = tokenizer.encode(text)
-  const tokenStrs: string[] = []
-  for (let i = 0; i < tokens.length; i++) {
-    tokenStrs.push(td.decode(tokenizer.decode([tokens[i]] as any)))
-  }
-
-  return tokenStrs
-}
+const tokenSplitter = (text: string): string[] =>
+  Array.from(tokenizer.encode(text)).map(token =>
+    td.decode(tokenizer.decode([token] as any))
+  )
 
 // Tests
 let tokenizer: Tiktoken

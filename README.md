@@ -221,15 +221,10 @@ const tokenizer = tiktoken.encoding_for_model('text-embedding-ada-002')
 const td = new TextDecoder()
 
 // Create a token splitter function
-const tokenSplitter = text => {
-  const tokens = tokenizer.encode(text)
-  const tokenStrs = []
-  for (let i = 0; i < tokens.length; i++) {
-    tokenStrs.push(td.decode(tokenizer.decode([tokens[i]])))
-  }
-
-  return tokenStrs
-}
+const tokenSplitter = text =>
+  Array.from(tokenizer.encode(text)).map(token =>
+    td.decode(tokenizer.decode([token]))
+  )
 
 const text = 'Hello world! This is a test.'
 const chunks = split(text, {
