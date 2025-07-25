@@ -26,17 +26,15 @@ describe('split', () => {
   })
 
   describe('splitToParts', () => {
-    it('should yield nothing for empty input array', async () => {
+    it('should yield nothing for empty input array', () => {
       const input: string[] = []
       const expected: Chunk[] = []
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, charSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
-    it('should split with default splitter (char split)', async () => {
+    it('should split with default splitter (char split)', () => {
       const input: string[] = ['hello world!']
       const expected: Chunk[] = [
         { text: 'h', start: 0, end: 1 },
@@ -52,27 +50,23 @@ describe('split', () => {
         { text: 'd', start: 10, end: 11 },
         { text: '!', start: 11, end: 12 }
       ]
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, charSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
-    it('should split with whitespace splitter', async () => {
+    it('should split with whitespace splitter', () => {
       const input: string[] = ['hello world!']
       const expected: Chunk[] = [
         { text: 'hello', start: 0, end: 5 },
         { text: 'world!', start: 6, end: 12 }
       ]
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, whitespaceSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, whitespaceSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
-    it('should split with tiktoken splitter', async () => {
+    it('should split with tiktoken splitter', () => {
       const input: string[] = ['hello world! ']
       const expected: Chunk[] = [
         { text: 'hello', start: 0, end: 5 },
@@ -80,14 +74,12 @@ describe('split', () => {
         { text: '!', start: 11, end: 12 },
         { text: ' ', start: 12, end: 13 }
       ]
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, tokenSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, tokenSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
-    it('should split multiple items with default splitter', async () => {
+    it('should split multiple items with default splitter', () => {
       const input: string[] = ['foo bar', 'baz! qux']
       const expected: Chunk[] = [
         { text: 'f', start: 0, end: 1 },
@@ -106,9 +98,7 @@ describe('split', () => {
         { text: 'u', start: 13, end: 14 },
         { text: 'x', start: 14, end: 15 }
       ]
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, charSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
@@ -122,9 +112,7 @@ describe('split', () => {
         { text: 'qux', start: 13, end: 16 }
       ]
 
-      let result = await Array.fromAsync(
-        splitToParts(input, whitespaceSplitter)
-      )
+      let result = splitToParts(input, whitespaceSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
@@ -139,9 +127,7 @@ describe('split', () => {
         { text: ' qu', start: 11, end: 14 },
         { text: 'x', start: 14, end: 15 }
       ]
-      const result: Chunk[] = await Array.fromAsync(
-        splitToParts(input, tokenSplitter)
-      )
+      const result: Chunk[] = splitToParts(input, tokenSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
@@ -205,12 +191,10 @@ describe('split', () => {
           'This is the split test string. Of words. ',
           ' '
         ]
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 5,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 5,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello world! ', 'This is the'], start: 1, end: 25 },
           { text: ['split test string. Of words.'], start: 26, end: 54 }
@@ -220,35 +204,31 @@ describe('split', () => {
       // Base cases
       it('should handle empty string input', async () => {
         const input: string = ''
-        const result: Chunk[] = await Array.fromAsync(split(input))
+        const result: Chunk[] = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle empty array input', async () => {
         const input: string[] = []
-        const result: Chunk[] = await Array.fromAsync(split(input))
+        const result: Chunk[] = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle array with empty strings', async () => {
         const input: string[] = ['', '', '']
-        const result: Chunk[] = await Array.fromAsync(split(input))
+        const result: Chunk[] = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle single character with default splitter', async () => {
         const input: string = 'a'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 1 })
         assert.deepStrictEqual(result, [{ text: 'a', start: 0, end: 1 }])
       })
 
       it('should handle single word with default splitter', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo', start: 3, end: 5 }
@@ -258,7 +238,7 @@ describe('split', () => {
       // Parameter permutations
       it('should use default chunkSize when not specified', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(split(input))
+        const result: Chunk[] = split(input)
         // Default chunkSize is 512, so all text should be in one chunk
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 }
@@ -267,9 +247,7 @@ describe('split', () => {
 
       it('should use default splitter when not specified', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 1 })
         // Default splitter is char split
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
@@ -282,25 +260,19 @@ describe('split', () => {
 
       it('should handle chunkSize larger than input', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 10 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 10 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkSize equal to input length', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 5 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 5 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkSize smaller than input length', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo ', start: 3, end: 6 },
@@ -312,12 +284,10 @@ describe('split', () => {
       // Different input types
       it('should handle string input with whitespace splitter', async () => {
         const input: string = 'hello world test'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 },
           { text: 'test', start: 12, end: 16 }
@@ -326,12 +296,10 @@ describe('split', () => {
 
       it('should handle array input with whitespace splitter', async () => {
         const input: string[] = ['hello world', 'test string']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello world'], start: 0, end: 11 },
           { text: ['test string'], start: 11, end: 22 }
@@ -340,12 +308,10 @@ describe('split', () => {
 
       it('should handle array with single string', async () => {
         const input: string[] = ['hello world']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 3,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 3,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello world'], start: 0, end: 11 }
         ])
@@ -353,12 +319,10 @@ describe('split', () => {
 
       it('should handle array with multiple strings', async () => {
         const input: string[] = ['hello', 'world', 'test']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: charSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: charSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['he'], start: 0, end: 2 },
           { text: ['ll'], start: 2, end: 4 },
@@ -373,31 +337,25 @@ describe('split', () => {
       // Edge cases
       it('should handle input with only whitespace', async () => {
         const input: string = '   '
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle input with only whitespace in array', async () => {
         const input: string[] = ['   ', '  ']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle chunkSize of 1', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 1 })
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
           { text: 'e', start: 1, end: 2 },
@@ -464,9 +422,7 @@ describe('split', () => {
         const input: string = 'hello'
         await assert.rejects(
           async () => {
-            await Array.fromAsync(
-              split(input, { chunkSize: 5, chunkOverlap: -1 })
-            )
+            split(input, { chunkSize: 5, chunkOverlap: -1 })
           },
           {
             name: 'Error',
@@ -479,9 +435,7 @@ describe('split', () => {
         const input: string = 'hello'
         await assert.rejects(
           async () => {
-            await Array.fromAsync(
-              split(input, { chunkSize: 5, chunkOverlap: 1.5 })
-            )
+            split(input, { chunkSize: 5, chunkOverlap: 1.5 })
           },
           {
             name: 'Error',
@@ -494,9 +448,7 @@ describe('split', () => {
         const input: string = 'hello'
         await assert.rejects(
           async () => {
-            await Array.fromAsync(
-              split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any })
-            )
+            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any })
           },
           {
             name: 'Error',
@@ -510,9 +462,7 @@ describe('split', () => {
         const input: string = 'hello'
         await assert.rejects(
           async () => {
-            await Array.fromAsync(
-              split(input, { chunkSize: 5, chunkOverlap: 5 })
-            )
+            split(input, { chunkSize: 5, chunkOverlap: 5 })
           },
           {
             name: 'Error',
@@ -525,9 +475,7 @@ describe('split', () => {
         const input: string = 'hello'
         await assert.rejects(
           async () => {
-            await Array.fromAsync(
-              split(input, { chunkSize: 3, chunkOverlap: 5 })
-            )
+            split(input, { chunkSize: 3, chunkOverlap: 5 })
           },
           {
             name: 'Error',
@@ -539,12 +487,10 @@ describe('split', () => {
       // Token splitter tests
       it('should handle string input with token splitter', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: tokenSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: tokenSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 }
         ])
@@ -557,12 +503,10 @@ describe('split', () => {
           'bar baz buz',
           'what? why? howdymachina'
         ]
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: tokenSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: tokenSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello', 'world'], start: 0, end: 10 },
           { text: ['bar baz'], start: 10, end: 17 },
@@ -577,12 +521,10 @@ describe('split', () => {
       // Complex scenarios
       it('should handle mixed content with whitespace splitter', async () => {
         const input: string = 'hello   world!  test'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello   world!', start: 0, end: 14 },
           { text: 'test', start: 16, end: 20 }
@@ -591,12 +533,10 @@ describe('split', () => {
 
       it('should handle array with mixed content', async () => {
         const input: string[] = ['hello', '   world!', 'test']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello', '   world!'], start: 0, end: 14 },
           { text: ['test'], start: 14, end: 18 }
@@ -605,9 +545,7 @@ describe('split', () => {
 
       it('should handle very large chunkSize', async () => {
         const input: string = 'hello world test string'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 1000 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 1000 })
         assert.deepStrictEqual(result, [
           { text: 'hello world test string', start: 0, end: 23 }
         ])
@@ -615,12 +553,10 @@ describe('split', () => {
 
       it('should handle array boundary as token boundary', async () => {
         const input: string[] = ['hello', 'world']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 3,
-            splitter: charSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 3,
+          splitter: charSplitter
+        })
         // Should respect array boundaries
         assert.deepStrictEqual(result, [
           { text: ['hel'], start: 0, end: 3 },
@@ -635,9 +571,7 @@ describe('split', () => {
       // Basic overlap tests with char splitter
       it('should handle chunkOverlap of 1 with char splitter', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'llo', start: 2, end: 5 },
@@ -649,9 +583,7 @@ describe('split', () => {
 
       it('should handle chunkOverlap of 2 with char splitter', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 4, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 4, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'hell', start: 0, end: 4 },
           { text: 'llo ', start: 2, end: 6 },
@@ -663,9 +595,7 @@ describe('split', () => {
 
       it('should handle chunkOverlap equal to chunkSize - 1', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'ell', start: 1, end: 4 },
@@ -682,13 +612,11 @@ describe('split', () => {
       // Overlap with whitespace splitter
       it('should handle chunkOverlap with whitespace splitter', async () => {
         const input: string = 'hello world test string'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 },
           { text: 'world test', start: 6, end: 16 },
@@ -698,13 +626,11 @@ describe('split', () => {
 
       it('should handle chunkOverlap with whitespace splitter and multiple spaces', async () => {
         const input: string = 'hello   world  test'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello   world', start: 0, end: 13 },
           { text: 'world  test', start: 8, end: 19 }
@@ -714,9 +640,7 @@ describe('split', () => {
       // Overlap with array inputs
       it('should handle chunkOverlap with array input and char splitter', async () => {
         const input: string[] = ['hello', 'world']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: ['hel'], start: 0, end: 3 },
           { text: ['llo'], start: 2, end: 5 },
@@ -728,13 +652,11 @@ describe('split', () => {
 
       it('should handle chunkOverlap with array input and whitespace splitter', async () => {
         const input: string[] = ['hello world', 'test string']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello world'], start: 0, end: 11 },
           { text: ['world', 'test'], start: 6, end: 15 },
@@ -745,9 +667,7 @@ describe('split', () => {
       // Edge cases for overlap
       it('should handle chunkOverlap of 0 (default behavior)', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 0 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 0 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo ', start: 3, end: 6 },
@@ -758,34 +678,26 @@ describe('split', () => {
 
       it('should handle chunkOverlap with input smaller than chunkSize', async () => {
         const input: string = 'hi'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 5, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 5, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [{ text: 'hi', start: 0, end: 2 }])
       })
 
       it('should handle chunkOverlap with input equal to chunkSize', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 5, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 5, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkOverlap with single character input', async () => {
         const input: string = 'a'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [{ text: 'a', start: 0, end: 1 }])
       })
 
       // Complex overlap scenarios
       it('should handle large chunkOverlap with small chunkSize', async () => {
         const input: string = 'abcdefghij'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'abc', start: 0, end: 3 },
           { text: 'bcd', start: 1, end: 4 },
@@ -800,21 +712,17 @@ describe('split', () => {
 
       it('should handle chunkOverlap with whitespace-only input', async () => {
         const input: string = '   '
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle chunkOverlap with array containing empty strings', async () => {
         const input: string[] = ['', 'hello', '']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: ['hel'], start: 0, end: 3 },
           { text: ['llo'], start: 2, end: 5 }
@@ -824,13 +732,11 @@ describe('split', () => {
       // Token splitter overlap tests
       it('should handle chunkOverlap with token splitter', async () => {
         const input: string = 'hello world test'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: tokenSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: tokenSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 },
           { text: ' world test', start: 5, end: 16 }
@@ -839,13 +745,11 @@ describe('split', () => {
 
       it('should handle chunkOverlap with token splitter and array input', async () => {
         const input: string[] = ['hello', 'world']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: tokenSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: tokenSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello', 'world'], start: 0, end: 10 }
         ])
@@ -854,9 +758,7 @@ describe('split', () => {
       // Boundary conditions
       it('should handle chunkOverlap with chunkSize of 1', async () => {
         const input: string = 'hello'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 1, chunkOverlap: 0 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 1, chunkOverlap: 0 })
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
           { text: 'e', start: 1, end: 2 },
@@ -868,9 +770,10 @@ describe('split', () => {
 
       it('should handle chunkOverlap with very large chunkSize', async () => {
         const input: string = 'hello world'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 100, chunkOverlap: 10 })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 100,
+          chunkOverlap: 10
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 }
         ])
@@ -879,13 +782,11 @@ describe('split', () => {
       // Mixed content scenarios
       it('should handle chunkOverlap with mixed content and whitespace splitter', async () => {
         const input: string = 'hello   world!  test'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello   world!', start: 0, end: 14 },
           { text: 'world!  test', start: 8, end: 20 }
@@ -894,13 +795,11 @@ describe('split', () => {
 
       it('should handle chunkOverlap with array containing mixed content', async () => {
         const input: string[] = ['hello', '   world!', 'test']
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: ['hello', '   world!'], start: 0, end: 14 },
           { text: ['world!', 'test'], start: 8, end: 18 }
@@ -910,9 +809,7 @@ describe('split', () => {
       // Overlap behavior verification
       it('should verify overlap parts are correctly carried forward', async () => {
         const input: string = 'abcdefghijklmnop'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 4, chunkOverlap: 2 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 4, chunkOverlap: 2 })
         // Verify that each chunk (except first) starts with the last 2 chars of previous chunk
         for (let i = 1; i < result.length; i++) {
           const prevChunk = result[i - 1]
@@ -931,9 +828,7 @@ describe('split', () => {
 
       it('should handle chunkOverlap with unicode characters', async () => {
         const input: string = 'héllö wörld'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 3, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: 'hél', start: 0, end: 3 },
           { text: 'llö', start: 2, end: 5 },
@@ -946,9 +841,7 @@ describe('split', () => {
       // Stress tests
       it('should handle chunkOverlap with very small chunkSize and large overlap', async () => {
         const input: string = 'abcdefghijklmnopqrstuvwxyz'
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, { chunkSize: 2, chunkOverlap: 1 })
-        )
+        const result: Chunk[] = split(input, { chunkSize: 2, chunkOverlap: 1 })
         // Should have many overlapping chunks
         assert(result.length > 10)
         // Each chunk should have exactly 2 characters
@@ -959,13 +852,11 @@ describe('split', () => {
 
       it('should handle chunkOverlap with whitespace splitter and complex spacing', async () => {
         const input: string = '  hello   world  test  string  '
-        const result: Chunk[] = await Array.fromAsync(
-          split(input, {
-            chunkSize: 2,
-            chunkOverlap: 1,
-            splitter: whitespaceSplitter
-          })
-        )
+        const result: Chunk[] = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter
+        })
         assert.deepStrictEqual(result, [
           { text: 'hello   world', start: 2, end: 15 },
           { text: 'world  test', start: 10, end: 21 },
@@ -980,9 +871,7 @@ describe('split', () => {
           const input: string = 'hello world'
           await assert.rejects(
             async () => {
-              await Array.fromAsync(
-                split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any })
-              )
+              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any })
             },
             {
               name: 'Error',
@@ -994,9 +883,10 @@ describe('split', () => {
 
         it('should accept character chunkStrategy', async () => {
           const input: string = 'hello world'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, { chunkSize: 3, chunkStrategy: 'character' })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'character'
+          })
           assert.deepStrictEqual(result, [
             { text: 'hel', start: 0, end: 3 },
             { text: 'lo ', start: 3, end: 6 },
@@ -1007,9 +897,10 @@ describe('split', () => {
 
         it('should accept paragraph chunkStrategy', async () => {
           const input: string = 'hello\n\nworld'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, { chunkSize: 3, chunkStrategy: 'paragraph' })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'paragraph'
+          })
           assert.deepStrictEqual(result, [
             { text: 'hel', start: 0, end: 3 },
             { text: 'lo', start: 3, end: 5 },
@@ -1024,21 +915,20 @@ describe('split', () => {
         it('should behave like default behavior when chunkStrategy is character', async () => {
           const input: string = 'hello world'
           const result1 = await Array.fromAsync(split(input, { chunkSize: 3 }))
-          const result2 = await Array.fromAsync(
-            split(input, { chunkSize: 3, chunkStrategy: 'character' })
-          )
+          const result2 = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'character'
+          })
           assert.deepStrictEqual(result1, result2)
         })
 
         it('should handle character strategy with whitespace splitter', async () => {
           const input: string = 'hello world test'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 2,
-              chunkStrategy: 'character',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'character',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello world', start: 0, end: 11 },
             { text: 'test', start: 12, end: 16 }
@@ -1047,13 +937,11 @@ describe('split', () => {
 
         it('should handle character strategy with array input', async () => {
           const input: string[] = ['hello', 'world']
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkStrategy: 'character',
-              splitter: charSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'character',
+            splitter: charSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: ['hel'], start: 0, end: 3 },
             { text: ['lo', 'w'], start: 3, end: 6 },
@@ -1064,13 +952,11 @@ describe('split', () => {
 
         it('should handle character strategy with chunkOverlap', async () => {
           const input: string = 'hello world'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkOverlap: 1,
-              chunkStrategy: 'character'
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkOverlap: 1,
+            chunkStrategy: 'character'
+          })
           assert.deepStrictEqual(result, [
             { text: 'hel', start: 0, end: 3 },
             { text: 'llo', start: 2, end: 5 },
@@ -1085,13 +971,11 @@ describe('split', () => {
       describe('paragraph strategy', () => {
         it('should group tokens by paragraphs', async () => {
           const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello', start: 0, end: 5 },
             { text: 'world', start: 7, end: 12 },
@@ -1101,13 +985,11 @@ describe('split', () => {
 
         it('should handle single paragraph that fits in chunk', async () => {
           const input: string = 'hello world'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 5,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 5,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello world', start: 0, end: 11 }
           ])
@@ -1115,13 +997,11 @@ describe('split', () => {
 
         it('should handle paragraph that exceeds chunk size', async () => {
           const input: string = 'hello world test string'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 2,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           // Should split across multiple chunks since paragraph is too large
           assert.deepStrictEqual(result, [
             { text: 'hello world', start: 0, end: 11 },
@@ -1132,13 +1012,11 @@ describe('split', () => {
         it('should handle multiple paragraphs with mixed sizes', async () => {
           const input: string =
             'short\n\nvery long paragraph with many words\n\nanother short'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'short', start: 0, end: 5 },
             { text: 'very long paragraph', start: 7, end: 26 },
@@ -1149,13 +1027,11 @@ describe('split', () => {
 
         it('should handle empty paragraphs', async () => {
           const input: string = 'hello\n\n\n\nworld'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello', start: 0, end: 5 },
             { text: 'world', start: 9, end: 14 }
@@ -1164,13 +1040,11 @@ describe('split', () => {
 
         it('should handle paragraphs with only whitespace', async () => {
           const input: string = 'hello\n\n   \n\nworld'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello', start: 0, end: 5 },
             { text: 'world', start: 12, end: 17 }
@@ -1179,13 +1053,11 @@ describe('split', () => {
 
         it('should handle array input with paragraph strategy', async () => {
           const input: string[] = ['hello\n\nworld', 'test\n\nstring']
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: ['hello'], start: 0, end: 5 },
             { text: ['world'], start: 7, end: 12 },
@@ -1196,13 +1068,11 @@ describe('split', () => {
 
         it('should handle paragraph strategy with char splitter', async () => {
           const input: string = 'hello\n\nworld'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkStrategy: 'paragraph',
-              splitter: charSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'paragraph',
+            splitter: charSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hel', start: 0, end: 3 },
             { text: 'lo', start: 3, end: 5 },
@@ -1213,13 +1083,11 @@ describe('split', () => {
 
         it('should handle paragraph strategy with token splitter', async () => {
           const input: string = 'hello\n\nworld'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 2,
-              chunkStrategy: 'paragraph',
-              splitter: tokenSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'paragraph',
+            splitter: tokenSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello\n\nworld', start: 0, end: 12 }
           ])
@@ -1227,14 +1095,12 @@ describe('split', () => {
 
         it('should handle paragraph strategy with chunkOverlap', async () => {
           const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 2,
-              chunkOverlap: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkOverlap: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello\n\nworld', start: 0, end: 12 },
             { text: 'world\n\ntest', start: 7, end: 18 }
@@ -1243,13 +1109,11 @@ describe('split', () => {
 
         it('should handle paragraph strategy with mixed content in array', async () => {
           const input: string[] = ['hello\n\nworld', 'test', 'string\n\nend']
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 2,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: ['hello\n\nworld'], start: 0, end: 12 },
             { text: ['test', 'string'], start: 12, end: 22 },
@@ -1259,20 +1123,16 @@ describe('split', () => {
 
         it('should compare character vs paragraph strategies', async () => {
           const input: string = 'hello\n\nworld test'
-          const charResult: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkStrategy: ChunkStrategy.character,
-              splitter: whitespaceSplitter
-            })
-          )
-          const paragraphResult: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 3,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const charResult: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: ChunkStrategy.character,
+            splitter: whitespaceSplitter
+          })
+          const paragraphResult: Chunk[] = split(input, {
+            chunkSize: 3,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           // Character strategy should split more aggressively
           assert(charResult.length >= paragraphResult.length)
           // Paragraph strategy should respect paragraph boundaries
@@ -1283,13 +1143,11 @@ describe('split', () => {
 
         it('should handle paragraph strategy with chunkSize larger than any paragraph', async () => {
           const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 100,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 100,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(result, [
             { text: 'hello\n\nworld\n\ntest', start: 0, end: 18 }
           ])
@@ -1303,14 +1161,12 @@ describe('split', () => {
             ' '
           ]
 
-          const result: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 10,
-              chunkOverlap: 2,
-              splitter: whitespaceSplitter,
-              chunkStrategy: 'paragraph'
-            })
-          )
+          const result: Chunk[] = split(input, {
+            chunkSize: 10,
+            chunkOverlap: 2,
+            splitter: whitespaceSplitter,
+            chunkStrategy: 'paragraph'
+          })
           assert.deepStrictEqual(result, [
             { text: ['hello\nbig world!'], start: 1, end: 17 },
             {
@@ -1332,59 +1188,54 @@ describe('split', () => {
       describe('edge cases', () => {
         it('should handle empty input with both strategies', async () => {
           const emptyInput: string = ''
-          const charResult: Chunk[] = await Array.fromAsync(
-            split(emptyInput, { chunkStrategy: ChunkStrategy.character })
-          )
-          const paragraphResult: Chunk[] = await Array.fromAsync(
-            split(emptyInput, { chunkStrategy: 'paragraph' })
-          )
+          const charResult: Chunk[] = split(emptyInput, {
+            chunkStrategy: ChunkStrategy.character
+          })
+          const paragraphResult: Chunk[] = split(emptyInput, {
+            chunkStrategy: 'paragraph'
+          })
           assert.deepStrictEqual(charResult, [])
           assert.deepStrictEqual(paragraphResult, [])
         })
 
         it('should handle array with empty strings with both strategies', async () => {
           const emptyArray: string[] = ['', '', '']
-          const charResult: Chunk[] = await Array.fromAsync(
-            split(emptyArray, { chunkStrategy: ChunkStrategy.character })
-          )
-          const paragraphResult: Chunk[] = await Array.fromAsync(
-            split(emptyArray, { chunkStrategy: 'paragraph' })
-          )
+          const charResult: Chunk[] = split(emptyArray, {
+            chunkStrategy: ChunkStrategy.character
+          })
+          const paragraphResult: Chunk[] = split(emptyArray, {
+            chunkStrategy: 'paragraph'
+          })
           assert.deepStrictEqual(charResult, [])
           assert.deepStrictEqual(paragraphResult, [])
         })
 
         it('should handle single character with both strategies', async () => {
           const input: string = 'a'
-          const charResult: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: ChunkStrategy.character
-            })
-          )
-          const paragraphResult: Chunk[] = await Array.fromAsync(
-            split(input, { chunkSize: 1, chunkStrategy: 'paragraph' })
-          )
+          const charResult: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: ChunkStrategy.character
+          })
+          const paragraphResult: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph'
+          })
           assert.deepStrictEqual(charResult, paragraphResult)
           assert.deepStrictEqual(charResult, [{ text: 'a', start: 0, end: 1 }])
         })
 
         it('should handle whitespace-only input with both strategies', async () => {
           const input: string = '   '
-          const charResult: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: ChunkStrategy.character,
-              splitter: whitespaceSplitter
-            })
-          )
-          const paragraphResult: Chunk[] = await Array.fromAsync(
-            split(input, {
-              chunkSize: 1,
-              chunkStrategy: 'paragraph',
-              splitter: whitespaceSplitter
-            })
-          )
+          const charResult: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: ChunkStrategy.character,
+            splitter: whitespaceSplitter
+          })
+          const paragraphResult: Chunk[] = split(input, {
+            chunkSize: 1,
+            chunkStrategy: 'paragraph',
+            splitter: whitespaceSplitter
+          })
           assert.deepStrictEqual(charResult, [])
           assert.deepStrictEqual(paragraphResult, [])
         })
