@@ -1,0 +1,562 @@
+<!--
+
+Local development server:
+
+```sh
+$ npx serve
+```
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Splitter Demo</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/grids-responsive-min.css"
+    />
+    <script type="importmap">
+      {
+        "imports": {
+          "htm": "https://esm.sh/htm@3.1.1?dev&external=react,react-dom",
+          "react": "https://esm.sh/react@19.1.0?dev&external=react,react-dom",
+          "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime?dev&external=react,react-dom",
+          "react-dom": "https://esm.sh/react-dom@19.1.0?dev&external=react,react-dom",
+          "react-dom/client": "https://esm.sh/react-dom@19.1.0/client?dev&external=react,react-dom"
+        }
+      }
+    </script>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: #f8f9fa;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .header h1 {
+        margin: 0;
+        color: #2c3e50;
+        font-size: 2.5em;
+      }
+      .header p {
+        margin: 10px 0 0 0;
+        color: #7f8c8d;
+        font-size: 1.1em;
+      }
+      .demo-section {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        padding: 20px;
+      }
+      .form-row {
+        margin-bottom: 20px;
+      }
+      .form-row label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+      .form-row input,
+      .form-row select,
+      .form-row textarea {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .custom-splitter-section {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+        margin-top: 10px;
+      }
+      .custom-splitter-toggle {
+        cursor: pointer;
+        user-select: none;
+        color: #3498db;
+        text-decoration: underline;
+        margin-bottom: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .custom-splitter-content {
+        display: none;
+      }
+      .custom-splitter-content.open {
+        display: block;
+      }
+      .split-button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background 0.2s;
+      }
+      .split-button:hover {
+        background: #2980b9;
+      }
+      .split-button:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+      }
+      .results-section {
+        margin-top: 30px;
+      }
+      .results-toggle {
+        margin-bottom: 15px;
+      }
+      .results-toggle button {
+        background: #ecf0f1;
+        border: 1px solid #bdc3c7;
+        padding: 8px 16px;
+        cursor: pointer;
+        border-radius: 4px 0 0 4px;
+      }
+      .results-toggle button:last-child {
+        border-radius: 0 4px 4px 0;
+        border-left: none;
+      }
+      .results-toggle button.active {
+        background: #3498db;
+        color: white;
+        border-color: #3498db;
+      }
+      .json-output {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 20px;
+        border-radius: 4px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      .cards-output {
+        display: grid;
+        gap: 15px;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      .chunk-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+      }
+      .chunk-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .chunk-index {
+        background: #3498db;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .chunk-range {
+        color: #7f8c8d;
+        font-size: 12px;
+        margin-left: auto;
+      }
+      .chunk-text {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .error-message {
+        background: #e74c3c;
+        color: white;
+        padding: 15px;
+        border-radius: 4px;
+        margin-top: 15px;
+      }
+      .stats {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        color: #7f8c8d;
+      }
+      .stat-item {
+        background: #ecf0f1;
+        padding: 8px 12px;
+        border-radius: 4px;
+      }
+      .two-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+      @media (max-width: 768px) {
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="module">
+      import React, { useState, useCallback } from 'react'
+      import { createRoot } from 'react-dom/client'
+      import htm from 'htm'
+      import { split } from './dist/index.js'
+
+      const html = htm.bind(React.createElement)
+
+      // Predefined splitter functions
+      const PRESET_SPLITTERS = {
+        character: {
+          name: 'Character',
+          description: 'Split into individual characters',
+          func: text => [...text]
+        },
+        word: {
+          name: 'Word',
+          description: 'Split by whitespace',
+          func: text => text.split(/\s+/).filter(Boolean)
+        },
+        sentence: {
+          name: 'Sentence',
+          description: 'Split by sentence endings',
+          func: text => text.split(/[.!?]+/).filter(Boolean)
+        },
+        line: {
+          name: 'Line',
+          description: 'Split by line breaks',
+          func: text => text.split(/\n/).filter(Boolean)
+        }
+      }
+
+      function SplitterDemo() {
+        const [inputText, setInputText] = useState('')
+        const [chunkSize, setChunkSize] = useState(512)
+        const [chunkOverlap, setChunkOverlap] = useState(0)
+        const [chunkStrategy, setChunkStrategy] = useState('character')
+        const [splitterType, setSplitterType] = useState('character')
+        const [customSplitterCode, setCustomSplitterCode] = useState(
+          '(text) => text.split(/\\s+/).filter(Boolean)'
+        )
+        const [showCustomSplitter, setShowCustomSplitter] = useState(false)
+        const [results, setResults] = useState(null)
+        const [error, setError] = useState(null)
+        const [isProcessing, setIsProcessing] = useState(false)
+        const [viewMode, setViewMode] = useState('cards') // 'cards' or 'json'
+
+        const handleSplit = useCallback(async () => {
+          if (!inputText.trim()) {
+            setError('Please enter some text to split')
+            return
+          }
+
+          setIsProcessing(true)
+          setError(null)
+
+          try {
+            let splitterFunc
+
+            if (splitterType === 'custom') {
+              try {
+                // Evaluate the custom splitter function
+                splitterFunc = eval(customSplitterCode)
+                if (typeof splitterFunc !== 'function') {
+                  throw new Error('Custom splitter must be a function')
+                }
+              } catch (err) {
+                throw new Error(`Custom splitter error: ${err.message}`)
+              }
+            } else {
+              splitterFunc = PRESET_SPLITTERS[splitterType].func
+            }
+
+            const chunks = split(inputText, {
+              chunkSize: parseInt(chunkSize),
+              chunkOverlap: parseInt(chunkOverlap),
+              splitter: splitterFunc,
+              chunkStrategy: chunkStrategy
+            })
+
+            setResults(chunks)
+          } catch (err) {
+            setError(err.message)
+            setResults(null)
+          } finally {
+            setIsProcessing(false)
+          }
+        }, [
+          inputText,
+          chunkSize,
+          chunkOverlap,
+          chunkStrategy,
+          splitterType,
+          customSplitterCode
+        ])
+
+        const renderResults = () => {
+          if (!results) return null
+
+          const totalChunks = results.length
+          const avgChunkSize =
+            results.length > 0
+              ? Math.round(
+                  results.reduce((sum, chunk) => sum + chunk.text.length, 0) /
+                    results.length
+                )
+              : 0
+          const totalLength = results.reduce(
+            (sum, chunk) => sum + chunk.text.length,
+            0
+          )
+
+          return html`
+            <div className="results-section">
+              <h3>Results</h3>
+              <div className="stats">
+                <div className="stat-item">
+                  <strong>Total Chunks:</strong> ${totalChunks}
+                </div>
+                <div className="stat-item">
+                  <strong>Avg Chunk Size:</strong> ${avgChunkSize} chars
+                </div>
+                <div className="stat-item">
+                  <strong>Total Length:</strong> ${totalLength} chars
+                </div>
+              </div>
+
+              <div className="results-toggle">
+                <button
+                  className=${viewMode === 'cards' ? 'active' : ''}
+                  onClick=${() => setViewMode('cards')}
+                >
+                  📋 Card View
+                </button>
+                <button
+                  className=${viewMode === 'json' ? 'active' : ''}
+                  onClick=${() => setViewMode('json')}
+                >
+                  🔧 JSON View
+                </button>
+              </div>
+
+              ${viewMode === 'cards'
+                ? html`
+                    <div className="cards-output">
+                      ${results.map(
+                        (chunk, index) => html`
+                          <div key=${index} className="chunk-card">
+                            <div className="chunk-header">
+                              <span className="chunk-index"
+                                >Chunk ${index + 1}</span
+                              >
+                              <span className="chunk-range"
+                                >${chunk.start}-${chunk.end}
+                                (${chunk.text.length} chars)</span
+                              >
+                            </div>
+                            <div className="chunk-text">${chunk.text}</div>
+                          </div>
+                        `
+                      )}
+                    </div>
+                  `
+                : html`
+                    <div className="json-output">
+                      ${JSON.stringify(results, null, 2)}
+                    </div>
+                  `}
+            </div>
+          `
+        }
+
+        return html`
+          <div className="container">
+            <div className="header">
+              <h1>🔤 LLM Splitter Demo</h1>
+              <p>
+                Efficient, configurable text chunking utility for LLM
+                vectorization
+              </p>
+            </div>
+
+            <div className="demo-section">
+              <h2>Configuration</h2>
+
+              <div className="two-column">
+                <div className="form-row">
+                  <label htmlFor="chunkSize">Chunk Size:</label>
+                  <input
+                    type="number"
+                    id="chunkSize"
+                    value=${chunkSize}
+                    onChange=${e => setChunkSize(e.target.value)}
+                    min="1"
+                    className="pure-input-1"
+                  />
+                </div>
+
+                <div className="form-row">
+                  <label htmlFor="chunkOverlap">Chunk Overlap:</label>
+                  <input
+                    type="number"
+                    id="chunkOverlap"
+                    value=${chunkOverlap}
+                    onChange=${e => setChunkOverlap(e.target.value)}
+                    min="0"
+                    className="pure-input-1"
+                  />
+                </div>
+              </div>
+
+              <div className="two-column">
+                <div className="form-row">
+                  <label htmlFor="chunkStrategy">Chunk Strategy:</label>
+                  <select
+                    id="chunkStrategy"
+                    value=${chunkStrategy}
+                    onChange=${e => setChunkStrategy(e.target.value)}
+                    className="pure-input-1"
+                  >
+                    <option value="character">Character</option>
+                    <option value="paragraph">Paragraph</option>
+                  </select>
+                </div>
+
+                <div className="form-row">
+                  <label htmlFor="splitterType">Splitter:</label>
+                  <select
+                    id="splitterType"
+                    value=${splitterType}
+                    onChange=${e => setSplitterType(e.target.value)}
+                    className="pure-input-1"
+                  >
+                    ${Object.entries(PRESET_SPLITTERS).map(
+                      ([key, preset]) => html`
+                        <option key=${key} value=${key}>${preset.name}</option>
+                      `
+                    )}
+                    <option value="custom">Custom Function</option>
+                  </select>
+                </div>
+              </div>
+
+              ${splitterType === 'custom' || showCustomSplitter
+                ? html`
+                    <div className="custom-splitter-section">
+                      <div
+                        className="custom-splitter-toggle"
+                        onClick=${() =>
+                          setShowCustomSplitter(!showCustomSplitter)}
+                      >
+                        ${showCustomSplitter ? '🔽' : '▶️'} Custom Splitter
+                        Function
+                      </div>
+                      <div
+                        className=${`custom-splitter-content ${showCustomSplitter || splitterType === 'custom' ? 'open' : ''}`}
+                      >
+                        <p
+                          style=${{
+                            margin: '0 0 10px',
+                            fontSize: '14px',
+                            color: '#7f8c8d'
+                          }}
+                        >
+                          Enter a JavaScript function that takes a string and
+                          returns an array of strings:
+                        </p>
+                        <textarea
+                          value=${customSplitterCode}
+                          onChange=${e => setCustomSplitterCode(e.target.value)}
+                          placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
+                          rows="3"
+                          className="pure-input-1"
+                          style=${{
+                            fontFamily:
+                              "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                            fontSize: '13px'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  `
+                : null}
+            </div>
+
+            <div className="demo-section">
+              <h2>Input Text</h2>
+              <div className="form-row">
+                <textarea
+                  value=${inputText}
+                  onChange=${e => setInputText(e.target.value)}
+                  placeholder="Enter your text here to be chunked..."
+                  rows="8"
+                  className="pure-input-1"
+                  style=${{ resize: 'vertical' }}
+                />
+              </div>
+
+              <button
+                className="split-button"
+                onClick=${handleSplit}
+                disabled=${isProcessing || !inputText.trim()}
+              >
+                ${isProcessing ? '⏳ Processing...' : '🔤 Split Text'}
+              </button>
+            </div>
+
+            ${error &&
+            html`
+              <div className="demo-section">
+                <div className="error-message">
+                  <strong>Error:</strong> ${error}
+                </div>
+              </div>
+            `}
+            ${results && renderResults()}
+          </div>
+        `
+      }
+
+      const root = createRoot(document.getElementById('root'))
+      root.render(html`<${SplitterDemo} />`)
+    </script>
+  </body>
+</html>
