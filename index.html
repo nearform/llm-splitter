@@ -11,7 +11,22 @@ $ npx serve
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LLM Splitter Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
+    />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
@@ -20,21 +35,15 @@ $ npx serve
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/grids-responsive-min.css"
     />
-    <script type="importmap">
-      {
-        "imports": {
-          "htm": "https://esm.sh/htm@3.1.1?dev&external=react,react-dom",
-          "react": "https://esm.sh/react@19.1.0?dev&external=react,react-dom",
-          "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime?dev&external=react,react-dom",
-          "react-dom": "https://esm.sh/react-dom@19.1.0?dev&external=react,react-dom",
-          "react-dom/client": "https://esm.sh/react-dom@19.1.0/client?dev&external=react,react-dom"
-        }
-      }
-    </script>
     <style>
       body {
         font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
         line-height: 1.6;
         color: #333;
         background: #f8f9fa;
@@ -124,6 +133,17 @@ $ npx serve
       .split-button:disabled {
         background: #bdc3c7;
         cursor: not-allowed;
+      }
+      .ph-spinner {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
       }
       .results-section {
         margin-top: 30px;
@@ -231,10 +251,22 @@ $ npx serve
         }
       }
     </style>
+    <title>LLM Splitter Demo</title>
   </head>
   <body>
     <div id="root"></div>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "htm": "https://esm.sh/htm@3.1.1?dev&external=react,react-dom",
+          "react": "https://esm.sh/react@19.1.0?dev&external=react,react-dom",
+          "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime?dev&external=react,react-dom",
+          "react-dom": "https://esm.sh/react-dom@19.1.0?dev&external=react,react-dom",
+          "react-dom/client": "https://esm.sh/react-dom@19.1.0/client?dev&external=react,react-dom"
+        }
+      }
+    </script>
     <script type="module">
       import React, { useState, useCallback } from 'react'
       import { createRoot } from 'react-dom/client'
@@ -367,13 +399,13 @@ $ npx serve
                   className=${viewMode === 'cards' ? 'active' : ''}
                   onClick=${() => setViewMode('cards')}
                 >
-                  📋 Card View
+                  <i className="ph ph-cards"></i> Chunk View
                 </button>
                 <button
                   className=${viewMode === 'json' ? 'active' : ''}
                   onClick=${() => setViewMode('json')}
                 >
-                  🔧 JSON View
+                  <i className="ph ph-code"></i> JSON View
                 </button>
               </div>
 
@@ -410,7 +442,7 @@ $ npx serve
         return html`
           <div className="container">
             <div className="header">
-              <h1>🔤 LLM Splitter Demo</h1>
+              <h1>LLM Splitter Demo</h1>
               <p>
                 Efficient, configurable text chunking utility for LLM
                 vectorization
@@ -486,8 +518,12 @@ $ npx serve
                         onClick=${() =>
                           setShowCustomSplitter(!showCustomSplitter)}
                       >
-                        ${showCustomSplitter ? '🔽' : '▶️'} Custom Splitter
-                        Function
+                        <i
+                          className="${showCustomSplitter
+                            ? 'ph ph-caret-down'
+                            : 'ph ph-caret-right'}"
+                        ></i>
+                        Custom Splitter Function
                       </div>
                       <div
                         className=${`custom-splitter-content ${showCustomSplitter || splitterType === 'custom' ? 'open' : ''}`}
@@ -538,7 +574,9 @@ $ npx serve
                 onClick=${handleSplit}
                 disabled=${isProcessing || !inputText.trim()}
               >
-                ${isProcessing ? '⏳ Processing...' : '🔤 Split Text'}
+                ${isProcessing
+                  ? html`<i className="ph ph-spinner"></i> Processing...`
+                  : html`<i className="ph ph-scissors"></i> Split Text`}
               </button>
             </div>
 
