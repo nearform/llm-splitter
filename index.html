@@ -397,10 +397,10 @@ $ npx serve
 
       function SplitterDemo() {
         const [inputText, setInputText] = useState('')
-        const [chunkSize, setChunkSize] = useState(512)
-        const [chunkOverlap, setChunkOverlap] = useState(0)
-        const [chunkStrategy, setChunkStrategy] = useState('character')
-        const [splitterType, setSplitterType] = useState('character')
+        const [chunkSize, setChunkSize] = useState(200)
+        const [chunkOverlap, setChunkOverlap] = useState(10)
+        const [chunkStrategy, setChunkStrategy] = useState('paragraph')
+        const [splitterType, setSplitterType] = useState('word')
         const [customSplitterCode, setCustomSplitterCode] = useState(
           '(text) => text.split(/\\s+/).filter(Boolean)'
         )
