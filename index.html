@@ -404,7 +404,7 @@ $ npx serve
         const [customSplitterCode, setCustomSplitterCode] = useState(
           '(text) => text.split(/\\s+/).filter(Boolean)'
         )
-        const [showCustomSplitter, setShowCustomSplitter] = useState(false)
+        const [showCustomSplitter, setShowCustomSplitter] = useState(true)
         const [results, setResults] = useState(null)
         const [error, setError] = useState(null)
         const [isProcessing, setIsProcessing] = useState(false)
@@ -635,7 +635,7 @@ $ npx serve
                 </div>
               </div>
 
-              ${splitterType === 'custom' || showCustomSplitter
+              ${splitterType === 'custom'
                 ? html`
                     <div className="custom-splitter-section">
                       <div
@@ -644,14 +644,14 @@ $ npx serve
                           setShowCustomSplitter(!showCustomSplitter)}
                       >
                         <i
-                          className="${showCustomSplitter
+                          className=${showCustomSplitter
                             ? 'ph ph-caret-down'
-                            : 'ph ph-caret-right'}"
+                            : 'ph ph-caret-right'}
                         ></i>
                         Custom Splitter Function
                       </div>
                       <div
-                        className=${`custom-splitter-content ${showCustomSplitter || splitterType === 'custom' ? 'open' : ''}`}
+                        className=${`custom-splitter-content ${showCustomSplitter ? 'open' : ''}`}
                       >
                         <p
                           style=${{
@@ -668,11 +668,18 @@ $ npx serve
                           onChange=${e => setCustomSplitterCode(e.target.value)}
                           placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
                           rows="3"
-                          className="pure-input-1"
                           style=${{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '12px 16px',
+                            fontSize: '13px',
                             fontFamily:
                               "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-                            fontSize: '13px'
+                            transition: 'all 0.2s ease',
+                            background: 'rgba(255, 255, 255, 0.8)',
+                            resize: 'vertical'
                           }}
                         />
                       </div>
