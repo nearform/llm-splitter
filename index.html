@@ -413,7 +413,83 @@ $ npx serve
         }
       }
 
-      function SplitterDemo() {
+      const ResultsDisplay = ({ results, viewMode, setViewMode }) => {
+        if (!results) return null
+
+        const totalChunks = results.length
+        const avgChunkSize =
+          results.length > 0
+            ? Math.round(
+                results.reduce((sum, chunk) => sum + chunk.text.length, 0) /
+                  results.length
+              )
+            : 0
+        const totalLength = results.reduce(
+          (sum, chunk) => sum + chunk.text.length,
+          0
+        )
+
+        return html`
+          <div className="results-section">
+            <h3>Results</h3>
+            <div className="stats">
+              <div className="stat-item">
+                <strong>Total Chunks:</strong> ${totalChunks}
+              </div>
+              <div className="stat-item">
+                <strong>Avg Chunk Size:</strong> ${avgChunkSize} chars
+              </div>
+              <div className="stat-item">
+                <strong>Total Length:</strong> ${totalLength} chars
+              </div>
+            </div>
+
+            <div className="results-toggle">
+              <button
+                className=${viewMode === 'cards' ? 'active' : ''}
+                onClick=${() => setViewMode('cards')}
+              >
+                <i className="ph ph-cards"></i> Chunk View
+              </button>
+              <button
+                className=${viewMode === 'json' ? 'active' : ''}
+                onClick=${() => setViewMode('json')}
+              >
+                <i className="ph ph-code"></i> JSON View
+              </button>
+            </div>
+
+            ${viewMode === 'cards'
+              ? html`
+                  <div className="cards-output">
+                    ${results.map(
+                      (chunk, index) => html`
+                        <div key=${index} className="chunk-card">
+                          <div className="chunk-header">
+                            <span className="chunk-index"
+                              >Chunk ${index + 1}</span
+                            >
+                            <span className="chunk-range"
+                              >${chunk.start}-${chunk.end} (${chunk.text.length}
+                              chars)</span
+                            >
+                          </div>
+                          <div className="chunk-text">${chunk.text}</div>
+                        </div>
+                      `
+                    )}
+                  </div>
+                `
+              : html`
+                  <div className="json-output">
+                    ${JSON.stringify(results, null, 2)}
+                  </div>
+                `}
+          </div>
+        `
+      }
+
+      const SplitterDemo = () => {
         const [inputText, setInputText] = useState('')
         const [chunkSize, setChunkSize] = useState(200)
         const [chunkOverlap, setChunkOverlap] = useState(10)
@@ -476,82 +552,6 @@ $ npx serve
           splitterType,
           customSplitterCode
         ])
-
-        const renderResults = () => {
-          if (!results) return null
-
-          const totalChunks = results.length
-          const avgChunkSize =
-            results.length > 0
-              ? Math.round(
-                  results.reduce((sum, chunk) => sum + chunk.text.length, 0) /
-                    results.length
-                )
-              : 0
-          const totalLength = results.reduce(
-            (sum, chunk) => sum + chunk.text.length,
-            0
-          )
-
-          return html`
-            <div className="results-section">
-              <h3>Results</h3>
-              <div className="stats">
-                <div className="stat-item">
-                  <strong>Total Chunks:</strong> ${totalChunks}
-                </div>
-                <div className="stat-item">
-                  <strong>Avg Chunk Size:</strong> ${avgChunkSize} chars
-                </div>
-                <div className="stat-item">
-                  <strong>Total Length:</strong> ${totalLength} chars
-                </div>
-              </div>
-
-              <div className="results-toggle">
-                <button
-                  className=${viewMode === 'cards' ? 'active' : ''}
-                  onClick=${() => setViewMode('cards')}
-                >
-                  <i className="ph ph-cards"></i> Chunk View
-                </button>
-                <button
-                  className=${viewMode === 'json' ? 'active' : ''}
-                  onClick=${() => setViewMode('json')}
-                >
-                  <i className="ph ph-code"></i> JSON View
-                </button>
-              </div>
-
-              ${viewMode === 'cards'
-                ? html`
-                    <div className="cards-output">
-                      ${results.map(
-                        (chunk, index) => html`
-                          <div key=${index} className="chunk-card">
-                            <div className="chunk-header">
-                              <span className="chunk-index"
-                                >Chunk ${index + 1}</span
-                              >
-                              <span className="chunk-range"
-                                >${chunk.start}-${chunk.end}
-                                (${chunk.text.length} chars)</span
-                              >
-                            </div>
-                            <div className="chunk-text">${chunk.text}</div>
-                          </div>
-                        `
-                      )}
-                    </div>
-                  `
-                : html`
-                    <div className="json-output">
-                      ${JSON.stringify(results, null, 2)}
-                    </div>
-                  `}
-            </div>
-          `
-        }
 
         return html`
           <div className="container">
@@ -742,7 +742,11 @@ $ npx serve
                 </div>
               </div>
             `}
-            ${results && renderResults()}
+            <${ResultsDisplay}
+              results=${results}
+              viewMode=${viewMode}
+              setViewMode=${setViewMode}
+            />
 
             <div
               className="demo-section"
