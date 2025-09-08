@@ -11,6 +11,24 @@ $ npx serve
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.ico"
+      type="image/x-icon"
+      sizes="32x32"
+    />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.ico"
+      type="image/x-icon"
+    />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="icon" href="https://nearform.com/favicon.png" type="image/png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -725,6 +743,31 @@ $ npx serve
               </div>
             `}
             ${results && renderResults()}
+
+            <div
+              className="demo-section"
+              style=${{ textAlign: 'center', marginTop: '40px' }}
+            >
+              <a
+                href="https://www.nearform.com/contact/?utm_source=open-source&utm_medium=banner&utm_campaign=os-project-pages"
+                target="_blank"
+                rel="noopener noreferrer"
+                style=${{
+                  textDecoration: 'none'
+                }}
+              >
+                <img
+                  src="https://raw.githubusercontent.com/nearform/.github/refs/heads/master/assets/os-banner-green.svg"
+                  alt="Nearform Open Source"
+                  style=${{
+                    maxWidth: '100%',
+                    height: 'auto',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
+              </a>
+            </div>
           </div>
         `
       }
