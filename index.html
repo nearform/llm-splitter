@@ -280,7 +280,7 @@ $ npx serve
       }
       .chunk-header {
         display: flex;
-        justify-content: between;
+        justify-content: space-between;
         align-items: center;
         margin-bottom: 12px;
       }
@@ -519,10 +519,7 @@ $ npx serve
             if (splitterType === 'custom') {
               try {
                 // Evaluate the custom splitter function
-                splitterFunc = eval(customSplitterCode)
-                if (typeof splitterFunc !== 'function') {
-                  throw new Error('Custom splitter must be a function')
-                }
+                splitterFunc = new Function('return ' + customSplitterCode)()
               } catch (err) {
                 throw new Error(`Custom splitter error: ${err.message}`)
               }
