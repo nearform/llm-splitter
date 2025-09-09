@@ -1,0 +1,780 @@
+<!--
+
+Local development server:
+
+```sh
+$ npx serve
+```
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.ico"
+      type="image/x-icon"
+      sizes="32x32"
+    />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.ico"
+      type="image/x-icon"
+    />
+    <link
+      rel="icon"
+      href="https://nearform.com/favicon.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="icon" href="https://nearform.com/favicon.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/grids-responsive-min.css"
+    />
+    <style>
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        line-height: 1.6;
+        color: #1a1a1a;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .header h1 {
+        margin: 0;
+        color: #2d3748;
+        font-size: 2.75em;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .header p {
+        margin: 16px 0 0 0;
+        color: #4a5568;
+        font-size: 1.2em;
+        font-weight: 400;
+      }
+      .demo-section {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        margin-bottom: 24px;
+        padding: 32px;
+      }
+      .demo-section h2 {
+        color: #2d3748;
+        font-weight: 600;
+        margin-top: 0;
+        margin-bottom: 24px;
+        font-size: 1.5em;
+        letter-spacing: -0.01em;
+      }
+      .form-row {
+        margin-bottom: 24px;
+      }
+      .form-row label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #2d3748;
+        font-size: 0.95em;
+      }
+      .form-row input,
+      .form-row select,
+      .form-row textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        background: rgba(255, 255, 255, 0.8);
+      }
+      .form-row input:focus,
+      .form-row select:focus,
+      .form-row textarea:focus {
+        outline: none;
+        border-color: #00e5a4;
+        box-shadow: 0 0 0 3px rgba(0, 229, 164, 0.1);
+        background: #ffffff;
+      }
+      .custom-splitter-section {
+        background: rgba(247, 250, 252, 0.8);
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 12px;
+      }
+      .custom-splitter-toggle {
+        cursor: pointer;
+        user-select: none;
+        color: #00e5a4;
+        text-decoration: none;
+        margin-bottom: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+        font-size: 0.95em;
+        transition: color 0.2s ease;
+      }
+      .custom-splitter-toggle:hover {
+        color: #00b87a;
+      }
+      .custom-splitter-content {
+        display: none;
+      }
+      .custom-splitter-content.open {
+        display: block;
+      }
+      .split-button {
+        background: linear-gradient(135deg, #00e5a4 0%, #00b87a 100%);
+        color: white;
+        border: none;
+        padding: 14px 28px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0, 229, 164, 0.2);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .split-button:hover {
+        background: linear-gradient(135deg, #00b87a 0%, #009966 100%);
+        box-shadow: 0 6px 16px rgba(0, 229, 164, 0.3);
+        transform: translateY(-1px);
+      }
+      .split-button:disabled {
+        background: #cbd5e0;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .ph-spinner {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .results-section {
+        margin-top: 32px;
+      }
+      .results-section h3 {
+        color: #2d3748;
+        font-weight: 600;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        letter-spacing: -0.01em;
+      }
+      .results-toggle {
+        margin-bottom: 20px;
+      }
+      .results-toggle button {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid #e2e8f0;
+        padding: 10px 18px;
+        cursor: pointer;
+        border-radius: 8px 0 0 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4a5568;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .results-toggle button:last-child {
+        border-radius: 0 8px 8px 0;
+        border-left: none;
+      }
+      .results-toggle button.active {
+        background: linear-gradient(135deg, #00e5a4 0%, #00b87a 100%);
+        color: white;
+        border-color: #00e5a4;
+        box-shadow: 0 2px 8px rgba(0, 229, 164, 0.2);
+      }
+      .results-toggle button:hover:not(.active) {
+        background: rgba(255, 255, 255, 1);
+        border-color: #cbd5e0;
+      }
+      .json-output {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        color: #e2e8f0;
+        padding: 24px;
+        border-radius: 8px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        max-height: 600px;
+        overflow-y: auto;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .cards-output {
+        display: grid;
+        gap: 18px;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      .chunk-card {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        transition: all 0.2s ease;
+      }
+      .chunk-card:hover {
+        background: rgba(255, 255, 255, 1);
+        border-color: #cbd5e0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      .chunk-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .chunk-index {
+        background: linear-gradient(135deg, #00e5a4 0%, #00b87a 100%);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.025em;
+      }
+      .chunk-range {
+        color: #718096;
+        font-size: 12px;
+        margin-left: auto;
+        font-weight: 500;
+      }
+      .chunk-text {
+        background: rgba(247, 250, 252, 0.8);
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 14px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        max-height: 200px;
+        overflow-y: auto;
+        line-height: 1.5;
+      }
+      .error-message {
+        background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+        color: white;
+        padding: 18px;
+        border-radius: 8px;
+        margin-top: 20px;
+        font-weight: 500;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .stats {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        color: #4a5568;
+        flex-wrap: wrap;
+      }
+      .stat-item {
+        background: rgba(247, 250, 252, 0.8);
+        border: 1px solid #e2e8f0;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-weight: 500;
+      }
+      .stat-item strong {
+        color: #2d3748;
+      }
+      .two-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      @media (max-width: 768px) {
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+        .container {
+          padding: 16px;
+        }
+        .demo-section {
+          padding: 24px;
+        }
+        .header {
+          padding: 32px 20px;
+        }
+        .header h1 {
+          font-size: 2.25em;
+        }
+        .stats {
+          flex-direction: column;
+          gap: 12px;
+        }
+      }
+    </style>
+    <title>LLM Splitter Demo</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "htm": "https://esm.sh/htm@3.1.1?dev&external=react,react-dom",
+          "react": "https://esm.sh/react@19.1.0?dev&external=react,react-dom",
+          "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime?dev&external=react,react-dom",
+          "react-dom": "https://esm.sh/react-dom@19.1.0?dev&external=react,react-dom",
+          "react-dom/client": "https://esm.sh/react-dom@19.1.0/client?dev&external=react,react-dom"
+        }
+      }
+    </script>
+    <script type="module">
+      import React, { useState, useCallback, Fragment } from 'react'
+      import { createRoot } from 'react-dom/client'
+      import htm from 'htm'
+      import { split } from './dist/index.js'
+
+      const html = htm.bind(React.createElement)
+
+      // Predefined splitter functions
+      const PRESET_SPLITTERS = {
+        character: {
+          name: 'Character',
+          description: 'Split into individual characters',
+          func: text => [...text]
+        },
+        word: {
+          name: 'Word',
+          description: 'Split by whitespace',
+          func: text => text.split(/\s+/).filter(Boolean)
+        },
+        sentence: {
+          name: 'Sentence',
+          description: 'Split by sentence endings',
+          func: text => text.split(/[.!?]+/).filter(Boolean)
+        },
+        line: {
+          name: 'Line',
+          description: 'Split by line breaks',
+          func: text => text.split(/\n/).filter(Boolean)
+        }
+      }
+
+      const ResultsDisplay = ({ results, viewMode, setViewMode }) => {
+        if (!results) return null
+
+        const totalChunks = results.length
+        const avgChunkSize =
+          results.length > 0
+            ? Math.round(
+                results.reduce((sum, chunk) => sum + chunk.text.length, 0) /
+                  results.length
+              )
+            : 0
+        const totalLength = results.reduce(
+          (sum, chunk) => sum + chunk.text.length,
+          0
+        )
+
+        return html`
+          <div className="results-section">
+            <h3>Results</h3>
+            <div className="stats">
+              <div className="stat-item">
+                <strong>Total Chunks:</strong> ${totalChunks}
+              </div>
+              <div className="stat-item">
+                <strong>Avg Chunk Size:</strong> ${avgChunkSize} chars
+              </div>
+              <div className="stat-item">
+                <strong>Total Length:</strong> ${totalLength} chars
+              </div>
+            </div>
+
+            <div className="results-toggle">
+              <button
+                className=${viewMode === 'cards' ? 'active' : ''}
+                onClick=${() => setViewMode('cards')}
+              >
+                <i className="ph ph-cards"></i> Chunk View
+              </button>
+              <button
+                className=${viewMode === 'json' ? 'active' : ''}
+                onClick=${() => setViewMode('json')}
+              >
+                <i className="ph ph-code"></i> JSON View
+              </button>
+            </div>
+
+            ${viewMode === 'cards'
+              ? html`
+                  <div className="cards-output">
+                    ${results.map(
+                      (chunk, index) => html`
+                        <div key=${index} className="chunk-card">
+                          <div className="chunk-header">
+                            <span className="chunk-index"
+                              >Chunk ${index + 1}</span
+                            >
+                            <span className="chunk-range"
+                              >${chunk.start}-${chunk.end} (${chunk.text.length}
+                              chars)</span
+                            >
+                          </div>
+                          <div className="chunk-text">${chunk.text}</div>
+                        </div>
+                      `
+                    )}
+                  </div>
+                `
+              : html`
+                  <div className="json-output">
+                    ${JSON.stringify(results, null, 2)}
+                  </div>
+                `}
+          </div>
+        `
+      }
+
+      const SplitterDemo = () => {
+        const [inputText, setInputText] = useState('')
+        const [chunkSize, setChunkSize] = useState(200)
+        const [chunkOverlap, setChunkOverlap] = useState(10)
+        const [chunkStrategy, setChunkStrategy] = useState('paragraph')
+        const [splitterType, setSplitterType] = useState('word')
+        const [customSplitterCode, setCustomSplitterCode] = useState(
+          '(text) => text.split(/\\s+/).filter(Boolean)'
+        )
+        const [showCustomSplitter, setShowCustomSplitter] = useState(true)
+        const [results, setResults] = useState(null)
+        const [error, setError] = useState(null)
+        const [isProcessing, setIsProcessing] = useState(false)
+        const [viewMode, setViewMode] = useState('cards') // 'cards' or 'json'
+
+        const handleSplit = useCallback(async () => {
+          if (!inputText.trim()) {
+            setError('Please enter some text to split')
+            return
+          }
+
+          setIsProcessing(true)
+          setError(null)
+
+          try {
+            let splitterFunc
+
+            if (splitterType === 'custom') {
+              try {
+                // Evaluate the custom splitter function
+                splitterFunc = new Function('return ' + customSplitterCode)()
+              } catch (err) {
+                throw new Error(`Custom splitter error: ${err.message}`)
+              }
+            } else {
+              splitterFunc = PRESET_SPLITTERS[splitterType].func
+            }
+
+            const chunks = split(inputText, {
+              chunkSize: parseInt(chunkSize),
+              chunkOverlap: parseInt(chunkOverlap),
+              splitter: splitterFunc,
+              chunkStrategy: chunkStrategy
+            })
+
+            setResults(chunks)
+          } catch (err) {
+            setError(err.message)
+            setResults(null)
+          } finally {
+            setIsProcessing(false)
+          }
+        }, [
+          inputText,
+          chunkSize,
+          chunkOverlap,
+          chunkStrategy,
+          splitterType,
+          customSplitterCode
+        ])
+
+        return html`
+          <div className="container">
+            <div className="header">
+              <h1>LLM Splitter Demo</h1>
+              <p>
+                Efficient, configurable text chunking utility for LLM
+                vectorization
+              </p>
+              <div
+                style=${{
+                  marginTop: '15px',
+                  display: 'flex',
+                  gap: '10px',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <a
+                  href="https://www.npmjs.com/package/llm-splitter"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img
+                    src="https://badgen.net/npm/v/llm-splitter?icon=npm"
+                    alt="npm version"
+                  />
+                </a>
+                <a
+                  href="https://github.com/nearform/llm-splitter"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img
+                    src="https://badgen.net/github/release/nearform/llm-splitter?icon=github"
+                    alt="GitHub release"
+                  />
+                </a>
+              </div>
+            </div>
+            <div className="demo-section">
+              <h2>Configuration</h2>
+
+              <div className="two-column">
+                <div className="form-row">
+                  <label htmlFor="chunkSize">Chunk Size:</label>
+                  <input
+                    type="number"
+                    id="chunkSize"
+                    value=${chunkSize}
+                    onChange=${e => setChunkSize(e.target.value)}
+                    min="1"
+                    className="pure-input-1"
+                  />
+                </div>
+
+                <div className="form-row">
+                  <label htmlFor="chunkOverlap">Chunk Overlap:</label>
+                  <input
+                    type="number"
+                    id="chunkOverlap"
+                    value=${chunkOverlap}
+                    onChange=${e => setChunkOverlap(e.target.value)}
+                    min="0"
+                    className="pure-input-1"
+                  />
+                </div>
+              </div>
+
+              <div className="two-column">
+                <div className="form-row">
+                  <label htmlFor="chunkStrategy">Chunk Strategy:</label>
+                  <select
+                    id="chunkStrategy"
+                    value=${chunkStrategy}
+                    onChange=${e => setChunkStrategy(e.target.value)}
+                    className="pure-input-1"
+                  >
+                    <option value="character">Character</option>
+                    <option value="paragraph">Paragraph</option>
+                  </select>
+                </div>
+
+                <div className="form-row">
+                  <label htmlFor="splitterType">Splitter:</label>
+                  <select
+                    id="splitterType"
+                    value=${splitterType}
+                    onChange=${e => setSplitterType(e.target.value)}
+                    className="pure-input-1"
+                  >
+                    ${Object.entries(PRESET_SPLITTERS).map(
+                      ([key, preset]) => html`
+                        <option key=${key} value=${key}>${preset.name}</option>
+                      `
+                    )}
+                    <option value="custom">Custom Function</option>
+                  </select>
+                </div>
+              </div>
+
+              ${splitterType === 'custom'
+                ? html`
+                    <div className="custom-splitter-section">
+                      <div
+                        className="custom-splitter-toggle"
+                        onClick=${() =>
+                          setShowCustomSplitter(!showCustomSplitter)}
+                      >
+                        <i
+                          className=${showCustomSplitter
+                            ? 'ph ph-caret-down'
+                            : 'ph ph-caret-right'}
+                        ></i>
+                        Custom Splitter Function
+                      </div>
+                      <div
+                        className=${`custom-splitter-content ${showCustomSplitter ? 'open' : ''}`}
+                      >
+                        <p
+                          style=${{
+                            margin: '0 0 10px',
+                            fontSize: '14px',
+                            color: '#7f8c8d'
+                          }}
+                        >
+                          Enter a JavaScript function that takes a string and
+                          returns an array of strings:
+                        </p>
+                        <textarea
+                          value=${customSplitterCode}
+                          onChange=${e => setCustomSplitterCode(e.target.value)}
+                          placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
+                          rows="3"
+                          style=${{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '12px 16px',
+                            fontSize: '13px',
+                            fontFamily:
+                              "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                            transition: 'all 0.2s ease',
+                            background: 'rgba(255, 255, 255, 0.8)',
+                            resize: 'vertical'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  `
+                : null}
+            </div>
+
+            <div className="demo-section">
+              <h2>Input Text</h2>
+              <div className="form-row">
+                <textarea
+                  value=${inputText}
+                  onChange=${e => setInputText(e.target.value)}
+                  placeholder="Enter your text here to be chunked..."
+                  rows="8"
+                  className="pure-input-1"
+                  style=${{ resize: 'vertical' }}
+                />
+              </div>
+
+              <button
+                className="split-button"
+                onClick=${handleSplit}
+                disabled=${isProcessing || !inputText.trim()}
+              >
+                ${isProcessing
+                  ? html`<${Fragment}
+                      ><i className="ph ph-spinner"></i> Processing...<//
+                    >`
+                  : html`<${Fragment}
+                      ><i className="ph ph-scissors"></i> Split Text<//
+                    >`}
+              </button>
+            </div>
+
+            ${error &&
+            html`
+              <div className="demo-section">
+                <div className="error-message">
+                  <strong>Error:</strong> ${error}
+                </div>
+              </div>
+            `}
+            <${ResultsDisplay}
+              results=${results}
+              viewMode=${viewMode}
+              setViewMode=${setViewMode}
+            />
+
+            <div
+              className="demo-section"
+              style=${{ textAlign: 'center', marginTop: '40px' }}
+            >
+              <a
+                href="https://www.nearform.com/contact/?utm_source=open-source&utm_medium=banner&utm_campaign=os-project-pages"
+                target="_blank"
+                rel="noopener noreferrer"
+                style=${{
+                  textDecoration: 'none'
+                }}
+              >
+                <img
+                  src="https://raw.githubusercontent.com/nearform/.github/refs/heads/master/assets/os-banner-green.svg"
+                  alt="Nearform Open Source"
+                  style=${{
+                    maxWidth: '100%',
+                    height: 'auto',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
+              </a>
+            </div>
+          </div>
+        `
+      }
+
+      const root = createRoot(document.getElementById('root'))
+      root.render(html`<${SplitterDemo} />`)
+    </script>
+  </body>
+</html>

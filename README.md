@@ -1,5 +1,9 @@
 # `llm-splitter`
 
+[![npm version](https://badgen.net/npm/v/llm-splitter?icon=npm)](https://www.npmjs.com/package/llm-splitter)
+[![GitHub release](https://badgen.net/github/release/nearform/llm-splitter?icon=github)](https://github.com/nearform/llm-splitter)
+[![GitHub CI](https://badgen.net/github/checks/nearform/llm-splitter?icon=github)](https://github.com/nearform/llm-splitter)
+
 A JavaScript library for splitting text into configurable chunks with overlap support.
 
 ## Features
