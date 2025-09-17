@@ -38,10 +38,11 @@ Each chunk contains positional data (`start` and `end`) that may be used to sepa
 #### Parameters
 
 - `input` (string|string[]) - The text or array of texts to split
-- `options` (Object) - Configuration options
-  - `chunkSize` (number) - Maximum number of tokens per chunk (default: 512)
-  - `chunkOverlap` (number) - Number of overlapping tokens between chunks (default: 0)
-  - `splitter` (Function) - Function to split text into tokens (default: character-by-character)
+- `options` (object) - Configuration options
+  - `chunkSize` (number) - Maximum number of tokens per chunk (default: `512`)
+  - `chunkOverlap` (number) - Number of overlapping tokens between chunks (default: `0`)
+  - `chunkStrategy` (string) - Grouping preference for chunks (default: `"character"`)
+  - `splitter` (function) - Function to split text into tokens (default: character-by-character)
 
 Notes:
 
@@ -49,6 +50,11 @@ Notes:
 - `chunkOverlap` must be a non-negative integer ≥ 0
 - `chunkOverlap` must be less than `chunkSize`
 - `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`).
+- Here are some sample `splitter` functions:
+  - Character: `text => [...text]` (default)
+  - Word: `text => text.split(/\s+/)`
+  - Sentence: `text => text.split(/[.!?]+/)`
+  - Line: `text => text.split(/\n/)`
 
 #### Returns
 
