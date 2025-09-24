@@ -132,11 +132,11 @@ describe('split', () => {
       assert.deepStrictEqual(result, expected)
     })
 
-    it('throws if splitter returns non string outputs', async () => {
+    it('throws if splitter returns non string outputs', () => {
       const inputs: string[] = ['hello']
       const splitter = (): unknown[] => [400, 1, 2, 3, 4]
-      await assert.rejects(
-        async () => {
+      assert.throws(
+        () => {
           // @ts-expect-error
           splitToParts(inputs, splitter)
         },
@@ -146,11 +146,11 @@ describe('split', () => {
       )
     })
 
-    it('throws if splitter returns a part not found in input', async () => {
+    it('throws if splitter returns a part not found in input', () => {
       const inputs: string[] = ['hello']
       const splitter = (): string[] => ['notfound']
-      await assert.rejects(
-        async () => {
+      assert.throws(
+        () => {
           splitToParts(inputs, splitter)
         },
         {
@@ -160,11 +160,11 @@ describe('split', () => {
       )
     })
 
-    it('throws if splitter returns a part that only partially matches', async () => {
+    it('throws if splitter returns a part that only partially matches', () => {
       const inputs: string[] = ['abc']
       const splitter = (): string[] => ['a', 'z']
-      await assert.rejects(
-        async () => {
+      assert.throws(
+        () => {
           splitToParts(inputs, splitter)
         },
         {
@@ -174,10 +174,10 @@ describe('split', () => {
       )
     })
 
-    it('does not throw if all parts are found', async () => {
+    it('does not throw if all parts are found', () => {
       const inputs: string[] = ['abc']
       const splitter = (): string[] => ['a', 'b', 'c']
-      assert.doesNotReject(async () => {
+      assert.doesNotThrow(() => {
         splitToParts(inputs, splitter)
       })
     })
@@ -365,10 +365,10 @@ describe('split', () => {
         ])
       })
 
-      it('should throw error for chunkSize of 0', async () => {
+      it('should throw error for chunkSize of 0', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 0 })
           },
           {
@@ -379,10 +379,10 @@ describe('split', () => {
       })
 
       // Validation tests
-      it('should throw error for negative chunkSize', async () => {
+      it('should throw error for negative chunkSize', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: -1 })
           },
           {
@@ -392,10 +392,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error for non-integer chunkSize', async () => {
+      it('should throw error for non-integer chunkSize', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 1.5 })
           },
           {
@@ -405,10 +405,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error for non-number chunkSize', async () => {
+      it('should throw error for non-number chunkSize', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 'invalid' as any })
           },
           {
@@ -418,10 +418,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error for negative chunkOverlap', async () => {
+      it('should throw error for negative chunkOverlap', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 5, chunkOverlap: -1 })
           },
           {
@@ -431,10 +431,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error for non-integer chunkOverlap', async () => {
+      it('should throw error for non-integer chunkOverlap', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 5, chunkOverlap: 1.5 })
           },
           {
@@ -444,10 +444,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error for non-number chunkOverlap', async () => {
+      it('should throw error for non-number chunkOverlap', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any })
           },
           {
@@ -458,10 +458,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error when chunkOverlap >= chunkSize', async () => {
+      it('should throw error when chunkOverlap >= chunkSize', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 5, chunkOverlap: 5 })
           },
           {
@@ -471,10 +471,10 @@ describe('split', () => {
         )
       })
 
-      it('should throw error when chunkOverlap > chunkSize', async () => {
+      it('should throw error when chunkOverlap > chunkSize', () => {
         const input: string = 'hello'
-        await assert.rejects(
-          async () => {
+        assert.throws(
+          () => {
             split(input, { chunkSize: 3, chunkOverlap: 5 })
           },
           {
@@ -867,10 +867,10 @@ describe('split', () => {
 
     describe('chunkStrategy', () => {
       describe('validation', () => {
-        it('should throw error for invalid chunkStrategy', async () => {
+        it('should throw error for invalid chunkStrategy', () => {
           const input: string = 'hello world'
-          await assert.rejects(
-            async () => {
+          assert.throws(
+            () => {
               split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any })
             },
             {
