@@ -1388,6 +1388,24 @@ describe('split', () => {
           assert.deepStrictEqual(charResult, [])
           assert.deepStrictEqual(paragraphResult, [])
         })
+
+        // TODO: remove .only
+        it.only("should handle array with unicode characters with token splitter", async () => {
+          const input = ["hello", "world", "👋🏻", " ¦"];
+          const result = split(input, {
+            chunkSize: 2,
+            splitter: tokenSplitter,
+          });
+          assert.deepStrictEqual(result, [
+            { text: ["hello", "world"], start: 0, end: 10 },
+            { text: ["👋🏻"], start: 10, end: 14 },
+          ]);
+        });
+
+        // TODO: Other test from ticket
+        // TODO: multibytes within chunks
+        // TODO: multibyte split across chunks
+        // TODO: multibytes next to barrier.
       })
     })
   })
