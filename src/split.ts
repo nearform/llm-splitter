@@ -73,10 +73,12 @@ export function splitToParts(
   let offset: number = 0
 
   for (const input of inputs) {
+    console.log('TODO: INPUT', input)
     let inputStart: number = 0
     const inputParts: string[] = splitter(input)
 
     for (const part of inputParts) {
+      console.log('TODO: PART', part)
       let partFound: boolean = false
       let partStart: number = inputStart
 
@@ -91,6 +93,9 @@ export function splitToParts(
 
       // Catch up cursor.
       while (partStart < input.length) {
+        console.log('TODO: IDX', partStart, {
+          test: input.startsWith(part, partStart)
+        })
         // Found a match of the part in the input.
         if (input.startsWith(part, partStart)) {
           // Just capture the matched part...
