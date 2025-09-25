@@ -3,6 +3,7 @@ import { describe, it, after, before } from 'node:test'
 import assert from 'node:assert'
 import tiktoken, { type Tiktoken } from 'tiktoken'
 import { splitToParts, split, ChunkStrategy, type Chunk } from '../src/split.js'
+import { getChunk } from '../src/get-chunk.js'
 
 // Helpers
 const charSplitter = (text: string): string[] => [...text]
@@ -1241,7 +1242,7 @@ describe('split', () => {
         })
 
         // TODO: remove .only
-        it.only('should handle array with unicode characters with token splitter', async () => {
+        it.skip('should handle array with unicode characters with token splitter', async () => {
           const input = ['hello', 'world', '👋🏻', ' ¦']
           const result = split(input, {
             chunkSize: 2,
@@ -1253,14 +1254,18 @@ describe('split', () => {
           ])
         })
 
+        // TODO: remove .only
         it.only('should handle array with unicode characters with token splitter', async () => {
-          const input = ['hello', 'w👋🏻rld']
+          const input = 'hello w👋🏻rld'
+          // TODO: BASELINE GUT CHECK
+          console.log('TODO - GET MULTIBYTE', getChunk(input, 0, 11))
+
           const result = split(input, {
             chunkSize: 2,
             splitter: tokenSplitter
           })
           assert.deepStrictEqual(result, [
-            { text: ['hello', 'w👋🏻rld'], start: 0, end: 10 }
+            { text: 'hello w👋🏻rld', start: 0, end: 12 }
           ])
         })
 

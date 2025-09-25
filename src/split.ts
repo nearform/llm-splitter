@@ -72,13 +72,40 @@ export function splitToParts(
   const parts: Chunk[] = []
   let offset: number = 0
 
+  // TODO: NOTES
+  // - getChunk operates on string index length (input[i]) NOT string array item version
+
   for (const input of inputs) {
-    console.log('TODO: INPUT', input)
+    const inputItems: string[] = [...input]
+    const inputItemsStr: string[] = []
+    for (let i = 0; i < input.length; i++) {
+      inputItemsStr.push(input[i])
+    }
+    const splits: string[] = splitter(input)
+    console.log('TODO: BASELINE', {
+      input,
+      inputLen: input.length,
+      inputItemsStrLen: inputItemsStr.length,
+      inputItemsStr,
+      inputItemsLen: inputItems.length,
+      inputItems,
+      splitsLen: splits.length
+    })
+
+    for (const split of splits) {
+      const splitItems: string[] = [...split]
+
+      console.log('TODO', { input, inputItems, split, splitItems })
+    }
+
+    break // TODO: REMOVE
+
     let inputStart: number = 0
     const inputParts: string[] = splitter(input)
+    console.log('TODO: INPUT', { input, inputParts, pieces: [...input] })
 
     for (const part of inputParts) {
-      console.log('TODO: PART', part)
+      console.log(`TODO: TOKEN`, { part, pieces: [...part] })
       let partFound: boolean = false
       let partStart: number = inputStart
 
@@ -93,9 +120,74 @@ export function splitToParts(
 
       // Catch up cursor.
       while (partStart < input.length) {
-        console.log('TODO: IDX', partStart, {
-          test: input.startsWith(part, partStart)
-        })
+        // console.log('TODO: IDX', partStart, {
+        //   test: input.startsWith(part, partStart)
+        // })
+        // Found a match of the part in the input.
+        if (input.startsWith(part, partStart)) {
+          // Just capture the matched part...
+          partFound = true
+          parts.push({
+            text: part,
+            start: partStart + offset + baseOffset,
+            end: partStart + part.length + offset + baseOffset
+          })
+
+          inputStart = partStart + part.length
+          break
+        }
+
+        // No match found, move cursor forward.
+        // Ignore and discard unmatched parts.
+        partStart++
+      }
+
+      if (!partFound)
+        throw new Error(
+          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
+        )
+    }
+
+    // Update offset.
+    // Ignore and discard unmatched parts.
+    offset += input.length
+  }
+
+  return parts
+}
+
+export function splitToPartsOrig(
+  inputs: string[],
+  splitter: (input: string) => string[],
+  baseOffset: number = 0
+): Chunk[] {
+  const parts: Chunk[] = []
+  let offset: number = 0
+
+  for (const input of inputs) {
+    let inputStart: number = 0
+    const inputParts: string[] = splitter(input)
+    console.log('TODO: INPUT', { input, inputParts, pieces: [...input] })
+
+    for (const part of inputParts) {
+      console.log(`TODO: TOKEN`, { part, pieces: [...part] })
+      let partFound: boolean = false
+      let partStart: number = inputStart
+
+      // Validation
+      if (typeof part !== 'string')
+        throw new Error(
+          `Splitter returned a non-string part: ${part} for input: ${input}`
+        )
+
+      // Ignore empty string.
+      if (part.length === 0) continue
+
+      // Catch up cursor.
+      while (partStart < input.length) {
+        // console.log('TODO: IDX', partStart, {
+        //   test: input.startsWith(part, partStart)
+        // })
         // Found a match of the part in the input.
         if (input.startsWith(part, partStart)) {
           // Just capture the matched part...
