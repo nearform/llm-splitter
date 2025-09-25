@@ -59,6 +59,9 @@ function assertChunkStrategy(
  * While this function takes an array of strings, the `start` and `end` indices are from the
  * perspective of the entire input array as a joined long single string.
  *
+ * **Note**: `start` and `end` are based on string indexing (`input[i]` or `intput.split('')`) and
+ * not on array-likeiteration of the string (e.g. `[...input]` or `Array.from(input)`)
+ *
  * @param {string[]} inputs - The inputs to split.
  * @param {Function} splitter - The function to split the text.
  * @param {number} baseOffset - The base offset to add to the start and end positions.
@@ -76,26 +79,47 @@ export function splitToParts(
   // - getChunk operates on string index length (input[i]) NOT string array item version
 
   for (const input of inputs) {
-    const inputItems: string[] = [...input]
-    const inputItemsStr: string[] = []
-    for (let i = 0; i < input.length; i++) {
-      inputItemsStr.push(input[i])
-    }
+    // const inputItems: string[] = [...input]
+    // const inputItemsStr: string[] = input.split('');
+    // const inputItemsCharAt: string[] = [];
+    // for (let i = 0; i < input.length; i++) {
+    //   inputItemsCharAt.push(input.charAt(i))
+    // }
+    // const splits: string[] = splitter(input)
+    // console.log('TODO: BASELINE', {
+    //   input,
+    //   inputLen: input.length,
+    //   inputItemsStrLen: inputItemsStr.length,
+    //   inputItemsStr,
+    //   inputItemsCharAtLen: inputItemsCharAt.length,
+    //   inputItemsCharAt,
+    //   inputItemsLen: inputItems.length,
+    //   inputItems,
+    //   splitsLen: splits.length
+    // })
+
+    const inputItems: string[] = input.split('')
+    const inputItemsCharCodes: number[] = inputItems.map(item =>
+      item.charCodeAt(0)
+    )
     const splits: string[] = splitter(input)
     console.log('TODO: BASELINE', {
-      input,
       inputLen: input.length,
-      inputItemsStrLen: inputItemsStr.length,
-      inputItemsStr,
+      input,
       inputItemsLen: inputItems.length,
       inputItems,
+      inputItemsCharCodesLen: inputItemsCharCodes.length,
+      inputItemsCharCodes,
       splitsLen: splits.length
     })
 
     for (const split of splits) {
-      const splitItems: string[] = [...split]
+      const splitItems: string[] = split.split('')
+      const splitItemsCharCodes: number[] = splitItems.map(item =>
+        item.charCodeAt(0)
+      )
 
-      console.log('TODO', { input, inputItems, split, splitItems })
+      console.log('TODO', { split, splitItems, splitItemsCharCodes })
     }
 
     break // TODO: REMOVE
