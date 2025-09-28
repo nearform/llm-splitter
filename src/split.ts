@@ -75,6 +75,56 @@ export function splitToParts(
   const parts: Chunk[] = []
   let offset: number = 0
 
+  for (const input of inputs) {
+    let inputStart: number = 0
+    const inputParts: string[] = splitter(input)
+
+    for (const part of inputParts) {
+      let partStart: number = inputStart
+
+      for (let i = 0; i < part.length; i++) {
+        let partCharIdx: number = partStart
+        while (input.charAt(partCharIdx) !== part[i]) {
+          console.log('TODO: PART CHECK', {
+            part,
+            in: inputStart,
+            p: partCharIdx,
+            i,
+            inC: input.charAt(partCharIdx),
+            pC: part[i]
+          })
+          if (partCharIdx >= input.length) {
+            throw new Error(
+              `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
+            )
+          }
+          partCharIdx++
+        }
+      }
+
+      // Found a match of the part in the input.
+      parts.push({
+        text: part,
+        start: partStart + offset + baseOffset,
+        end: partStart + part.length + offset + baseOffset
+      })
+      console.log('TODO: PART FOUND', { part, partStart })
+
+      inputStart = partStart + part.length
+    }
+  }
+
+  return parts
+}
+
+export function splitToPartsExperimental(
+  inputs: string[],
+  splitter: (input: string) => string[],
+  baseOffset: number = 0
+): Chunk[] {
+  const parts: Chunk[] = []
+  let offset: number = 0
+
   // TODO: NOTES
   // - getChunk operates on string index length (input[i]) NOT string array item version
 
