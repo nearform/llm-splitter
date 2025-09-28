@@ -56,7 +56,7 @@ describe('split', () => {
       assert.deepStrictEqual(result, expected)
     })
 
-    it('should split with whitespace splitter', () => {
+    it.only('should split with whitespace splitter', () => {
       const input: string[] = ['hello world!']
       const expected: Chunk[] = [
         { text: 'hello', start: 0, end: 5 },

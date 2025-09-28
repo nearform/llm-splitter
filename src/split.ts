@@ -73,45 +73,81 @@ export function splitToParts(
   baseOffset: number = 0
 ): Chunk[] {
   const parts: Chunk[] = []
-  let offset: number = 0
+  let inputsIdx: number = 0
 
   for (const input of inputs) {
-    let inputStart: number = 0
+    let inputIdx: number = 0
     const inputParts: string[] = splitter(input)
 
     for (const part of inputParts) {
-      let partStart: number = inputStart
+      let partIdx: number = inputIdx
+      let partFound: boolean = false
 
-      for (let i = 0; i < part.length; i++) {
-        let partCharIdx: number = partStart
-        while (input.charAt(partCharIdx) !== part[i]) {
-          console.log('TODO: PART CHECK', {
-            part,
-            in: inputStart,
-            p: partCharIdx,
-            i,
-            inC: input.charAt(partCharIdx),
-            pC: part[i]
+      if (typeof part !== 'string')
+        throw new Error(
+          `Splitter returned a non-string part: ${part} for input: ${input}`
+        )
+
+      // Ignore empty string.
+      if (part.length === 0) continue
+
+      // Catch up cursor.
+      while (partIdx < input.length) {
+        // Found a match of the part in the input.
+        if (input.startsWith(part, partIdx)) {
+          // Just capture the matched part...
+          partFound = true
+          parts.push({
+            text: part,
+            start: baseOffset + inputsIdx + partIdx,
+            end: baseOffset + inputsIdx + partIdx + part.length
           })
-          if (partCharIdx >= input.length) {
-            throw new Error(
-              `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-            )
-          }
-          partCharIdx++
+
+          inputIdx = partIdx + part.length
+          break
         }
+
+        // No match found, move cursor forward.
+        // Ignore and discard unmatched parts.
+        partIdx++
       }
 
-      // Found a match of the part in the input.
-      parts.push({
-        text: part,
-        start: partStart + offset + baseOffset,
-        end: partStart + part.length + offset + baseOffset
-      })
-      console.log('TODO: PART FOUND', { part, partStart })
+      if (!partFound)
+        throw new Error(
+          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
+        )
+      // ================================================
+      // TODO: FIX NEW
+      // for (let i = 0; i < part.length; i++) {
+      //   let partCharIdx: number = partIdx
 
-      inputStart = partStart + part.length
+      //   while (input.charAt(partCharIdx) !== part[i]) {
+      //     if (partCharIdx >= input.length) {
+      //       throw new Error(
+      //         `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
+      //       )
+      //     }
+      //     // console.log('TODO: PART LOOP', { i, partChar: input.charAt(partCharIdx), partCharExpected: part[i] })
+      //     partCharIdx++
+      //   }
+      // }
+
+      // // Found a match of the part in the input.
+      // parts.push({
+      //   text: part,
+      //   start: baseOffset + inputsIdx + partIdx,
+      //   end: baseOffset + inputsIdx + partIdx + part.length
+      // })
+      // console.log('TODO: PART FOUND', { part, partStart: partIdx })
+      // ================================================
+
+      // Finished a single (split) part.
+      inputIdx = partIdx + part.length
     }
+
+    // Finished a single input string..
+    // Ignore and discard unmatched parts.
+    inputsIdx += input.length
   }
 
   return parts
