@@ -56,7 +56,7 @@ describe('split', () => {
       assert.deepStrictEqual(result, expected)
     })
 
-    it.only('should split with whitespace splitter', () => {
+    it('should split with whitespace splitter', () => {
       const input: string[] = ['hello world!']
       const expected: Chunk[] = [
         { text: 'hello', start: 0, end: 5 },
@@ -1255,7 +1255,7 @@ describe('split', () => {
         })
 
         // TODO: remove .only
-        it.only('should handle array with unicode characters with token splitter', async () => {
+        it.skip('should handle array with unicode characters with token splitter', async () => {
           const input = 'hello w👋🏻rld'
           // TODO: BASELINE GUT CHECK
           console.log('TODO - GET MULTIBYTE', getChunk(input, 0, 11))

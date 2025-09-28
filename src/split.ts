@@ -53,6 +53,13 @@ function assertChunkStrategy(
     )
 }
 
+const partMatches = (input: string, part: string, partIdx: number): boolean => {
+  for (let i = 0; i < part.length; i++) {
+    if (input.charAt(partIdx + i) !== part[i]) return false
+  }
+  return true
+}
+
 /**
  * Split text into parts of text (or null if the part is ignored) and their start and end indices.
  *
@@ -94,7 +101,7 @@ export function splitToParts(
       // Catch up cursor.
       while (partIdx < input.length) {
         // Found a match of the part in the input.
-        if (input.startsWith(part, partIdx)) {
+        if (partMatches(input, part, partIdx)) {
           // Just capture the matched part...
           partFound = true
           parts.push({
@@ -116,30 +123,6 @@ export function splitToParts(
         throw new Error(
           `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
         )
-      // ================================================
-      // TODO: FIX NEW
-      // for (let i = 0; i < part.length; i++) {
-      //   let partCharIdx: number = partIdx
-
-      //   while (input.charAt(partCharIdx) !== part[i]) {
-      //     if (partCharIdx >= input.length) {
-      //       throw new Error(
-      //         `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-      //       )
-      //     }
-      //     // console.log('TODO: PART LOOP', { i, partChar: input.charAt(partCharIdx), partCharExpected: part[i] })
-      //     partCharIdx++
-      //   }
-      // }
-
-      // // Found a match of the part in the input.
-      // parts.push({
-      //   text: part,
-      //   start: baseOffset + inputsIdx + partIdx,
-      //   end: baseOffset + inputsIdx + partIdx + part.length
-      // })
-      // console.log('TODO: PART FOUND', { part, partStart: partIdx })
-      // ================================================
 
       // Finished a single (split) part.
       inputIdx = partIdx + part.length
