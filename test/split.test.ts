@@ -1250,10 +1250,10 @@ describe('split', () => {
 
           // NOTE: Token split results:
           // [
-          //   [ 'he', '¦', '¦', 'o' ],
-          //   [ 'world' ],
-          //   [ '�', '�', '�', '�', '�', '�' ],
-          //   [ ' �', '�' ]
+          //   [ 'he', '¦', '¦', 'o' ],           // `'he¦¦o'`
+          //   [ 'world' ],                       // `'world'`
+          //   [ '�', '�', '�', '�', '�', '�' ],  // `'👋🏻'
+          //   [ ' �', '�' ]                      // `' ¦'`
           // ]
 
           assert.deepStrictEqual(result, [
@@ -1294,8 +1294,41 @@ describe('split', () => {
           ])
         })
 
-        // TODO: 'hello w👋🏻rld extra' with token splitter
-        // TODO: Other test from ticket
+        it('should handle multibyte arrays with token splitter', async () => {
+          const input: string[] = [
+            'hello 🌍',
+            'café naïve façade',
+            'こんにちは world',
+            'emoji: 😀😃😄😁',
+            'русский текст mixed',
+            '中文字符 and english',
+            'Español: año, niño, jalapeño',
+            'français: élève, déjà vu',
+            'Grüße, München! Straße',
+            'Zürich — Genève',
+            'crème brûlée',
+            'smörgåsbord',
+            'piñata 🎉 fiesta',
+            'I ❤️ TypeScript',
+            '𝔘𝔫𝔦𝔠𝔬𝔡𝔢 𝔣𝔬𝔫𝔱𝔰',
+            'Math: ∑ ∫ √ ∞ ≈ ≠ ≤ ≥',
+            'Arabic: مرحبا بالعالم',
+            'Hebrew: שלום עולם',
+            'Hindi: नमस्ते दुनिया',
+            'Thai: สวัสดีโลก'
+          ]
+          const chunks: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'paragraph',
+            splitter: tokenSplitter
+          })
+
+          for (const chunk of chunks) {
+            const retrievedText = getChunk(input, chunk.start, chunk.end)
+            assert.deepStrictEqual(chunk.text, retrievedText)
+          }
+        })
+
         // TODO: multibytes within chunks
         // TODO: multibyte split across chunks
         // TODO: multibytes next to barrier.
