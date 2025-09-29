@@ -53,10 +53,110 @@ function assertChunkStrategy(
     )
 }
 
-const partMatches = (input: string, part: string, partIdx: number): boolean => {
-  for (let i = 0; i < part.length; i++) {
-    if (input.charAt(partIdx + i) !== part[i]) return false
+const findMatches = (input: string, splitParts: string[]) => {
+  const matchedParts: Chunk[] = []
+  let inputIndex = 0
+
+  for (const splitPart of splitParts) {
+    // Check if all characters in splitPart have char codes above 255
+    const allHighCharCodes = [...splitPart].every(
+      char => char.charCodeAt(0) > 255
+    )
+
+    if (allHighCharCodes) {
+      continue
+    }
+
+    // Get all valid characters (charCode <= 255) from splitPart
+    const validChars = [...splitPart].filter(char => char.charCodeAt(0) <= 255)
+
+    if (validChars.length === 0) {
+      continue
+    }
+
+    // Find consecutive matching characters in input
+    let startPos = -1
+    let endPos = -1
+    let found = false
+
+    // Search for the sequence of valid characters
+    for (let i = inputIndex; i <= input.length - validChars.length; i++) {
+      let matches = true
+
+      for (let j = 0; j < validChars.length; j++) {
+        if (input[i + j] !== validChars[j]) {
+          matches = false
+          break
+        }
+      }
+
+      if (matches) {
+        startPos = i
+        endPos = i + validChars.length
+        inputIndex = endPos
+        found = true
+        break
+      }
+    }
+
+    if (!found) {
+      throw new Error(`Could not find match for splitPart: "${splitPart}"`)
+    }
+
+    matchedParts.push({
+      text: splitPart,
+      start: startPos,
+      end: endPos
+    })
   }
+
+  return matchedParts
+}
+
+// TODO: NUANCE -- need to check both input and part for non-ANSI single byte characters and handle differently.
+const partMatches = (input: string, part: string, partIdx: number): boolean => {
+  // TODO: REMOVE -- OLD WAY.
+  // return input.startsWith(part, partIdx)
+
+  console.log('TODO: PART', { part })
+  for (let i = 0; i < part.length; i++) {
+    // console.log('TODO: PART LOOP', {
+    //   input, part, partIdx, i,
+    //   inputChar: input.charAt(partIdx + i),
+    //   inputCharCode: input.charCodeAt(partIdx + i),
+    //   partChar: part[i],
+    //   partCharCode: part.charCodeAt(i)
+    // })
+    const inputCharCode = input.charCodeAt(partIdx + i)
+    const partCharCode = part.charCodeAt(i)
+
+    // TODO: test above 127 char codes.
+    if (partCharCode <= 255) {
+      console.log('TODO: PART I', {
+        i,
+        inputChar: input.charAt(partIdx + i),
+        inputCharCode,
+        partCharCode
+      })
+    }
+
+    // A "miss" is unmatched ANSI single byte characters.
+    // If _both_ are non-ANSI single byte characters, we consider it a match.
+    if (
+      inputCharCode !== partCharCode &&
+      inputCharCode < 128 &&
+      partCharCode < 128
+    ) {
+      // console.log('TODO: PART MISS', {
+      //   inputChar: input.charAt(partIdx + i),
+      //   inputCharCode,
+      //   partCharCode
+      // })
+      return false
+    }
+  }
+
+  console.log('TODO: PART MATCH TRUE', { part, partIdx })
   return true
 }
 
@@ -75,6 +175,35 @@ const partMatches = (input: string, part: string, partIdx: number): boolean => {
  * @returns {Chunk[]}
  */
 export function splitToParts(
+  inputs: string[],
+  splitter: (input: string) => string[],
+  baseOffset: number = 0
+): Chunk[] {
+  const parts: Chunk[] = []
+  let inputsOffset: number = 0
+
+  for (const input of inputs) {
+    const splitParts: string[] = splitter(input)
+
+    const matches: Chunk[] = findMatches(input, splitParts)
+    for (const match of matches) {
+      parts.push({
+        text: match.text,
+        start: baseOffset + inputsOffset + match.start,
+        end: baseOffset + inputsOffset + match.end
+      })
+    }
+    console.log('TODO: FOUND MATCHES', { matches })
+
+    // Finished a single input string..
+    // Ignore and discard unmatched parts.
+    inputsOffset += input.length
+  }
+
+  return parts
+}
+
+export function splitToPartsGettingCloser(
   inputs: string[],
   splitter: (input: string) => string[],
   baseOffset: number = 0

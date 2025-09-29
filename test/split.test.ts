@@ -1255,18 +1255,41 @@ describe('split', () => {
         })
 
         // TODO: remove .only
-        it.skip('should handle array with unicode characters with token splitter', async () => {
-          const input = 'hello w👋🏻rld'
+        it.only('should handle array with unicode characters with token splitter', async () => {
+          const input = 'hello w👋🏻rld extra'
+
+          const arrToObj = (arr: string[]) =>
+            Object.fromEntries(arr.map((c, i) => [i, [c, c.charCodeAt(0)]]))
+
           // TODO: BASELINE GUT CHECK
-          console.log('TODO - GET MULTIBYTE', getChunk(input, 0, 11))
+          const tokens = tokenSplitter(input)
+          const tokenRawChars = tokens.flatMap(part => part.split(''))
+          const tokenChars = arrToObj(tokenRawChars)
+          console.log('TODO - GET MULTIBYTE', {
+            inputLen: input.length,
+            tokens,
+            chars: arrToObj(input.split('')),
+            tokenChars
+          })
+
+          // // TODO: HERE -- different **length** of multibyte characters.
+          // return;
 
           const result = split(input, {
             chunkSize: 2,
             splitter: tokenSplitter
           })
+
           assert.deepStrictEqual(result, [
-            { text: 'hello w👋🏻rld', start: 0, end: 12 }
+            { text: 'hello w👋🏻rld', start: 0, end: 14 },
+            { text: 'extra', start: 15, end: 20 }
           ])
+
+          // whitespaceSplitter
+          // assert.deepStrictEqual(result, [
+          //   { text: 'hello w👋🏻rld', start: 0, end: 14 },
+          //   { text: 'extra', start: 15, end: 20 }
+          // ])
         })
 
         // TODO: Other test from ticket
