@@ -58,6 +58,13 @@ const findMatches = (input: string, splitParts: string[]) => {
   let inputIndex = 0
 
   for (const splitPart of splitParts) {
+    if (typeof splitPart !== 'string')
+      throw new Error(
+        `Splitter returned a non-string part: ${splitPart} for input: ${input}`
+      )
+
+    // TODO: FAST PATH input.startsWith(splitPart, inputIndex) ???
+
     // Check if all characters in splitPart have char codes above 255
     const allHighCharCodes = [...splitPart].every(
       char => char.charCodeAt(0) > 255
@@ -100,7 +107,9 @@ const findMatches = (input: string, splitParts: string[]) => {
     }
 
     if (!found) {
-      throw new Error(`Could not find match for splitPart: "${splitPart}"`)
+      throw new Error(
+        `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`
+      )
     }
 
     matchedParts.push({
@@ -111,53 +120,6 @@ const findMatches = (input: string, splitParts: string[]) => {
   }
 
   return matchedParts
-}
-
-// TODO: NUANCE -- need to check both input and part for non-ANSI single byte characters and handle differently.
-const partMatches = (input: string, part: string, partIdx: number): boolean => {
-  // TODO: REMOVE -- OLD WAY.
-  // return input.startsWith(part, partIdx)
-
-  console.log('TODO: PART', { part })
-  for (let i = 0; i < part.length; i++) {
-    // console.log('TODO: PART LOOP', {
-    //   input, part, partIdx, i,
-    //   inputChar: input.charAt(partIdx + i),
-    //   inputCharCode: input.charCodeAt(partIdx + i),
-    //   partChar: part[i],
-    //   partCharCode: part.charCodeAt(i)
-    // })
-    const inputCharCode = input.charCodeAt(partIdx + i)
-    const partCharCode = part.charCodeAt(i)
-
-    // TODO: test above 127 char codes.
-    if (partCharCode <= 255) {
-      console.log('TODO: PART I', {
-        i,
-        inputChar: input.charAt(partIdx + i),
-        inputCharCode,
-        partCharCode
-      })
-    }
-
-    // A "miss" is unmatched ANSI single byte characters.
-    // If _both_ are non-ANSI single byte characters, we consider it a match.
-    if (
-      inputCharCode !== partCharCode &&
-      inputCharCode < 128 &&
-      partCharCode < 128
-    ) {
-      // console.log('TODO: PART MISS', {
-      //   inputChar: input.charAt(partIdx + i),
-      //   inputCharCode,
-      //   partCharCode
-      // })
-      return false
-    }
-  }
-
-  console.log('TODO: PART MATCH TRUE', { part, partIdx })
-  return true
 }
 
 /**
@@ -193,251 +155,10 @@ export function splitToParts(
         end: baseOffset + inputsOffset + match.end
       })
     }
-    console.log('TODO: FOUND MATCHES', { matches })
 
     // Finished a single input string..
     // Ignore and discard unmatched parts.
     inputsOffset += input.length
-  }
-
-  return parts
-}
-
-export function splitToPartsGettingCloser(
-  inputs: string[],
-  splitter: (input: string) => string[],
-  baseOffset: number = 0
-): Chunk[] {
-  const parts: Chunk[] = []
-  let inputsIdx: number = 0
-
-  for (const input of inputs) {
-    let inputIdx: number = 0
-    const inputParts: string[] = splitter(input)
-
-    for (const part of inputParts) {
-      let partIdx: number = inputIdx
-      let partFound: boolean = false
-
-      if (typeof part !== 'string')
-        throw new Error(
-          `Splitter returned a non-string part: ${part} for input: ${input}`
-        )
-
-      // Ignore empty string.
-      if (part.length === 0) continue
-
-      // Catch up cursor.
-      while (partIdx < input.length) {
-        // Found a match of the part in the input.
-        if (partMatches(input, part, partIdx)) {
-          // Just capture the matched part...
-          partFound = true
-          parts.push({
-            text: part,
-            start: baseOffset + inputsIdx + partIdx,
-            end: baseOffset + inputsIdx + partIdx + part.length
-          })
-
-          inputIdx = partIdx + part.length
-          break
-        }
-
-        // No match found, move cursor forward.
-        // Ignore and discard unmatched parts.
-        partIdx++
-      }
-
-      if (!partFound)
-        throw new Error(
-          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-        )
-
-      // Finished a single (split) part.
-      inputIdx = partIdx + part.length
-    }
-
-    // Finished a single input string..
-    // Ignore and discard unmatched parts.
-    inputsIdx += input.length
-  }
-
-  return parts
-}
-
-export function splitToPartsExperimental(
-  inputs: string[],
-  splitter: (input: string) => string[],
-  baseOffset: number = 0
-): Chunk[] {
-  const parts: Chunk[] = []
-  let offset: number = 0
-
-  // TODO: NOTES
-  // - getChunk operates on string index length (input[i]) NOT string array item version
-
-  for (const input of inputs) {
-    // const inputItems: string[] = [...input]
-    // const inputItemsStr: string[] = input.split('');
-    // const inputItemsCharAt: string[] = [];
-    // for (let i = 0; i < input.length; i++) {
-    //   inputItemsCharAt.push(input.charAt(i))
-    // }
-    // const splits: string[] = splitter(input)
-    // console.log('TODO: BASELINE', {
-    //   input,
-    //   inputLen: input.length,
-    //   inputItemsStrLen: inputItemsStr.length,
-    //   inputItemsStr,
-    //   inputItemsCharAtLen: inputItemsCharAt.length,
-    //   inputItemsCharAt,
-    //   inputItemsLen: inputItems.length,
-    //   inputItems,
-    //   splitsLen: splits.length
-    // })
-
-    const inputItems: string[] = input.split('')
-    const inputItemsCharCodes: number[] = inputItems.map(item =>
-      item.charCodeAt(0)
-    )
-    const splits: string[] = splitter(input)
-    console.log('TODO: BASELINE', {
-      inputLen: input.length,
-      input,
-      inputItemsLen: inputItems.length,
-      inputItems,
-      inputItemsCharCodesLen: inputItemsCharCodes.length,
-      inputItemsCharCodes,
-      splitsLen: splits.length
-    })
-
-    for (const split of splits) {
-      const splitItems: string[] = split.split('')
-      const splitItemsCharCodes: number[] = splitItems.map(item =>
-        item.charCodeAt(0)
-      )
-
-      console.log('TODO', { split, splitItems, splitItemsCharCodes })
-    }
-
-    break // TODO: REMOVE
-
-    let inputStart: number = 0
-    const inputParts: string[] = splitter(input)
-    console.log('TODO: INPUT', { input, inputParts, pieces: [...input] })
-
-    for (const part of inputParts) {
-      console.log(`TODO: TOKEN`, { part, pieces: [...part] })
-      let partFound: boolean = false
-      let partStart: number = inputStart
-
-      // Validation
-      if (typeof part !== 'string')
-        throw new Error(
-          `Splitter returned a non-string part: ${part} for input: ${input}`
-        )
-
-      // Ignore empty string.
-      if (part.length === 0) continue
-
-      // Catch up cursor.
-      while (partStart < input.length) {
-        // console.log('TODO: IDX', partStart, {
-        //   test: input.startsWith(part, partStart)
-        // })
-        // Found a match of the part in the input.
-        if (input.startsWith(part, partStart)) {
-          // Just capture the matched part...
-          partFound = true
-          parts.push({
-            text: part,
-            start: partStart + offset + baseOffset,
-            end: partStart + part.length + offset + baseOffset
-          })
-
-          inputStart = partStart + part.length
-          break
-        }
-
-        // No match found, move cursor forward.
-        // Ignore and discard unmatched parts.
-        partStart++
-      }
-
-      if (!partFound)
-        throw new Error(
-          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-        )
-    }
-
-    // Update offset.
-    // Ignore and discard unmatched parts.
-    offset += input.length
-  }
-
-  return parts
-}
-
-export function splitToPartsOrig(
-  inputs: string[],
-  splitter: (input: string) => string[],
-  baseOffset: number = 0
-): Chunk[] {
-  const parts: Chunk[] = []
-  let offset: number = 0
-
-  for (const input of inputs) {
-    let inputStart: number = 0
-    const inputParts: string[] = splitter(input)
-    console.log('TODO: INPUT', { input, inputParts, pieces: [...input] })
-
-    for (const part of inputParts) {
-      console.log(`TODO: TOKEN`, { part, pieces: [...part] })
-      let partFound: boolean = false
-      let partStart: number = inputStart
-
-      // Validation
-      if (typeof part !== 'string')
-        throw new Error(
-          `Splitter returned a non-string part: ${part} for input: ${input}`
-        )
-
-      // Ignore empty string.
-      if (part.length === 0) continue
-
-      // Catch up cursor.
-      while (partStart < input.length) {
-        // console.log('TODO: IDX', partStart, {
-        //   test: input.startsWith(part, partStart)
-        // })
-        // Found a match of the part in the input.
-        if (input.startsWith(part, partStart)) {
-          // Just capture the matched part...
-          partFound = true
-          parts.push({
-            text: part,
-            start: partStart + offset + baseOffset,
-            end: partStart + part.length + offset + baseOffset
-          })
-
-          inputStart = partStart + part.length
-          break
-        }
-
-        // No match found, move cursor forward.
-        // Ignore and discard unmatched parts.
-        partStart++
-      }
-
-      if (!partFound)
-        throw new Error(
-          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-        )
-    }
-
-    // Update offset.
-    // Ignore and discard unmatched parts.
-    offset += input.length
   }
 
   return parts
