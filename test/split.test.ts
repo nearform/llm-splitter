@@ -1241,16 +1241,29 @@ describe('split', () => {
           assert.deepStrictEqual(paragraphResult, [])
         })
 
-        // TODO: remove .only
-        it.skip('should handle array with unicode characters with token splitter', async () => {
-          const input = ['hello', 'world', '👋🏻', ' ¦']
+        it('should handle array with unicode characters with token splitter', async () => {
+          const input = ['he¦¦o', 'world', '👋🏻', ' ¦']
           const result = split(input, {
             chunkSize: 2,
             splitter: tokenSplitter
           })
+
+          // NOTE: Token split results:
+          // [
+          //   [ 'he', '¦', '¦', 'o' ],
+          //   [ 'world' ],
+          //   [ '�', '�', '�', '�', '�', '�' ],
+          //   [ ' �', '�' ]
+          // ]
+
           assert.deepStrictEqual(result, [
-            { text: ['hello', 'world'], start: 0, end: 10 },
-            { text: ['👋🏻'], start: 10, end: 14 }
+            // First two tokens: 'he', '¦'
+            { text: ['he¦'], start: 0, end: 3 },
+            // Second two tokens: '¦', 'o'
+            { text: ['¦o'], start: 3, end: 5 },
+            // Here, we get: 'world', then ignore all single >255 code chars, then ' �' but just the first space.
+            // This has the effect of grabbing the emoji wave in between.
+            { text: ['world', '👋🏻', ' '], start: 5, end: 15 }
           ])
         })
 
@@ -1268,8 +1281,7 @@ describe('split', () => {
           ])
         })
 
-        // TODO: remove .only
-        it.skip('should handle array with unicode characters with token splitter', async () => {
+        it('should handle array with unicode characters with token splitter', async () => {
           const input = 'hello w👋🏻rld extra'
           const result = split(input, {
             chunkSize: 2,

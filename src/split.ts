@@ -74,32 +74,55 @@ const findMatches = (input: string, splitParts: string[]) => {
       continue
     }
 
-    // Get all valid characters (charCode <= 255) from splitPart
-    const validChars = [...splitPart].filter(char => char.charCodeAt(0) <= 255)
+    // Find the first and last valid characters (charCode <= 255) in splitPart
+    const splitPartChars = [...splitPart]
+    let firstValidIndex = -1
+    let lastValidIndex = -1
 
-    if (validChars.length === 0) {
+    for (let i = 0; i < splitPartChars.length; i++) {
+      if (splitPartChars[i].charCodeAt(0) <= 255) {
+        if (firstValidIndex === -1) {
+          firstValidIndex = i
+        }
+        lastValidIndex = i
+      }
+    }
+
+    if (firstValidIndex === -1) {
       continue
     }
 
-    // Find consecutive matching characters in input
+    // Find the first valid character in the input
+    const firstValidChar = splitPartChars[firstValidIndex]
     let startPos = -1
     let endPos = -1
     let found = false
 
-    // Search for the sequence of valid characters
-    for (let i = inputIndex; i <= input.length - validChars.length; i++) {
-      let matches = true
-
-      for (let j = 0; j < validChars.length; j++) {
-        if (input[i + j] !== validChars[j]) {
-          matches = false
-          break
-        }
-      }
-
-      if (matches) {
+    // Search for the first valid character in input
+    for (let i = inputIndex; i < input.length; i++) {
+      if (input[i] === firstValidChar) {
         startPos = i
-        endPos = i + validChars.length
+        // Find the last valid character position
+        let lastValidPos = startPos
+        for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
+          const nextValidChar = splitPartChars[j]
+          if (nextValidChar.charCodeAt(0) <= 255) {
+            // Find this character in the input after the current position
+            let foundNext = false
+            for (let k = lastValidPos + 1; k < input.length; k++) {
+              if (input[k] === nextValidChar) {
+                lastValidPos = k
+                foundNext = true
+                break
+              }
+            }
+            if (!foundNext) {
+              // If we can't find the next valid character, break
+              break
+            }
+          }
+        }
+        endPos = lastValidPos + 1
         inputIndex = endPos
         found = true
         break
