@@ -311,24 +311,13 @@ const chunks = split(text, {
 
 ### Multibyte / Unicode Strings
 
-Splitting on multibyte / unicode strings can cause malformed chunks and internal errors to be thrown if `start`/`end` token or chunk positions can't be determined. We are presently tracking this in [an issue](https://github.com/nearform/llm-splitter/issues/36).
+When processing text with multibyte characters (Unicode characters with char codes greater than 255), these characters are ignored during tokenization and chunking. The string positions (`start` and `end`) will skip them at the front and back of a chunk string, which means chunk text will omit these characters when they occur on a chunk boundary.
 
-If your input has these characters, at present we recommend pre-processing and stripping them out before calling `split` like:
+This approach represents a tradeoff: while some higher-level Unicode data may be lost during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
 
 ```js
-const input = 'Hello there! 👋🏻'
-const removeNonAscii = str => str.replace(/[^\x00-\x7F]/g, '')
-const strippedInput = removeNonAscii(input) // => "Hello there! "
-
-const chunks = split(strippedInput)
-for (const { start, end } of chunks) {
-  // Use `strippedInput`, not `input` for the correct string retrieval!
-  const retrieved = getChunk(strippedInput, start, end)
-  console.log('Retrieved chunk:', { retrieved, start, end })
-}
+// TODO: EMOJI EXAMPLE
 ```
-
-Note then that calls with `start` and `end` to `getChunk` must use your processed/stripped input and not the original input!
 
 ## License
 

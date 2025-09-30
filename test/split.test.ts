@@ -1267,7 +1267,7 @@ describe('split', () => {
           ])
         })
 
-        it('should handle array with unicode characters with token splitter', async () => {
+        it('should handle string with unicode characters with token splitter', async () => {
           const input = 'hello w👋🏻rld extra'
           const result = split(input, {
             chunkSize: 2,
@@ -1281,7 +1281,7 @@ describe('split', () => {
           ])
         })
 
-        it('should handle array with unicode characters with token splitter', async () => {
+        it('should handle string with unicode characters with whitespace splitter', async () => {
           const input = 'hello w👋🏻rld extra'
           const result = split(input, {
             chunkSize: 2,
@@ -1291,6 +1291,20 @@ describe('split', () => {
           assert.deepStrictEqual(result, [
             { text: 'hello w👋🏻rld', start: 0, end: 14 },
             { text: 'extra', start: 15, end: 20 }
+          ])
+        })
+
+        it('should handle array with unicode characters with whitespace splitter', async () => {
+          const input = ['hi👋 w🌍rld wow😃', '🚀', 'more 🚀 text here']
+          const result = split(input, {
+            chunkOverlap: 2,
+            chunkSize: 4,
+            splitter: whitespaceSplitter
+          })
+
+          assert.deepStrictEqual(result, [
+            { text: ['hi👋 w🌍rld wow😃', '🚀', 'more'], start: 0, end: 23 },
+            { text: ['wow😃', '🚀', 'more 🚀 text here'], start: 12, end: 36 }
           ])
         })
 
@@ -1328,10 +1342,6 @@ describe('split', () => {
             assert.deepStrictEqual(chunk.text, retrievedText)
           }
         })
-
-        // TODO: multibytes within chunks
-        // TODO: multibyte split across chunks
-        // TODO: multibytes next to barrier.
       })
     })
   })
