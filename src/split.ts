@@ -63,7 +63,21 @@ const findMatches = (input: string, splitParts: string[]) => {
         `Splitter returned a non-string part: ${splitPart} for input: ${input}`
       )
 
-    // TODO: FAST PATH input.startsWith(splitPart, inputIndex) ???
+    if (splitPart.length === 0) {
+      continue
+    }
+
+    // TODO: ADD FAST PATH?? Changes behavior / tests.
+    // // Fast path -- simple string match.
+    // if (input.startsWith(splitPart, inputIndex)) {
+    //   matchedParts.push({
+    //     text: splitPart,
+    //     start: inputIndex,
+    //     end: inputIndex + splitPart.length
+    //   })
+    //   inputIndex += splitPart.length
+    //   continue
+    // }
 
     // Check if all characters in splitPart have char codes above 255
     const allHighCharCodes = [...splitPart].every(
