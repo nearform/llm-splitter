@@ -67,7 +67,7 @@ const findMatches = (input: string, splitParts: string[]) => {
       continue
     }
 
-    // TODO: ADD FAST PATH?? Changes behavior / tests.
+    // // TODO: ADD FAST PATH?? Changes behavior / tests.
     // // Fast path -- simple string match.
     // if (input.startsWith(splitPart, inputIndex)) {
     //   matchedParts.push({
@@ -80,7 +80,8 @@ const findMatches = (input: string, splitParts: string[]) => {
     // }
 
     // Check if all characters in splitPart have char codes above 255
-    const allHighCharCodes = [...splitPart].every(
+    const splitPartChars = splitPart.split('')
+    const allHighCharCodes = splitPartChars.every(
       char => char.charCodeAt(0) > 255
     )
 
@@ -89,7 +90,6 @@ const findMatches = (input: string, splitParts: string[]) => {
     }
 
     // Find the first and last valid characters (charCode <= 255) in splitPart
-    const splitPartChars = [...splitPart]
     let firstValidIndex = -1
     let lastValidIndex = -1
 
@@ -328,7 +328,7 @@ export function split(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter = (text: string): string[] => [...text],
+    splitter = (text: string): string[] => text.split(''),
     chunkStrategy = ChunkStrategy.character
   }: SplitOptions = {}
 ) {
