@@ -1347,6 +1347,22 @@ describe('split', () => {
             assert.deepStrictEqual(chunk.text, retrievedText)
           }
         })
+
+        it('throws if splitter returns a part not found in multibyte input', () => {
+          const input = 'h👋🏻llo w👋🏻rld extra'
+          assert.throws(
+            () => {
+              split(input, {
+                chunkSize: 2,
+                splitter: text => text.toUpperCase().split(/\s+/)
+              })
+            },
+            {
+              message:
+                'Splitter did not return any parts for input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...'
+            }
+          )
+        })
       })
     })
   })

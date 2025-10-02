@@ -126,17 +126,11 @@ const findMatches = (input: string, splitParts: string[]) => {
           const nextValidChar = splitPartChars[j]
           if (nextValidChar.charCodeAt(0) <= 255) {
             // Find this character in the input after the current position
-            let foundNext = false
             for (let k = lastValidPos + 1; k < input.length; k++) {
               if (input[k] === nextValidChar) {
                 lastValidPos = k
-                foundNext = true
                 break
               }
-            }
-            if (!foundNext) {
-              // If we can't find the next valid character, break
-              break
             }
           }
         }
