@@ -57,7 +57,7 @@ const findMatches = (input: string, splitParts: string[]) => {
   const matchedParts: Chunk[] = []
   let inputIndex = 0
 
-  splitPartsLoop: for (const splitPart of splitParts) {
+  for (const splitPart of splitParts) {
     if (typeof splitPart !== 'string')
       throw new Error(
         `Splitter returned a non-string part: ${splitPart} for input: ${input}`
@@ -77,20 +77,11 @@ const findMatches = (input: string, splitParts: string[]) => {
         end: inputIndex + splitPart.length
       })
       inputIndex += splitPart.length
-      continue splitPartsLoop
-    }
-
-    // Check if all characters in splitPart have char codes above 255
-    const splitPartChars = splitPart.split('')
-    const allHighCharCodes = splitPartChars.every(
-      char => char.charCodeAt(0) > 255
-    )
-
-    if (allHighCharCodes) {
       continue
     }
 
-    // Find the first and last valid characters (charCode <= 255) in splitPart
+    // Split the part and find first + last usable character indices.
+    const splitPartChars = splitPart.split('')
     let firstValidIndex = -1
     let lastValidIndex = -1
 
@@ -107,26 +98,26 @@ const findMatches = (input: string, splitParts: string[]) => {
       continue
     }
 
-    // Find the first valid character in the input
+    // Find the first valid character in the **split part**.
+    // We'll now search starting from here in the split part.
     const firstValidChar = splitPartChars[firstValidIndex]
     let startPos = -1
     let endPos = -1
     let found = false
 
-    // Search for the first valid character in input
+    // Search for the first valid character in the **input**.
+    // We'll loop on the input until we find the first valid character or hit the end and error out.
     for (let i = inputIndex; i < input.length; i++) {
       if (input[i] === firstValidChar) {
         startPos = i
 
-        // Do the fast path again, in case we can cach other multibyte strings.
+        // Do the fast path again, in case we can catch other multibyte strings.
         if (input.startsWith(splitPart, startPos)) {
-          matchedParts.push({
-            text: splitPart,
-            start: startPos,
-            end: startPos + splitPart.length
-          })
+          // Found!
+          endPos = startPos + splitPart.length
           inputIndex += splitPart.length
-          continue splitPartsLoop
+          found = true
+          break
         }
 
         // Slow path -- only match on non-multibyte chars. Will miss some strings.
@@ -149,6 +140,8 @@ const findMatches = (input: string, splitParts: string[]) => {
             }
           }
         }
+
+        // Found!
         endPos = lastValidPos + 1
         inputIndex = endPos
         found = true
