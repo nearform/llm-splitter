@@ -160,7 +160,7 @@ const findMatches = (input: string, splitParts: string[]) => {
  * perspective of the entire input array as a joined long single string.
  *
  * **Note**: `start` and `end` are based on string indexing (`input[i]` or `intput.split('')`) and
- * not on array-likeiteration of the string (e.g. `[...input]` or `Array.from(input)`)
+ * not on array-like iteration of the string (e.g. `[...input]` or `Array.from(input)`)
  *
  * @param {string[]} inputs - The inputs to split.
  * @param {Function} splitter - The function to split the text.
