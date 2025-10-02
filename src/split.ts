@@ -55,6 +55,14 @@ function assertChunkStrategy(
     )
 }
 
+/**
+ * Finds and returns the matched parts (chunks) of the input string based on the provided split parts.
+ *
+ * @param {string} input - The original string to be split and matched.
+ * @param {string[]} splitParts - The array of string parts to match within the input string.
+ * @returns {Chunk[]} An array of Chunk objects, each representing a matched part of the input string.
+ * @throws {Error} If a split part cannot be matched in the input string in the expected order.
+ */
 const findMatches = (input: string, splitParts: string[]) => {
   const matchedParts: Chunk[] = []
   let inputIndex = 0
