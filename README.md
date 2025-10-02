@@ -311,13 +311,54 @@ const chunks = split(text, {
 
 ### Multibyte / Unicode Strings
 
-When processing text with multibyte characters (Unicode characters with char codes greater than 255), these characters are ignored during tokenization and chunking. The string positions (`start` and `end`) will skip them at the front and back of a chunk string, which means chunk text will omit these characters when they occur on a chunk boundary.
+Processing text with multibyte characters (Unicode characters with char codes greater than 255 -- e.g. emojis) is problematic for tokenizers that can split strings across byte boundaries (as noted by [other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). `llm-splitter` needs to determine the `start`/`end` locations of each chunk and thus have to find locations for the split parts in the original input(s).
 
-This approach represents a tradeoff: while some higher-level Unicode data may be lost during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
+How `llm-splitter` approaches the multibyte characters problem as follows -- for each part produced by `splitter()`:
+
+- If part doesn't have multibyte characters, then should be completely matched.
+- Try to do a simple string `startsWith(part)` match. This will correctly match on many strings with multibyte characters in them.
+- If that fails, then ignore the multibyte characters, and iterate through the part until we find a match on the single-byte parts. At this point we will potentially multibyte characters to just match on strings starting with single-byte characters.
+
+When the parts are then gathered into chunks and aggregated into `{ text, start, end }` array items, this means that some of the chunks will _undercount_ the number of parts produced by the `splitter()` function. In a simple test we conducted on 10MB of blog post content using the `tiktoken` tokenizer in our `splitter()` function, our results were that for the 3 million parts produced 99.6% of them matched without needing to ignore multibyte characters. So, if your chunking implementation is need hard constraints (like embedding API max tokens) on how large the chunks can be, we would advise to add a padding amount in your `chunkSize` to accomodate this if your text processing corpus contains multibyte strings. Additionally, if a large number of multibyte strings are prevalent, it would likely make sense to do some upfront analysis to determine a proper padding for `chunkSize`.
+
+Let's take a quick look at this in action working with multibyte emojis and a `tiktoken`-based splitter:
 
 ```js
-// TODO: EMOJI EXAMPLE
+const text = `
+A noiseless 🤫 patient spider, 🕷️
+I mark'd where on a little 🏔️ promontory it stood isolated,
+Mark'd how to explore 🔍 the vacant vast 🌌 surrounding,
+`
+
+const chunks = split(text, {
+  chunkSize: 15,
+  chunkOverlap: 2,
+  chunkStrategy: 'paragraph',
+  splitter: tokenSplitter // from previous example
+})
+
+console.log(JSON.stringify(chunks, null, 2))
+// =>
+;[
+  {
+    text: "\nA noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
+    start: 0,
+    end: 53
+  },
+  {
+    text: " where on a little 🏔️ promontory it stood isolated,\nMark'd how",
+    start: 44,
+    end: 107
+  },
+  {
+    text: "'d how to explore 🔍 the vacant vast 🌌 surrounding,\n",
+    start: 101,
+    end: 154
+  }
+]
 ```
+
+Ultimately, this approach represents a tradeoff: while some higher-level Unicode data may be lost during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
 
 ## License
 

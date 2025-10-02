@@ -1295,16 +1295,21 @@ describe('split', () => {
         })
 
         it('should handle array with unicode characters with whitespace splitter', async () => {
-          const input = ['hi👋 w🌍rld wow😃', '🚀', 'more 🚀 text here']
+          const input = [
+            'hi👋 w🌍rld wow😃',
+            '🚀',
+            'more 🚀 text here',
+            'yay!🎉'
+          ]
           const result = split(input, {
             chunkOverlap: 2,
-            chunkSize: 4,
+            chunkSize: 5,
             splitter: whitespaceSplitter
           })
 
           assert.deepStrictEqual(result, [
             { text: ['hi👋 w🌍rld wow😃', '🚀', 'more'], start: 0, end: 23 },
-            { text: ['wow😃', '🚀', 'more 🚀 text here'], start: 12, end: 36 }
+            { text: ['🚀', 'more 🚀 text here', 'yay!🎉'], start: 17, end: 42 }
           ])
         })
 

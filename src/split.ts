@@ -57,7 +57,7 @@ const findMatches = (input: string, splitParts: string[]) => {
   const matchedParts: Chunk[] = []
   let inputIndex = 0
 
-  for (const splitPart of splitParts) {
+  splitPartsLoop: for (const splitPart of splitParts) {
     if (typeof splitPart !== 'string')
       throw new Error(
         `Splitter returned a non-string part: ${splitPart} for input: ${input}`
@@ -67,17 +67,18 @@ const findMatches = (input: string, splitParts: string[]) => {
       continue
     }
 
-    // // TODO: ADD FAST PATH?? Changes behavior / tests.
-    // // Fast path -- simple string match.
-    // if (input.startsWith(splitPart, inputIndex)) {
-    //   matchedParts.push({
-    //     text: splitPart,
-    //     start: inputIndex,
-    //     end: inputIndex + splitPart.length
-    //   })
-    //   inputIndex += splitPart.length
-    //   continue
-    // }
+    // Fast path -- simple string match
+    // When we **do** get a match, we'll capture some multibyte strings that we
+    // can't match with the character by character match that ignores multibyte chars.
+    if (input.startsWith(splitPart, inputIndex)) {
+      matchedParts.push({
+        text: splitPart,
+        start: inputIndex,
+        end: inputIndex + splitPart.length
+      })
+      inputIndex += splitPart.length
+      continue splitPartsLoop
+    }
 
     // Check if all characters in splitPart have char codes above 255
     const splitPartChars = splitPart.split('')
@@ -116,7 +117,19 @@ const findMatches = (input: string, splitParts: string[]) => {
     for (let i = inputIndex; i < input.length; i++) {
       if (input[i] === firstValidChar) {
         startPos = i
-        // Find the last valid character position
+
+        // Do the fast path again, in case we can cach other multibyte strings.
+        if (input.startsWith(splitPart, startPos)) {
+          matchedParts.push({
+            text: splitPart,
+            start: startPos,
+            end: startPos + splitPart.length
+          })
+          inputIndex += splitPart.length
+          continue splitPartsLoop
+        }
+
+        // Slow path -- only match on non-multibyte chars. Will miss some strings.
         let lastValidPos = startPos
         for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
           const nextValidChar = splitPartChars[j]
