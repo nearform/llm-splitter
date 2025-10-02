@@ -39,7 +39,7 @@ const CHUNK_STRATEGIES = new Set<ChunkStrategy>(
   Object.keys(BOUNDARIES) as ChunkStrategy[]
 )
 
-const SINGLE_BYTE_CHAR_LIMIT = 255;
+const SINGLE_BYTE_CHAR_LIMIT = 255
 
 /**
  * Assert that the chunk strategy is valid.
