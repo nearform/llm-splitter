@@ -159,7 +159,7 @@ const findMatches = (input: string, splitParts: string[]) => {
  * While this function takes an array of strings, the `start` and `end` indices are from the
  * perspective of the entire input array as a joined long single string.
  *
- * **Note**: `start` and `end` are based on string indexing (`input[i]` or `intput.split('')`) and
+ * **Note**: `start` and `end` are based on string indexing (`input[i]` or `input.split('')`) and
  * not on array-like iteration of the string (e.g. `[...input]` or `Array.from(input)`)
  *
  * @param {string[]} inputs - The inputs to split.
