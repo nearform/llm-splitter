@@ -57,7 +57,7 @@ const findMatches = (input: string, splitParts: string[]) => {
   const matchedParts: Chunk[] = []
   let inputIndex = 0
 
-  for (const splitPart of splitParts) {
+  splitPartsLoop: for (const splitPart of splitParts) {
     if (typeof splitPart !== 'string')
       throw new Error(
         `Splitter returned a non-string part: ${splitPart} for input: ${input}`
@@ -67,16 +67,21 @@ const findMatches = (input: string, splitParts: string[]) => {
       continue
     }
 
+    // Helper to accumulate matches.
+    const addMatch = ({ start, end }: { start: number, end: number }) => {
+      matchedParts.push({
+        text: splitPart,
+        start,
+        end
+      })
+      inputIndex = end
+    };
+
     // Fast path -- simple string match
     // When we **do** get a match, we'll capture some multibyte strings that we
     // can't match with the character by character match that ignores multibyte chars.
     if (input.startsWith(splitPart, inputIndex)) {
-      matchedParts.push({
-        text: splitPart,
-        start: inputIndex,
-        end: inputIndex + splitPart.length
-      })
-      inputIndex += splitPart.length
+      addMatch({ start: inputIndex, end: inputIndex + splitPart.length })
       continue
     }
 
@@ -113,11 +118,9 @@ const findMatches = (input: string, splitParts: string[]) => {
 
         // Do the fast path again, in case we can catch other multibyte strings.
         if (input.startsWith(splitPart, startPos)) {
-          // Found!
-          endPos = startPos + splitPart.length
-          inputIndex += splitPart.length
-          found = true
-          break
+          // Found the whole part.
+          addMatch({ start: startPos, end: startPos + splitPart.length })
+          continue splitPartsLoop
         }
 
         // Slow path -- only match on non-multibyte chars. Will miss some strings.
@@ -135,25 +138,16 @@ const findMatches = (input: string, splitParts: string[]) => {
           }
         }
 
-        // Found!
-        endPos = lastValidPos + 1
-        inputIndex = endPos
-        found = true
-        break
+        // Found the best subset we could.
+        addMatch({ start: startPos, end: lastValidPos + 1 })
+        continue splitPartsLoop
       }
     }
 
-    if (!found) {
-      throw new Error(
-        `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`
-      )
-    }
-
-    matchedParts.push({
-      text: splitPart,
-      start: startPos,
-      end: endPos
-    })
+    // Bail.
+    throw new Error(
+      `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`
+    )
   }
 
   return matchedParts
