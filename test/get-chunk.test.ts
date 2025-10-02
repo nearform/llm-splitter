@@ -126,17 +126,17 @@ describe('getChunk', () => {
 
   describe('edge cases', () => {
     it('should handle null input gracefully', () => {
-      // @ts-expect-error
+      // @ts-expect-error test
       assert.throws(() => getChunk(null, 0, 5), TypeError)
     })
 
     it('should handle undefined input gracefully', () => {
-      // @ts-expect-error
+      // @ts-expect-error test
       assert.throws(() => getChunk(undefined, 0, 5), TypeError)
     })
 
     it('should handle non-string array elements', () => {
-      // @ts-expect-error
+      // @ts-expect-error test
       assert.throws(() => getChunk(['hello', 123, 'world'], 0, 5), TypeError)
     })
 

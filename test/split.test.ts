@@ -11,8 +11,8 @@ const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
 
 const td = new TextDecoder()
 const tokenSplitter = (text: string): string[] =>
-  Array.from(tokenizer.encode(text)).map(token =>
-    td.decode(tokenizer.decode([token] as any))
+  Array.from(tokenizer.encode(text)).map(
+    token => td.decode(tokenizer.decode([token] as any)) // eslint-disable-line @typescript-eslint/no-explicit-any
   )
 
 // Tests
@@ -113,7 +113,7 @@ describe('split', () => {
         { text: 'qux', start: 13, end: 16 }
       ]
 
-      let result = splitToParts(input, whitespaceSplitter)
+      const result = splitToParts(input, whitespaceSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
@@ -138,7 +138,7 @@ describe('split', () => {
       const splitter = (): unknown[] => [400, 1, 2, 3, 4]
       assert.throws(
         () => {
-          // @ts-expect-error
+          // @ts-expect-error test
           splitToParts(inputs, splitter)
         },
         {
@@ -410,7 +410,7 @@ describe('split', () => {
         const input: string = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 'invalid' as any })
+            split(input, { chunkSize: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
           },
           {
             name: 'Error',
@@ -449,7 +449,7 @@ describe('split', () => {
         const input: string = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any })
+            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
           },
           {
             name: 'Error',
@@ -872,7 +872,7 @@ describe('split', () => {
           const input: string = 'hello world'
           assert.throws(
             () => {
-              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any })
+              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
             },
             {
               name: 'Error',

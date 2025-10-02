@@ -68,14 +68,14 @@ const findMatches = (input: string, splitParts: string[]) => {
     }
 
     // Helper to accumulate matches.
-    const addMatch = ({ start, end }: { start: number, end: number }) => {
+    const addMatch = ({ start, end }: { start: number; end: number }) => {
       matchedParts.push({
         text: splitPart,
         start,
         end
       })
       inputIndex = end
-    };
+    }
 
     // Fast path -- simple string match
     // When we **do** get a match, we'll capture some multibyte strings that we
@@ -107,8 +107,6 @@ const findMatches = (input: string, splitParts: string[]) => {
     // We'll now search starting from here in the split part.
     const firstValidChar = splitPartChars[firstValidIndex]
     let startPos = -1
-    let endPos = -1
-    let found = false
 
     // Search for the first valid character in the **input**.
     // We'll loop on the input until we find the first valid character or hit the end and error out.
