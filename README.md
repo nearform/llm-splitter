@@ -51,7 +51,7 @@ Notes:
 - `chunkOverlap` must be less than `chunkSize`
 - `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`).
 - Here are some sample `splitter` functions:
-  - Character: `text => [...text]` (default)
+  - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`
   - Sentence: `text => text.split(/[.!?]+/)`
   - Line: `text => text.split(/\n/)`

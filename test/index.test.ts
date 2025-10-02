@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import { type Chunk, split, getChunk } from '../src/index.js'
 
 // Helper splitters
-const charSplitter = (text: string): string[] => [...text]
+const charSplitter = (text: string): string[] => text.split('')
 const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
 const sentenceSplitter = (text: string): string[] =>
   text.split(/[.!?]+/).filter(s => s.trim().length > 0)
