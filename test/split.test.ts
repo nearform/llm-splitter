@@ -3,15 +3,16 @@ import { describe, it, after, before } from 'node:test'
 import assert from 'node:assert'
 import tiktoken, { type Tiktoken } from 'tiktoken'
 import { splitToParts, split, ChunkStrategy, type Chunk } from '../src/split.js'
+import { getChunk } from '../src/get-chunk.js'
 
 // Helpers
-const charSplitter = (text: string): string[] => [...text]
+const charSplitter = (text: string): string[] => text.split('')
 const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
 
 const td = new TextDecoder()
 const tokenSplitter = (text: string): string[] =>
-  Array.from(tokenizer.encode(text)).map(token =>
-    td.decode(tokenizer.decode([token] as any))
+  Array.from(tokenizer.encode(text)).map(
+    token => td.decode(tokenizer.decode([token] as any)) // eslint-disable-line @typescript-eslint/no-explicit-any
   )
 
 // Tests
@@ -112,7 +113,7 @@ describe('split', () => {
         { text: 'qux', start: 13, end: 16 }
       ]
 
-      let result = splitToParts(input, whitespaceSplitter)
+      const result = splitToParts(input, whitespaceSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
@@ -137,7 +138,7 @@ describe('split', () => {
       const splitter = (): unknown[] => [400, 1, 2, 3, 4]
       assert.throws(
         () => {
-          // @ts-expect-error
+          // @ts-expect-error test
           splitToParts(inputs, splitter)
         },
         {
@@ -409,7 +410,7 @@ describe('split', () => {
         const input: string = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 'invalid' as any })
+            split(input, { chunkSize: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
           },
           {
             name: 'Error',
@@ -448,7 +449,7 @@ describe('split', () => {
         const input: string = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any })
+            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
           },
           {
             name: 'Error',
@@ -871,7 +872,7 @@ describe('split', () => {
           const input: string = 'hello world'
           assert.throws(
             () => {
-              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any })
+              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
             },
             {
               name: 'Error',
@@ -1238,6 +1239,129 @@ describe('split', () => {
           })
           assert.deepStrictEqual(charResult, [])
           assert.deepStrictEqual(paragraphResult, [])
+        })
+
+        it('should handle array with unicode characters with token splitter', async () => {
+          const input = ['he¦¦o', 'world', '👋🏻', ' ¦']
+          const result = split(input, {
+            chunkSize: 2,
+            splitter: tokenSplitter
+          })
+
+          // NOTE: Token split results:
+          // [
+          //   [ 'he', '¦', '¦', 'o' ],           // `'he¦¦o'`
+          //   [ 'world' ],                       // `'world'`
+          //   [ '�', '�', '�', '�', '�', '�' ],  // `'👋🏻'`
+          //   [ ' �', '�' ]                      // `' ¦'`
+          // ]
+
+          assert.deepStrictEqual(result, [
+            // First two tokens: 'he', '¦'
+            { text: ['he¦'], start: 0, end: 3 },
+            // Second two tokens: '¦', 'o'
+            { text: ['¦o'], start: 3, end: 5 },
+            // Here, we get: 'world', then ignore all single >255 code chars, then ' �' but just the first space.
+            // This has the effect of grabbing the emoji wave in between.
+            { text: ['world', '👋🏻', ' '], start: 5, end: 15 }
+          ])
+        })
+
+        it('should handle string with unicode characters with token splitter', async () => {
+          const input = 'hello w👋🏻rld extra'
+          const result = split(input, {
+            chunkSize: 2,
+            splitter: tokenSplitter
+          })
+
+          assert.deepStrictEqual(result, [
+            { text: 'hello w', start: 0, end: 7 },
+            { text: 'rld', start: 11, end: 14 },
+            { text: ' extra', start: 14, end: 20 }
+          ])
+        })
+
+        it('should handle string with unicode characters with whitespace splitter', async () => {
+          const input = 'hello w👋🏻rld extra'
+          const result = split(input, {
+            chunkSize: 2,
+            splitter: whitespaceSplitter
+          })
+
+          assert.deepStrictEqual(result, [
+            { text: 'hello w👋🏻rld', start: 0, end: 14 },
+            { text: 'extra', start: 15, end: 20 }
+          ])
+        })
+
+        it('should handle array with unicode characters with whitespace splitter', async () => {
+          const input = [
+            'hi👋 w🌍rld wow😃',
+            '🚀',
+            'more 🚀 text here',
+            'yay!🎉'
+          ]
+          const result = split(input, {
+            chunkOverlap: 2,
+            chunkSize: 5,
+            splitter: whitespaceSplitter
+          })
+
+          assert.deepStrictEqual(result, [
+            { text: ['hi👋 w🌍rld wow😃', '🚀', 'more'], start: 0, end: 23 },
+            { text: ['🚀', 'more 🚀 text here', 'yay!🎉'], start: 17, end: 42 }
+          ])
+        })
+
+        it('should handle multibyte arrays with token splitter', async () => {
+          const input: string[] = [
+            'hello 🌍',
+            'café naïve façade',
+            'こんにちは world',
+            'emoji: 😀😃😄😁',
+            'русский текст mixed',
+            '中文字符 and english',
+            'Español: año, niño, jalapeño',
+            'français: élève, déjà vu',
+            'Grüße, München! Straße',
+            'Zürich — Genève',
+            'crème brûlée',
+            'smörgåsbord',
+            'piñata 🎉 fiesta',
+            'I ❤️ TypeScript',
+            '𝔘𝔫𝔦𝔠𝔬𝔡𝔢 𝔣𝔬𝔫𝔱𝔰',
+            'Math: ∑ ∫ √ ∞ ≈ ≠ ≤ ≥',
+            'Arabic: مرحبا بالعالم',
+            'Hebrew: שלום עולם',
+            'Hindi: नमस्ते दुनिया',
+            'Thai: สวัสดีโลก'
+          ]
+          const chunks: Chunk[] = split(input, {
+            chunkSize: 2,
+            chunkStrategy: 'paragraph',
+            splitter: tokenSplitter
+          })
+
+          for (const chunk of chunks) {
+            const retrievedText = getChunk(input, chunk.start, chunk.end)
+            assert.deepStrictEqual(chunk.text, retrievedText)
+          }
+        })
+
+        it('throws if splitter returns a part not found in multibyte input', () => {
+          const input = 'h👋🏻llo w👋🏻rld extra'
+          assert.throws(
+            () => {
+              split(input, {
+                chunkSize: 2,
+                splitter: text => text.toUpperCase().split(/\s+/)
+              })
+            },
+            {
+              message:
+                'Splitter did not return any parts for input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...'
+            }
+          )
         })
       })
     })

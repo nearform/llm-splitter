@@ -39,6 +39,8 @@ const CHUNK_STRATEGIES = new Set<ChunkStrategy>(
   Object.keys(BOUNDARIES) as ChunkStrategy[]
 )
 
+const SINGLE_BYTE_CHAR_LIMIT = 255
+
 /**
  * Assert that the chunk strategy is valid.
  * @param {unknown} chunkStrategy The chunk strategy to validate.
@@ -54,10 +56,120 @@ function assertChunkStrategy(
 }
 
 /**
+ * Finds and returns the matched parts (chunks) of the input string based on the provided split parts.
+ *
+ * @param {string} input - The original string to be split and matched.
+ * @param {string[]} splitParts - The array of string parts to match within the input string.
+ * @returns {Chunk[]} An array of Chunk objects, each representing a matched part of the input string.
+ * @throws {Error} If a split part cannot be matched in the input string in the expected order.
+ */
+const findMatches = (input: string, splitParts: string[]) => {
+  const matchedParts: Chunk[] = []
+  let inputIndex = 0
+
+  splitPartsLoop: for (const splitPart of splitParts) {
+    if (typeof splitPart !== 'string')
+      throw new Error(
+        `Splitter returned a non-string part: ${splitPart} for input: ${input}`
+      )
+
+    if (splitPart.length === 0) {
+      continue
+    }
+
+    // Helper to accumulate matches.
+    const addMatch = ({ start, end }: { start: number; end: number }) => {
+      matchedParts.push({
+        text: splitPart,
+        start,
+        end
+      })
+      inputIndex = end
+    }
+
+    // Fast path -- simple string match
+    // When we **do** get a match, we'll capture some multibyte strings that we
+    // can't match with the character by character match that ignores multibyte chars.
+    if (input.startsWith(splitPart, inputIndex)) {
+      addMatch({ start: inputIndex, end: inputIndex + splitPart.length })
+      continue
+    }
+
+    // Split the part and find first + last usable character indices.
+    const splitPartChars = splitPart.split('')
+    const splitPartCharsCodes = splitPartChars.map(char => char.charCodeAt(0))
+    let firstValidIndex = -1
+    let lastValidIndex = -1
+
+    for (let i = 0; i < splitPartChars.length; i++) {
+      if (splitPartCharsCodes[i] <= SINGLE_BYTE_CHAR_LIMIT) {
+        if (firstValidIndex === -1) {
+          firstValidIndex = i
+        }
+        lastValidIndex = i
+      }
+    }
+
+    if (firstValidIndex === -1) {
+      continue
+    }
+
+    // Find the first valid character in the **split part**.
+    // We'll now search starting from here in the split part.
+    const firstValidChar = splitPartChars[firstValidIndex]
+    let startPos = -1
+
+    // Search for the first valid character in the **input**.
+    // We'll loop on the input until we find the first valid character or hit the end and error out.
+    for (let i = inputIndex; i < input.length; i++) {
+      if (input[i] === firstValidChar) {
+        startPos = i
+
+        // Do the fast path again, in case we can catch other multibyte strings.
+        if (input.startsWith(splitPart, startPos)) {
+          // Found the whole part.
+          addMatch({ start: startPos, end: startPos + splitPart.length })
+          continue splitPartsLoop
+        }
+
+        // Slow path -- only match on non-multibyte chars. Will miss some strings.
+        let lastValidPos = startPos
+        for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
+          const nextValidChar = splitPartChars[j]
+          if (splitPartCharsCodes[j] <= SINGLE_BYTE_CHAR_LIMIT) {
+            // Find this character in the input after the current position
+            for (let k = lastValidPos + 1; k < input.length; k++) {
+              if (input[k] === nextValidChar) {
+                lastValidPos = k
+                break
+              }
+            }
+          }
+        }
+
+        // Found the best subset we could.
+        addMatch({ start: startPos, end: lastValidPos + 1 })
+        continue splitPartsLoop
+      }
+    }
+
+    // Bail.
+    throw new Error(
+      `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`
+    )
+  }
+
+  return matchedParts
+}
+
+/**
  * Split text into parts of text (or null if the part is ignored) and their start and end indices.
  *
  * While this function takes an array of strings, the `start` and `end` indices are from the
  * perspective of the entire input array as a joined long single string.
+ *
+ * **Note**: `start` and `end` are based on string indexing (`input[i]` or `input.split('')`) and
+ * not on array-like iteration of the string (e.g. `[...input]` or `Array.from(input)`)
  *
  * @param {string[]} inputs - The inputs to split.
  * @param {Function} splitter - The function to split the text.
@@ -70,55 +182,23 @@ export function splitToParts(
   baseOffset: number = 0
 ): Chunk[] {
   const parts: Chunk[] = []
-  let offset: number = 0
+  let inputsOffset: number = 0
 
   for (const input of inputs) {
-    let inputStart: number = 0
-    const inputParts: string[] = splitter(input)
+    const splitParts: string[] = splitter(input)
 
-    for (const part of inputParts) {
-      let partFound: boolean = false
-      let partStart: number = inputStart
-
-      // Validation
-      if (typeof part !== 'string')
-        throw new Error(
-          `Splitter returned a non-string part: ${part} for input: ${input}`
-        )
-
-      // Ignore empty string.
-      if (part.length === 0) continue
-
-      // Catch up cursor.
-      while (partStart < input.length) {
-        // Found a match of the part in the input.
-        if (input.startsWith(part, partStart)) {
-          // Just capture the matched part...
-          partFound = true
-          parts.push({
-            text: part,
-            start: partStart + offset + baseOffset,
-            end: partStart + part.length + offset + baseOffset
-          })
-
-          inputStart = partStart + part.length
-          break
-        }
-
-        // No match found, move cursor forward.
-        // Ignore and discard unmatched parts.
-        partStart++
-      }
-
-      if (!partFound)
-        throw new Error(
-          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${part.length}): "${part.slice(0, 20)}"...`
-        )
+    const matches: Chunk[] = findMatches(input, splitParts)
+    for (const match of matches) {
+      parts.push({
+        text: match.text,
+        start: baseOffset + inputsOffset + match.start,
+        end: baseOffset + inputsOffset + match.end
+      })
     }
 
-    // Update offset.
+    // Finished a single input string..
     // Ignore and discard unmatched parts.
-    offset += input.length
+    inputsOffset += input.length
   }
 
   return parts
@@ -251,7 +331,7 @@ export function split(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter = (text: string): string[] => [...text],
+    splitter = (text: string): string[] => text.split(''),
     chunkStrategy = ChunkStrategy.character
   }: SplitOptions = {}
 ) {
