@@ -97,11 +97,12 @@ const findMatches = (input: string, splitParts: string[]) => {
 
     // Split the part and find first + last usable character indices.
     const splitPartChars = splitPart.split('')
+    const splitPartCharsCodes = splitPartChars.map(char => char.charCodeAt(0))
     let firstValidIndex = -1
     let lastValidIndex = -1
 
     for (let i = 0; i < splitPartChars.length; i++) {
-      if (splitPartChars[i].charCodeAt(0) <= SINGLE_BYTE_CHAR_LIMIT) {
+      if (splitPartCharsCodes[i] <= SINGLE_BYTE_CHAR_LIMIT) {
         if (firstValidIndex === -1) {
           firstValidIndex = i
         }
@@ -135,7 +136,7 @@ const findMatches = (input: string, splitParts: string[]) => {
         let lastValidPos = startPos
         for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
           const nextValidChar = splitPartChars[j]
-          if (nextValidChar.charCodeAt(0) <= SINGLE_BYTE_CHAR_LIMIT) {
+          if (splitPartCharsCodes[j] <= SINGLE_BYTE_CHAR_LIMIT) {
             // Find this character in the input after the current position
             for (let k = lastValidPos + 1; k < input.length; k++) {
               if (input[k] === nextValidChar) {
