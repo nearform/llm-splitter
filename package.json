@@ -52,7 +52,7 @@
     "prettier": "^3.6.2",
     "tiktoken": "^1.0.21",
     "ts-node": "^10.9.2",
-    "typescript": "^5.0.0",
+    "typescript": "^6.0.2",
     "typescript-eslint": "^8.45.0"
   },
   "lint-staged": {
