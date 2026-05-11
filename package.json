@@ -48,7 +48,7 @@
     "eslint-plugin-prettier": "^5.5.1",
     "globals": "^17.0.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.1.0",
+    "lint-staged": "^17.0.4",
     "prettier": "^3.6.2",
     "tiktoken": "^1.0.21",
     "ts-node": "^10.9.2",
