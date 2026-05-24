@@ -9,7 +9,7 @@
  * @param {number} end - The end of the chunk.
  * @returns {string|string[]} The text or array of texts of the chunk.
  */
-export function getChunk(input, start, end) {
+export const getChunk = (input, start, end) => {
   /** @type {string[]} */
   const matches = [];
   let offset = 0;
@@ -42,4 +42,4 @@ export function getChunk(input, start, end) {
 
   // Return single string for single input, array for array input
   return Array.isArray(input) ? matches : matches[0] || "";
-}
+};

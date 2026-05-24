@@ -21,5 +21,9 @@ export default [
         TextDecoder: "readonly",
       },
     },
+    rules: {
+      "func-style": ["error", "expression"],
+      "prefer-arrow-callback": "error",
+    },
   },
 ];

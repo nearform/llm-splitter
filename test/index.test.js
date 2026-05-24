@@ -11,7 +11,7 @@ const whitespaceSplitter = (text) => text.split(/\s+/);
 const sentenceSplitter = (text) =>
   text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
 
-describe.skip("index (integration)", () => {
+describe("index (integration)", () => {
   describe("short strings", () => {
     it("should handle single character with char splitter", () => {
       const input = "a";

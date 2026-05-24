@@ -31,7 +31,7 @@ describe("split", () => {
     tokenizer.free();
   });
 
-  describe.skip("split", () => {
+  describe("split", () => {
     describe("basics", () => {
       it("should split array with whitespace splitter and extra whitespace", () => {
         const input = [
@@ -1112,9 +1112,12 @@ describe("split", () => {
             { text: ["he¦"], start: 0, end: 3 },
             // Second two tokens: '¦', 'o'
             { text: ["¦o"], start: 3, end: 5 },
-            // Here, we get: 'world', then ignore all single >255 code chars, then ' �' but just the first space.
-            // This has the effect of grabbing the emoji wave in between.
-            { text: ["world", "👋🏻", " "], start: 5, end: 15 },
+            // 'world' (full match) plus the ' �' token which anchors at the
+            // space and claims its splitPart.length=2 of source — covering
+            // the trailing '¦'. The 5 all-replacement tokens for '👋🏻' have
+            // no anchor grapheme and are silently dropped, but the source
+            // bytes are still preserved in chunk.text via getChunk.
+            { text: ["world", "👋🏻", " ¦"], start: 5, end: 16 },
           ]);
         });
 
@@ -1158,9 +1161,15 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
 
+          // The new grapheme-based anchoring correctly locates the inner '🚀'
+          // token in "more 🚀 text here". The previous algorithm silently
+          // dropped tokens that were entirely surrogate-pair code units
+          // (charCode > 255), producing 8 anchored tokens instead of 9. With
+          // 9 real tokens at chunkSize=5/chunkOverlap=2 we get 3 chunks, not 2.
           assert.deepStrictEqual(result, [
             { text: ["hi👋 w🌍rld wow😃", "🚀", "more"], start: 0, end: 23 },
-            { text: ["🚀", "more 🚀 text here", "yay!🎉"], start: 17, end: 42 },
+            { text: ["🚀", "more 🚀 text here"], start: 17, end: 36 },
+            { text: ["text here", "yay!🎉"], start: 27, end: 42 },
           ]);
         });
 
