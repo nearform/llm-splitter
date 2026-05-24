@@ -123,13 +123,12 @@ const findMatches = (input, splitParts) => {
     // Find the first valid character in the **split part**.
     // We'll now search starting from here in the split part.
     const firstValidChar = splitPartChars[firstValidIndex];
-    let startPos = -1;
 
     // Search for the first valid character in the **input**.
     // We'll loop on the input until we find the first valid character or hit the end and error out.
     for (let i = inputIndex; i < input.length; i++) {
       if (input[i] === firstValidChar) {
-        startPos = i;
+        const startPos = i;
 
         // Do the fast path again, in case we can catch other multibyte strings.
         if (input.startsWith(splitPart, startPos)) {

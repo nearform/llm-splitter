@@ -4,7 +4,8 @@
     "noEmit": true,
     "declaration": false,
     "emitDeclarationOnly": false,
-    "rootDir": "."
+    "rootDir": ".",
+    "types": ["node"]
   },
   "include": ["src/**/*.js", "test/**/*.js"]
 }

@@ -38,17 +38,17 @@
     "lint": "eslint .",
     "test": "node --test 'test/*.test.js'",
     "test:only": "node --test --test-only 'test/*.test.js'",
-    "dep:check": "npx npm-check:updates"
+    "dep:check": "npx npm-check-updates"
   },
   "devDependencies": {
-    "@eslint/js": "^9.30.0",
-    "@types/node": "^25.0.2",
-    "eslint": "^10.0.3",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-prettier": "^5.5.1",
-    "prettier": "^3.6.2",
-    "tiktoken": "^1.0.21",
-    "typescript": "^5.0.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.3",
+    "tiktoken": "^1.0.22",
+    "typescript": "^6.0.3"
   },
   "publishConfig": {
     "access": "public"
