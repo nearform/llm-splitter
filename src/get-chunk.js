@@ -9,14 +9,11 @@
  * @param {number} end - The end of the chunk.
  * @returns {string|string[]} The text or array of texts of the chunk.
  */
-export function getChunk(
-  input: string | string[],
-  start: number,
-  end: number
-): typeof input {
-  const matches: string[] = []
-  let offset: number = 0
-  const inputs: string[] = Array.isArray(input) ? input : [input]
+export function getChunk(input, start, end) {
+  /** @type {string[]} */
+  const matches = []
+  let offset = 0
+  const inputs = Array.isArray(input) ? input : [input]
 
   for (const item of inputs) {
     // Error if not string.
@@ -25,18 +22,18 @@ export function getChunk(
         `Input must be a string or array of strings, got ${typeof item} for ${item}`
       )
 
-    const itemLength: number = item.length
-    const itemStart: number = offset
-    const itemEnd: number = offset + itemLength
+    const itemLength = item.length
+    const itemStart = offset
+    const itemEnd = offset + itemLength
 
     // Check if this item overlaps with the requested chunk
     if (start < itemEnd && itemStart < end) {
       // Calculate the actual start and end positions within this item
-      const chunkStart: number = Math.max(0, start - itemStart)
-      const chunkEnd: number = Math.min(itemLength, end - itemStart)
+      const chunkStart = Math.max(0, start - itemStart)
+      const chunkEnd = Math.min(itemLength, end - itemStart)
 
       // Extract the substring from this item
-      const chunk: string = item.substring(chunkStart, chunkEnd)
+      const chunk = item.substring(chunkStart, chunkEnd)
       matches.push(chunk)
     }
 

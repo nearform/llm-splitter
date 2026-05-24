@@ -3,23 +3,24 @@
   "private": false,
   "version": "0.2.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
-  "main": "dist/index.js",
+  "main": "src/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
   "files": [
+    "src",
     "dist"
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "check": "npm run lint && npm run test && npm run check-format",
+    "check": "npm run lint && npm run check-types && npm run test && npm run check-format",
     "check-format": "prettier --check .",
     "check-lint": "eslint .",
+    "check-types": "tsc --project tsconfig.check.json",
     "format": "prettier --write . && eslint --cache --fix .",
     "lint": "eslint .",
     "prebuild": "rm -rf dist",
-    "prepare": "husky",
-    "test": "node --loader ts-node/esm/transpile-only --test",
-    "test:only": "npm run test -- --test-only"
+    "test": "node --test 'test/*.test.js'",
+    "test:only": "node --test --test-only 'test/*.test.js'"
   },
   "repository": {
     "type": "git",
@@ -39,24 +40,14 @@
   },
   "homepage": "https://github.com/nearform/llm-splitter#readme",
   "devDependencies": {
-    "@commitlint/cli": "^21.0.0",
-    "@commitlint/config-conventional": "^21.0.1",
     "@eslint/js": "^9.30.0",
     "@types/node": "^25.0.2",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.5.1",
-    "globals": "^17.0.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^17.0.4",
     "prettier": "^3.6.2",
     "tiktoken": "^1.0.21",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.0.0",
-    "typescript-eslint": "^8.45.0"
-  },
-  "lint-staged": {
-    "*.{js,jsx}": "eslint --cache --fix"
+    "typescript": "^5.0.0"
   },
   "publishConfig": {
     "access": "public"

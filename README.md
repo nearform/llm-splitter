@@ -13,7 +13,7 @@ A JavaScript library for splitting text into configurable chunks with overlap su
 - 📊 **Rich Metadata**: Complete character position tracking for all chunks
 - ⚡ **High Performance**: Single pass greedy algorithms for optimized processing
 - 🎨 **Flexible Input**: Supports strings, arrays, and custom tokenization
-- 📝 **TypeScript**: Full type safety with comprehensive interfaces
+- 📝 **Typed**: Authored in JS with JSDoc annotations; ships `.d.ts` type definitions for full editor and TypeScript consumer support
 
 ## Installation
 

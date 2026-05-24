@@ -1,22 +1,27 @@
-/* global TextDecoder:false */
 import { describe, it, after, before } from 'node:test'
 import assert from 'node:assert'
-import tiktoken, { type Tiktoken } from 'tiktoken'
-import { splitToParts, split, ChunkStrategy, type Chunk } from '../src/split.js'
+import tiktoken from 'tiktoken'
+import { splitToParts, split, ChunkStrategy } from '../src/split.js'
 import { getChunk } from '../src/get-chunk.js'
 
+/** @typedef {import('../src/split.js').Chunk} Chunk */
+
 // Helpers
-const charSplitter = (text: string): string[] => text.split('')
-const whitespaceSplitter = (text: string): string[] => text.split(/\s+/)
+/** @param {string} text */
+const charSplitter = text => text.split('')
+/** @param {string} text */
+const whitespaceSplitter = text => text.split(/\s+/)
 
 const td = new TextDecoder()
-const tokenSplitter = (text: string): string[] =>
-  Array.from(tokenizer.encode(text)).map(
-    token => td.decode(tokenizer.decode([token] as any)) // eslint-disable-line @typescript-eslint/no-explicit-any
+/** @param {string} text */
+const tokenSplitter = text =>
+  Array.from(tokenizer.encode(text)).map(token =>
+    td.decode(tokenizer.decode(new Uint32Array([token])))
   )
 
 // Tests
-let tokenizer: Tiktoken
+/** @type {import('tiktoken').Tiktoken} */
+let tokenizer
 describe('split', () => {
   before(() => {
     tokenizer = tiktoken.encoding_for_model('text-embedding-ada-002')
@@ -28,16 +33,18 @@ describe('split', () => {
 
   describe('splitToParts', () => {
     it('should yield nothing for empty input array', () => {
-      const input: string[] = []
-      const expected: Chunk[] = []
-      const result: Chunk[] = splitToParts(input, charSplitter)
+      /** @type {string[]} */
+      const input = []
+      /** @type {Chunk[]} */
+      const expected = []
+      const result = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('should split with default splitter (char split)', () => {
-      const input: string[] = ['hello world!']
-      const expected: Chunk[] = [
+      const input = ['hello world!']
+      const expected = [
         { text: 'h', start: 0, end: 1 },
         { text: 'e', start: 1, end: 2 },
         { text: 'l', start: 2, end: 3 },
@@ -51,38 +58,38 @@ describe('split', () => {
         { text: 'd', start: 10, end: 11 },
         { text: '!', start: 11, end: 12 }
       ]
-      const result: Chunk[] = splitToParts(input, charSplitter)
+      const result = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('should split with whitespace splitter', () => {
-      const input: string[] = ['hello world!']
-      const expected: Chunk[] = [
+      const input = ['hello world!']
+      const expected = [
         { text: 'hello', start: 0, end: 5 },
         { text: 'world!', start: 6, end: 12 }
       ]
-      const result: Chunk[] = splitToParts(input, whitespaceSplitter)
+      const result = splitToParts(input, whitespaceSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('should split with tiktoken splitter', () => {
-      const input: string[] = ['hello world! ']
-      const expected: Chunk[] = [
+      const input = ['hello world! ']
+      const expected = [
         { text: 'hello', start: 0, end: 5 },
         { text: ' world', start: 5, end: 11 },
         { text: '!', start: 11, end: 12 },
         { text: ' ', start: 12, end: 13 }
       ]
-      const result: Chunk[] = splitToParts(input, tokenSplitter)
+      const result = splitToParts(input, tokenSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('should split multiple items with default splitter', () => {
-      const input: string[] = ['foo bar', 'baz! qux']
-      const expected: Chunk[] = [
+      const input = ['foo bar', 'baz! qux']
+      const expected = [
         { text: 'f', start: 0, end: 1 },
         { text: 'o', start: 1, end: 2 },
         { text: 'o', start: 2, end: 3 },
@@ -99,14 +106,14 @@ describe('split', () => {
         { text: 'u', start: 13, end: 14 },
         { text: 'x', start: 14, end: 15 }
       ]
-      const result: Chunk[] = splitToParts(input, charSplitter)
+      const result = splitToParts(input, charSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('should split multiple items with whitespace splitter', () => {
-      const input: string[] = [' 123 567', '89z! qux ']
-      const expected: Chunk[] = [
+      const input = [' 123 567', '89z! qux ']
+      const expected = [
         { text: '123', start: 1, end: 4 },
         { text: '567', start: 5, end: 8 },
         { text: '89z!', start: 8, end: 12 },
@@ -119,8 +126,8 @@ describe('split', () => {
     })
 
     it('should split multiple items with tiktoken splitter', () => {
-      const input: string[] = ['foo bar', 'baz! qux']
-      const expected: Chunk[] = [
+      const input = ['foo bar', 'baz! qux']
+      const expected = [
         { text: 'foo', start: 0, end: 3 },
         { text: ' bar', start: 3, end: 7 },
         { text: 'baz', start: 7, end: 10 },
@@ -128,14 +135,14 @@ describe('split', () => {
         { text: ' qu', start: 11, end: 14 },
         { text: 'x', start: 14, end: 15 }
       ]
-      const result: Chunk[] = splitToParts(input, tokenSplitter)
+      const result = splitToParts(input, tokenSplitter)
 
       assert.deepStrictEqual(result, expected)
     })
 
     it('throws if splitter returns non string outputs', () => {
-      const inputs: string[] = ['hello']
-      const splitter = (): unknown[] => [400, 1, 2, 3, 4]
+      const inputs = ['hello']
+      const splitter = () => [400, 1, 2, 3, 4]
       assert.throws(
         () => {
           // @ts-expect-error test
@@ -148,8 +155,8 @@ describe('split', () => {
     })
 
     it('throws if splitter returns a part not found in input', () => {
-      const inputs: string[] = ['hello']
-      const splitter = (): string[] => ['notfound']
+      const inputs = ['hello']
+      const splitter = () => ['notfound']
       assert.throws(
         () => {
           splitToParts(inputs, splitter)
@@ -162,8 +169,8 @@ describe('split', () => {
     })
 
     it('throws if splitter returns a part that only partially matches', () => {
-      const inputs: string[] = ['abc']
-      const splitter = (): string[] => ['a', 'z']
+      const inputs = ['abc']
+      const splitter = () => ['a', 'z']
       assert.throws(
         () => {
           splitToParts(inputs, splitter)
@@ -176,8 +183,8 @@ describe('split', () => {
     })
 
     it('does not throw if all parts are found', () => {
-      const inputs: string[] = ['abc']
-      const splitter = (): string[] => ['a', 'b', 'c']
+      const inputs = ['abc']
+      const splitter = () => ['a', 'b', 'c']
       assert.doesNotThrow(() => {
         splitToParts(inputs, splitter)
       })
@@ -187,12 +194,12 @@ describe('split', () => {
   describe('split', () => {
     describe('basics', () => {
       it('should split array with whitespace splitter and extra whitespace', () => {
-        const input: string[] = [
+        const input = [
           ' hello world! ',
           'This is the split test string. Of words. ',
           ' '
         ]
-        const result: Chunk[] = split(input, {
+        const result = split(input, {
           chunkSize: 5,
           splitter: whitespaceSplitter
         })
@@ -204,32 +211,33 @@ describe('split', () => {
 
       // Base cases
       it('should handle empty string input', () => {
-        const input: string = ''
-        const result: Chunk[] = split(input)
+        const input = ''
+        const result = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle empty array input', () => {
-        const input: string[] = []
-        const result: Chunk[] = split(input)
+        /** @type {string[]} */
+        const input = []
+        const result = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle array with empty strings', () => {
-        const input: string[] = ['', '', '']
-        const result: Chunk[] = split(input)
+        const input = ['', '', '']
+        const result = split(input)
         assert.deepStrictEqual(result, [])
       })
 
       it('should handle single character with default splitter', () => {
-        const input: string = 'a'
-        const result: Chunk[] = split(input, { chunkSize: 1 })
+        const input = 'a'
+        const result = split(input, { chunkSize: 1 })
         assert.deepStrictEqual(result, [{ text: 'a', start: 0, end: 1 }])
       })
 
       it('should handle single word with default splitter', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 3 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 3 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo', start: 3, end: 5 }
@@ -238,8 +246,8 @@ describe('split', () => {
 
       // Parameter permutations
       it('should use default chunkSize when not specified', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input)
+        const input = 'hello world'
+        const result = split(input)
         // Default chunkSize is 512, so all text should be in one chunk
         assert.deepStrictEqual(result, [
           { text: 'hello world', start: 0, end: 11 }
@@ -247,8 +255,8 @@ describe('split', () => {
       })
 
       it('should use default splitter when not specified', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 1 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 1 })
         // Default splitter is char split
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
@@ -260,20 +268,20 @@ describe('split', () => {
       })
 
       it('should handle chunkSize larger than input', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 10 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 10 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkSize equal to input length', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 5 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 5 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkSize smaller than input length', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, { chunkSize: 3 })
+        const input = 'hello world'
+        const result = split(input, { chunkSize: 3 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo ', start: 3, end: 6 },
@@ -284,8 +292,8 @@ describe('split', () => {
 
       // Different input types
       it('should handle string input with whitespace splitter', () => {
-        const input: string = 'hello world test'
-        const result: Chunk[] = split(input, {
+        const input = 'hello world test'
+        const result = split(input, {
           chunkSize: 2,
           splitter: whitespaceSplitter
         })
@@ -296,8 +304,8 @@ describe('split', () => {
       })
 
       it('should handle array input with whitespace splitter', () => {
-        const input: string[] = ['hello world', 'test string']
-        const result: Chunk[] = split(input, {
+        const input = ['hello world', 'test string']
+        const result = split(input, {
           chunkSize: 2,
           splitter: whitespaceSplitter
         })
@@ -308,8 +316,8 @@ describe('split', () => {
       })
 
       it('should handle array with single string', () => {
-        const input: string[] = ['hello world']
-        const result: Chunk[] = split(input, {
+        const input = ['hello world']
+        const result = split(input, {
           chunkSize: 3,
           splitter: whitespaceSplitter
         })
@@ -319,8 +327,8 @@ describe('split', () => {
       })
 
       it('should handle array with multiple strings', () => {
-        const input: string[] = ['hello', 'world', 'test']
-        const result: Chunk[] = split(input, {
+        const input = ['hello', 'world', 'test']
+        const result = split(input, {
           chunkSize: 2,
           splitter: charSplitter
         })
@@ -337,8 +345,8 @@ describe('split', () => {
 
       // Edge cases
       it('should handle input with only whitespace', () => {
-        const input: string = '   '
-        const result: Chunk[] = split(input, {
+        const input = '   '
+        const result = split(input, {
           chunkSize: 1,
           splitter: whitespaceSplitter
         })
@@ -346,8 +354,8 @@ describe('split', () => {
       })
 
       it('should handle input with only whitespace in array', () => {
-        const input: string[] = ['   ', '  ']
-        const result: Chunk[] = split(input, {
+        const input = ['   ', '  ']
+        const result = split(input, {
           chunkSize: 1,
           splitter: whitespaceSplitter
         })
@@ -355,8 +363,8 @@ describe('split', () => {
       })
 
       it('should handle chunkSize of 1', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 1 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 1 })
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
           { text: 'e', start: 1, end: 2 },
@@ -367,7 +375,7 @@ describe('split', () => {
       })
 
       it('should throw error for chunkSize of 0', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 0 })
@@ -381,7 +389,7 @@ describe('split', () => {
 
       // Validation tests
       it('should throw error for negative chunkSize', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: -1 })
@@ -394,7 +402,7 @@ describe('split', () => {
       })
 
       it('should throw error for non-integer chunkSize', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 1.5 })
@@ -407,10 +415,11 @@ describe('split', () => {
       })
 
       it('should throw error for non-number chunkSize', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
+            // @ts-expect-error test
+            split(input, { chunkSize: 'invalid' })
           },
           {
             name: 'Error',
@@ -420,7 +429,7 @@ describe('split', () => {
       })
 
       it('should throw error for negative chunkOverlap', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 5, chunkOverlap: -1 })
@@ -433,7 +442,7 @@ describe('split', () => {
       })
 
       it('should throw error for non-integer chunkOverlap', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 5, chunkOverlap: 1.5 })
@@ -446,10 +455,11 @@ describe('split', () => {
       })
 
       it('should throw error for non-number chunkOverlap', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
-            split(input, { chunkSize: 5, chunkOverlap: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
+            // @ts-expect-error test
+            split(input, { chunkSize: 5, chunkOverlap: 'invalid' })
           },
           {
             name: 'Error',
@@ -460,7 +470,7 @@ describe('split', () => {
       })
 
       it('should throw error when chunkOverlap >= chunkSize', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 5, chunkOverlap: 5 })
@@ -473,7 +483,7 @@ describe('split', () => {
       })
 
       it('should throw error when chunkOverlap > chunkSize', () => {
-        const input: string = 'hello'
+        const input = 'hello'
         assert.throws(
           () => {
             split(input, { chunkSize: 3, chunkOverlap: 5 })
@@ -487,8 +497,8 @@ describe('split', () => {
 
       // Token splitter tests
       it('should handle string input with token splitter', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, {
+        const input = 'hello world'
+        const result = split(input, {
           chunkSize: 2,
           splitter: tokenSplitter
         })
@@ -498,13 +508,13 @@ describe('split', () => {
       })
 
       it('should handle array input with token splitter', () => {
-        const input: string[] = [
+        const input = [
           'hello',
           'world',
           'bar baz buz',
           'what? why? howdymachina'
         ]
-        const result: Chunk[] = split(input, {
+        const result = split(input, {
           chunkSize: 2,
           splitter: tokenSplitter
         })
@@ -521,8 +531,8 @@ describe('split', () => {
 
       // Complex scenarios
       it('should handle mixed content with whitespace splitter', () => {
-        const input: string = 'hello   world!  test'
-        const result: Chunk[] = split(input, {
+        const input = 'hello   world!  test'
+        const result = split(input, {
           chunkSize: 2,
           splitter: whitespaceSplitter
         })
@@ -533,8 +543,8 @@ describe('split', () => {
       })
 
       it('should handle array with mixed content', () => {
-        const input: string[] = ['hello', '   world!', 'test']
-        const result: Chunk[] = split(input, {
+        const input = ['hello', '   world!', 'test']
+        const result = split(input, {
           chunkSize: 2,
           splitter: whitespaceSplitter
         })
@@ -545,16 +555,16 @@ describe('split', () => {
       })
 
       it('should handle very large chunkSize', () => {
-        const input: string = 'hello world test string'
-        const result: Chunk[] = split(input, { chunkSize: 1000 })
+        const input = 'hello world test string'
+        const result = split(input, { chunkSize: 1000 })
         assert.deepStrictEqual(result, [
           { text: 'hello world test string', start: 0, end: 23 }
         ])
       })
 
       it('should handle array boundary as token boundary', () => {
-        const input: string[] = ['hello', 'world']
-        const result: Chunk[] = split(input, {
+        const input = ['hello', 'world']
+        const result = split(input, {
           chunkSize: 3,
           splitter: charSplitter
         })
@@ -571,8 +581,8 @@ describe('split', () => {
     describe('chunkOverlap', () => {
       // Basic overlap tests with char splitter
       it('should handle chunkOverlap of 1 with char splitter', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
+        const input = 'hello world'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'llo', start: 2, end: 5 },
@@ -583,8 +593,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap of 2 with char splitter', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, { chunkSize: 4, chunkOverlap: 2 })
+        const input = 'hello world'
+        const result = split(input, { chunkSize: 4, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'hell', start: 0, end: 4 },
           { text: 'llo ', start: 2, end: 6 },
@@ -595,8 +605,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap equal to chunkSize - 1', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 2 })
+        const input = 'hello world'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'ell', start: 1, end: 4 },
@@ -612,8 +622,8 @@ describe('split', () => {
 
       // Overlap with whitespace splitter
       it('should handle chunkOverlap with whitespace splitter', () => {
-        const input: string = 'hello world test string'
-        const result: Chunk[] = split(input, {
+        const input = 'hello world test string'
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -626,8 +636,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with whitespace splitter and multiple spaces', () => {
-        const input: string = 'hello   world  test'
-        const result: Chunk[] = split(input, {
+        const input = 'hello   world  test'
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -640,8 +650,8 @@ describe('split', () => {
 
       // Overlap with array inputs
       it('should handle chunkOverlap with array input and char splitter', () => {
-        const input: string[] = ['hello', 'world']
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
+        const input = ['hello', 'world']
+        const result = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: ['hel'], start: 0, end: 3 },
           { text: ['llo'], start: 2, end: 5 },
@@ -652,8 +662,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with array input and whitespace splitter', () => {
-        const input: string[] = ['hello world', 'test string']
-        const result: Chunk[] = split(input, {
+        const input = ['hello world', 'test string']
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -667,8 +677,8 @@ describe('split', () => {
 
       // Edge cases for overlap
       it('should handle chunkOverlap of 0 (default behavior)', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 0 })
+        const input = 'hello world'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 0 })
         assert.deepStrictEqual(result, [
           { text: 'hel', start: 0, end: 3 },
           { text: 'lo ', start: 3, end: 6 },
@@ -678,27 +688,27 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with input smaller than chunkSize', () => {
-        const input: string = 'hi'
-        const result: Chunk[] = split(input, { chunkSize: 5, chunkOverlap: 2 })
+        const input = 'hi'
+        const result = split(input, { chunkSize: 5, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [{ text: 'hi', start: 0, end: 2 }])
       })
 
       it('should handle chunkOverlap with input equal to chunkSize', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 5, chunkOverlap: 2 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 5, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [{ text: 'hello', start: 0, end: 5 }])
       })
 
       it('should handle chunkOverlap with single character input', () => {
-        const input: string = 'a'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
+        const input = 'a'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [{ text: 'a', start: 0, end: 1 }])
       })
 
       // Complex overlap scenarios
       it('should handle large chunkOverlap with small chunkSize', () => {
-        const input: string = 'abcdefghij'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 2 })
+        const input = 'abcdefghij'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 2 })
         assert.deepStrictEqual(result, [
           { text: 'abc', start: 0, end: 3 },
           { text: 'bcd', start: 1, end: 4 },
@@ -712,8 +722,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with whitespace-only input', () => {
-        const input: string = '   '
-        const result: Chunk[] = split(input, {
+        const input = '   '
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -722,8 +732,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with array containing empty strings', () => {
-        const input: string[] = ['', 'hello', '']
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
+        const input = ['', 'hello', '']
+        const result = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: ['hel'], start: 0, end: 3 },
           { text: ['llo'], start: 2, end: 5 }
@@ -732,8 +742,8 @@ describe('split', () => {
 
       // Token splitter overlap tests
       it('should handle chunkOverlap with token splitter', () => {
-        const input: string = 'hello world test'
-        const result: Chunk[] = split(input, {
+        const input = 'hello world test'
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: tokenSplitter
@@ -745,8 +755,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with token splitter and array input', () => {
-        const input: string[] = ['hello', 'world']
-        const result: Chunk[] = split(input, {
+        const input = ['hello', 'world']
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: tokenSplitter
@@ -758,8 +768,8 @@ describe('split', () => {
 
       // Boundary conditions
       it('should handle chunkOverlap with chunkSize of 1', () => {
-        const input: string = 'hello'
-        const result: Chunk[] = split(input, { chunkSize: 1, chunkOverlap: 0 })
+        const input = 'hello'
+        const result = split(input, { chunkSize: 1, chunkOverlap: 0 })
         assert.deepStrictEqual(result, [
           { text: 'h', start: 0, end: 1 },
           { text: 'e', start: 1, end: 2 },
@@ -770,8 +780,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with very large chunkSize', () => {
-        const input: string = 'hello world'
-        const result: Chunk[] = split(input, {
+        const input = 'hello world'
+        const result = split(input, {
           chunkSize: 100,
           chunkOverlap: 10
         })
@@ -782,8 +792,8 @@ describe('split', () => {
 
       // Mixed content scenarios
       it('should handle chunkOverlap with mixed content and whitespace splitter', () => {
-        const input: string = 'hello   world!  test'
-        const result: Chunk[] = split(input, {
+        const input = 'hello   world!  test'
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -795,8 +805,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with array containing mixed content', () => {
-        const input: string[] = ['hello', '   world!', 'test']
-        const result: Chunk[] = split(input, {
+        const input = ['hello', '   world!', 'test']
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -809,14 +819,14 @@ describe('split', () => {
 
       // Overlap behavior verification
       it('should verify overlap parts are correctly carried forward', () => {
-        const input: string = 'abcdefghijklmnop'
-        const result: Chunk[] = split(input, { chunkSize: 4, chunkOverlap: 2 })
+        const input = 'abcdefghijklmnop'
+        const result = split(input, { chunkSize: 4, chunkOverlap: 2 })
         // Verify that each chunk (except first) starts with the last 2 chars of previous chunk
         for (let i = 1; i < result.length; i++) {
           const prevChunk = result[i - 1]
           const currChunk = result[i]
-          const prevText = prevChunk.text as string
-          const currText = currChunk.text as string
+          const prevText = /** @type {string} */ (prevChunk.text)
+          const currText = /** @type {string} */ (currChunk.text)
 
           // The current chunk should start with the last 2 characters of the previous chunk
           assert.strictEqual(
@@ -828,8 +838,8 @@ describe('split', () => {
       })
 
       it('should handle chunkOverlap with unicode characters', () => {
-        const input: string = 'héllö wörld'
-        const result: Chunk[] = split(input, { chunkSize: 3, chunkOverlap: 1 })
+        const input = 'héllö wörld'
+        const result = split(input, { chunkSize: 3, chunkOverlap: 1 })
         assert.deepStrictEqual(result, [
           { text: 'hél', start: 0, end: 3 },
           { text: 'llö', start: 2, end: 5 },
@@ -841,19 +851,19 @@ describe('split', () => {
 
       // Stress tests
       it('should handle chunkOverlap with very small chunkSize and large overlap', () => {
-        const input: string = 'abcdefghijklmnopqrstuvwxyz'
-        const result: Chunk[] = split(input, { chunkSize: 2, chunkOverlap: 1 })
+        const input = 'abcdefghijklmnopqrstuvwxyz'
+        const result = split(input, { chunkSize: 2, chunkOverlap: 1 })
         // Should have many overlapping chunks
         assert(result.length > 10)
         // Each chunk should have exactly 2 characters
         for (const chunk of result) {
-          assert.strictEqual((chunk.text as string).length, 2)
+          assert.strictEqual(/** @type {string} */ (chunk.text).length, 2)
         }
       })
 
       it('should handle chunkOverlap with whitespace splitter and complex spacing', () => {
-        const input: string = '  hello   world  test  string  '
-        const result: Chunk[] = split(input, {
+        const input = '  hello   world  test  string  '
+        const result = split(input, {
           chunkSize: 2,
           chunkOverlap: 1,
           splitter: whitespaceSplitter
@@ -869,10 +879,11 @@ describe('split', () => {
     describe('chunkStrategy', () => {
       describe('validation', () => {
         it('should throw error for invalid chunkStrategy', () => {
-          const input: string = 'hello world'
+          const input = 'hello world'
           assert.throws(
             () => {
-              split(input, { chunkSize: 5, chunkStrategy: 'invalid' as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
+              // @ts-expect-error test
+              split(input, { chunkSize: 5, chunkStrategy: 'invalid' })
             },
             {
               name: 'Error',
@@ -883,8 +894,8 @@ describe('split', () => {
         })
 
         it('should accept character chunkStrategy', () => {
-          const input: string = 'hello world'
-          const result: Chunk[] = split(input, {
+          const input = 'hello world'
+          const result = split(input, {
             chunkSize: 3,
             chunkStrategy: 'character'
           })
@@ -897,8 +908,8 @@ describe('split', () => {
         })
 
         it('should accept paragraph chunkStrategy', () => {
-          const input: string = 'hello\n\nworld'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld'
+          const result = split(input, {
             chunkSize: 3,
             chunkStrategy: 'paragraph'
           })
@@ -914,7 +925,7 @@ describe('split', () => {
       // Character strategy tests (default behavior)
       describe('character strategy', () => {
         it('should behave like default behavior when chunkStrategy is character', () => {
-          const input: string = 'hello world'
+          const input = 'hello world'
           const result1 = split(input, { chunkSize: 3 })
           const result2 = split(input, {
             chunkSize: 3,
@@ -924,8 +935,8 @@ describe('split', () => {
         })
 
         it('should handle character strategy with whitespace splitter', () => {
-          const input: string = 'hello world test'
-          const result: Chunk[] = split(input, {
+          const input = 'hello world test'
+          const result = split(input, {
             chunkSize: 2,
             chunkStrategy: 'character',
             splitter: whitespaceSplitter
@@ -937,8 +948,8 @@ describe('split', () => {
         })
 
         it('should handle character strategy with array input', () => {
-          const input: string[] = ['hello', 'world']
-          const result: Chunk[] = split(input, {
+          const input = ['hello', 'world']
+          const result = split(input, {
             chunkSize: 3,
             chunkStrategy: 'character',
             splitter: charSplitter
@@ -952,8 +963,8 @@ describe('split', () => {
         })
 
         it('should handle character strategy with chunkOverlap', () => {
-          const input: string = 'hello world'
-          const result: Chunk[] = split(input, {
+          const input = 'hello world'
+          const result = split(input, {
             chunkSize: 3,
             chunkOverlap: 1,
             chunkStrategy: 'character'
@@ -971,8 +982,8 @@ describe('split', () => {
       // Paragraph strategy tests
       describe('paragraph strategy', () => {
         it('should group tokens by paragraphs', () => {
-          const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld\n\ntest'
+          const result = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -985,8 +996,8 @@ describe('split', () => {
         })
 
         it('should handle single paragraph that fits in chunk', () => {
-          const input: string = 'hello world'
-          const result: Chunk[] = split(input, {
+          const input = 'hello world'
+          const result = split(input, {
             chunkSize: 5,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -997,8 +1008,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph that exceeds chunk size', () => {
-          const input: string = 'hello world test string'
-          const result: Chunk[] = split(input, {
+          const input = 'hello world test string'
+          const result = split(input, {
             chunkSize: 2,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1011,9 +1022,9 @@ describe('split', () => {
         })
 
         it('should handle multiple paragraphs with mixed sizes', () => {
-          const input: string =
+          const input =
             'short\n\nvery long paragraph with many words\n\nanother short'
-          const result: Chunk[] = split(input, {
+          const result = split(input, {
             chunkSize: 3,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1027,8 +1038,8 @@ describe('split', () => {
         })
 
         it('should handle empty paragraphs', () => {
-          const input: string = 'hello\n\n\n\nworld'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\n\n\nworld'
+          const result = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1040,8 +1051,8 @@ describe('split', () => {
         })
 
         it('should handle paragraphs with only whitespace', () => {
-          const input: string = 'hello\n\n   \n\nworld'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\n   \n\nworld'
+          const result = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1053,8 +1064,8 @@ describe('split', () => {
         })
 
         it('should handle array input with paragraph strategy', () => {
-          const input: string[] = ['hello\n\nworld', 'test\n\nstring']
-          const result: Chunk[] = split(input, {
+          const input = ['hello\n\nworld', 'test\n\nstring']
+          const result = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1068,8 +1079,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph strategy with char splitter', () => {
-          const input: string = 'hello\n\nworld'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld'
+          const result = split(input, {
             chunkSize: 3,
             chunkStrategy: 'paragraph',
             splitter: charSplitter
@@ -1083,8 +1094,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph strategy with token splitter', () => {
-          const input: string = 'hello\n\nworld'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld'
+          const result = split(input, {
             chunkSize: 2,
             chunkStrategy: 'paragraph',
             splitter: tokenSplitter
@@ -1095,8 +1106,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph strategy with chunkOverlap', () => {
-          const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld\n\ntest'
+          const result = split(input, {
             chunkSize: 2,
             chunkOverlap: 1,
             chunkStrategy: 'paragraph',
@@ -1109,8 +1120,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph strategy with mixed content in array', () => {
-          const input: string[] = ['hello\n\nworld', 'test', 'string\n\nend']
-          const result: Chunk[] = split(input, {
+          const input = ['hello\n\nworld', 'test', 'string\n\nend']
+          const result = split(input, {
             chunkSize: 2,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1123,13 +1134,13 @@ describe('split', () => {
         })
 
         it('should compare character vs paragraph strategies', () => {
-          const input: string = 'hello\n\nworld test'
-          const charResult: Chunk[] = split(input, {
+          const input = 'hello\n\nworld test'
+          const charResult = split(input, {
             chunkSize: 3,
             chunkStrategy: ChunkStrategy.character,
             splitter: whitespaceSplitter
           })
-          const paragraphResult: Chunk[] = split(input, {
+          const paragraphResult = split(input, {
             chunkSize: 3,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1143,8 +1154,8 @@ describe('split', () => {
         })
 
         it('should handle paragraph strategy with chunkSize larger than any paragraph', () => {
-          const input: string = 'hello\n\nworld\n\ntest'
-          const result: Chunk[] = split(input, {
+          const input = 'hello\n\nworld\n\ntest'
+          const result = split(input, {
             chunkSize: 100,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1155,14 +1166,14 @@ describe('split', () => {
         })
 
         it('handles paragraphs within array items', () => {
-          const input: string[] = [
+          const input = [
             ' hello\nbig world! ',
             'This is the split test string in a very long long string.\n\nOf words. \n\nHi there',
             'Another.',
             ' '
           ]
 
-          const result: Chunk[] = split(input, {
+          const result = split(input, {
             chunkSize: 10,
             chunkOverlap: 2,
             splitter: whitespaceSplitter,
@@ -1188,11 +1199,11 @@ describe('split', () => {
       // Edge cases and error conditions
       describe('edge cases', () => {
         it('should handle empty input with both strategies', () => {
-          const emptyInput: string = ''
-          const charResult: Chunk[] = split(emptyInput, {
+          const emptyInput = ''
+          const charResult = split(emptyInput, {
             chunkStrategy: ChunkStrategy.character
           })
-          const paragraphResult: Chunk[] = split(emptyInput, {
+          const paragraphResult = split(emptyInput, {
             chunkStrategy: 'paragraph'
           })
           assert.deepStrictEqual(charResult, [])
@@ -1200,11 +1211,11 @@ describe('split', () => {
         })
 
         it('should handle array with empty strings with both strategies', () => {
-          const emptyArray: string[] = ['', '', '']
-          const charResult: Chunk[] = split(emptyArray, {
+          const emptyArray = ['', '', '']
+          const charResult = split(emptyArray, {
             chunkStrategy: ChunkStrategy.character
           })
-          const paragraphResult: Chunk[] = split(emptyArray, {
+          const paragraphResult = split(emptyArray, {
             chunkStrategy: 'paragraph'
           })
           assert.deepStrictEqual(charResult, [])
@@ -1212,12 +1223,12 @@ describe('split', () => {
         })
 
         it('should handle single character with both strategies', () => {
-          const input: string = 'a'
-          const charResult: Chunk[] = split(input, {
+          const input = 'a'
+          const charResult = split(input, {
             chunkSize: 1,
             chunkStrategy: ChunkStrategy.character
           })
-          const paragraphResult: Chunk[] = split(input, {
+          const paragraphResult = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph'
           })
@@ -1226,13 +1237,13 @@ describe('split', () => {
         })
 
         it('should handle whitespace-only input with both strategies', () => {
-          const input: string = '   '
-          const charResult: Chunk[] = split(input, {
+          const input = '   '
+          const charResult = split(input, {
             chunkSize: 1,
             chunkStrategy: ChunkStrategy.character,
             splitter: whitespaceSplitter
           })
-          const paragraphResult: Chunk[] = split(input, {
+          const paragraphResult = split(input, {
             chunkSize: 1,
             chunkStrategy: 'paragraph',
             splitter: whitespaceSplitter
@@ -1314,7 +1325,7 @@ describe('split', () => {
         })
 
         it('should handle multibyte arrays with token splitter', async () => {
-          const input: string[] = [
+          const input = [
             'hello 🌍',
             'café naïve façade',
             'こんにちは world',
@@ -1336,7 +1347,7 @@ describe('split', () => {
             'Hindi: नमस्ते दुनिया',
             'Thai: สวัสดีโลก'
           ]
-          const chunks: Chunk[] = split(input, {
+          const chunks = split(input, {
             chunkSize: 2,
             chunkStrategy: 'paragraph',
             splitter: tokenSplitter

@@ -30,15 +30,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Install, build, and prep artifacts
+      # Install and prep artifacts
       - name: Install dependencies
         run: npm ci
-      - name: Build
-        run: npm run build
-      - name: Copy build to demo-public
+      - name: Copy sources to demo-public
         run: |
           mkdir -p demo-public
-          cp -r dist demo-public/dist
+          cp -r src demo-public/src
           cp index.html demo-public/index.html
 
       # Setup and deploy.

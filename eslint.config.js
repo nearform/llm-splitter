@@ -1,11 +1,8 @@
-import globals from 'globals'
 import js from '@eslint/js'
-import tseslint from 'typescript-eslint'
 import prettierRecommended from 'eslint-plugin-prettier/recommended'
 
-export default tseslint.config(
+export default [
   js.configs.recommended,
-  ...tseslint.configs.recommended,
   prettierRecommended,
   {
     ignores: [
@@ -18,11 +15,11 @@ export default tseslint.config(
   },
   {
     languageOptions: {
-      globals: {
-        ...globals.node
-      },
       ecmaVersion: 'latest',
-      sourceType: 'module'
+      sourceType: 'module',
+      globals: {
+        TextDecoder: 'readonly'
+      }
     }
   }
-)
+]

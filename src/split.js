@@ -1,55 +1,57 @@
 import { getChunk } from './get-chunk.js'
 
-export enum ChunkStrategy {
-  character = 'character',
-  paragraph = 'paragraph'
-}
+/** @enum {string} */
+export const ChunkStrategy = Object.freeze({
+  character: 'character',
+  paragraph: 'paragraph'
+})
 
-export interface Chunk {
-  text: string | string[] | null
-  start: number
-  end: number
-  isBoundary?: boolean
-}
+/**
+ * @typedef {object} Chunk
+ * @property {string|string[]|null} text
+ * @property {number} start
+ * @property {number} end
+ * @property {boolean} [isBoundary]
+ */
 
-export interface SplitOptions {
-  chunkSize?: number
-  chunkOverlap?: number
-  splitter?: (input: string) => string[]
-  chunkStrategy?: keyof typeof ChunkStrategy
-}
+/**
+ * @typedef {object} SplitOptions
+ * @property {number} [chunkSize]
+ * @property {number} [chunkOverlap]
+ * @property {(input: string) => string[]} [splitter]
+ * @property {keyof typeof ChunkStrategy} [chunkStrategy]
+ */
 
-type BoundaryFunction = (inputs: string[]) => string[][]
+/** @typedef {(inputs: string[]) => string[][]} BoundaryFunction */
 
 // Boundary functions take an array of string input and then return an array of arrays.
 // (Confusing!). The key part is that each sub-array is a group of parts that must *all* be
 // included in the same chunk if another sub-array is in the chunk, or fill the chunk and split
 // apart in subsequent chunks.
-const BOUNDARIES: Record<ChunkStrategy, BoundaryFunction> = {
-  [ChunkStrategy.character]: (inputs: string[]): string[][] => [inputs],
-  [ChunkStrategy.paragraph]: (inputs: string[]): string[][] => {
-    const groups: string[][] = []
+/** @type {Record<keyof typeof ChunkStrategy, BoundaryFunction>} */
+const BOUNDARIES = {
+  [ChunkStrategy.character]: inputs => [inputs],
+  [ChunkStrategy.paragraph]: inputs => {
+    /** @type {string[][]} */
+    const groups = []
     for (const input of inputs)
       for (const paragraph of input.split(/\n\n/)) groups.push([paragraph])
     return groups
   }
 }
 
-const CHUNK_STRATEGIES = new Set<ChunkStrategy>(
-  Object.keys(BOUNDARIES) as ChunkStrategy[]
-)
+const CHUNK_STRATEGIES = new Set(Object.keys(BOUNDARIES))
 
 const SINGLE_BYTE_CHAR_LIMIT = 255
 
 /**
  * Assert that the chunk strategy is valid.
  * @param {unknown} chunkStrategy The chunk strategy to validate.
+ * @returns {asserts chunkStrategy is keyof typeof ChunkStrategy}
  * @throws {Error} If the chunk strategy is invalid.
  */
-function assertChunkStrategy(
-  chunkStrategy: unknown
-): asserts chunkStrategy is ChunkStrategy {
-  if (!CHUNK_STRATEGIES.has(chunkStrategy as ChunkStrategy))
+function assertChunkStrategy(chunkStrategy) {
+  if (!CHUNK_STRATEGIES.has(/** @type {string} */ (chunkStrategy)))
     throw new Error(
       `Invalid chunk strategy. Must be one of: ${[...CHUNK_STRATEGIES].join(', ')}`
     )
@@ -63,8 +65,9 @@ function assertChunkStrategy(
  * @returns {Chunk[]} An array of Chunk objects, each representing a matched part of the input string.
  * @throws {Error} If a split part cannot be matched in the input string in the expected order.
  */
-const findMatches = (input: string, splitParts: string[]) => {
-  const matchedParts: Chunk[] = []
+const findMatches = (input, splitParts) => {
+  /** @type {Chunk[]} */
+  const matchedParts = []
   let inputIndex = 0
 
   splitPartsLoop: for (const splitPart of splitParts) {
@@ -78,7 +81,8 @@ const findMatches = (input: string, splitParts: string[]) => {
     }
 
     // Helper to accumulate matches.
-    const addMatch = ({ start, end }: { start: number; end: number }) => {
+    /** @param {{ start: number; end: number }} range */
+    const addMatch = ({ start, end }) => {
       matchedParts.push({
         text: splitPart,
         start,
@@ -172,22 +176,19 @@ const findMatches = (input: string, splitParts: string[]) => {
  * not on array-like iteration of the string (e.g. `[...input]` or `Array.from(input)`)
  *
  * @param {string[]} inputs - The inputs to split.
- * @param {Function} splitter - The function to split the text.
- * @param {number} baseOffset - The base offset to add to the start and end positions.
+ * @param {(input: string) => string[]} splitter - The function to split the text.
+ * @param {number} [baseOffset] - The base offset to add to the start and end positions.
  * @returns {Chunk[]}
  */
-export function splitToParts(
-  inputs: string[],
-  splitter: (input: string) => string[],
-  baseOffset: number = 0
-): Chunk[] {
-  const parts: Chunk[] = []
-  let inputsOffset: number = 0
+export function splitToParts(inputs, splitter, baseOffset = 0) {
+  /** @type {Chunk[]} */
+  const parts = []
+  let inputsOffset = 0
 
   for (const input of inputs) {
-    const splitParts: string[] = splitter(input)
+    const splitParts = splitter(input)
 
-    const matches: Chunk[] = findMatches(input, splitParts)
+    const matches = findMatches(input, splitParts)
     for (const match of matches) {
       parts.push({
         text: match.text,
@@ -205,16 +206,19 @@ export function splitToParts(
 }
 
 // Little helpers
+/**
+ * @param {{
+ *   chunkSize: number
+ *   chunkOverlap: number
+ *   splitter: (input: string) => string[]
+ *   chunkStrategy: string
+ * }} opts
+ */
 const splitValidate = ({
   chunkSize,
   chunkOverlap,
   splitter,
   chunkStrategy
-}: {
-  chunkSize: number
-  chunkOverlap: number
-  splitter: (input: string) => string[]
-  chunkStrategy: string
 }) => {
   assertChunkStrategy(chunkStrategy)
 
@@ -238,25 +242,33 @@ const splitValidate = ({
 }
 
 class ChunkParts {
-  public parts: Chunk[] = []
-  public lastEmittedPart: Chunk | null = null
-  public lastBoundaryPart: Chunk | null = null
+  /** @type {Chunk[]} */
+  parts = []
+  /** @type {Chunk | null} */
+  lastEmittedPart = null
+  /** @type {Chunk | null} */
+  lastBoundaryPart = null
 
-  constructor(
-    public input: string | string[],
-    public chunkOverlap: number
-  ) {}
+  /**
+   * @param {string | string[]} input
+   * @param {number} chunkOverlap
+   */
+  constructor(input, chunkOverlap) {
+    this.input = input
+    this.chunkOverlap = chunkOverlap
+  }
 
-  get length(): number {
+  get length() {
     return this.parts.length
   }
 
-  push(part: Chunk): void {
+  /** @param {Chunk} part */
+  push(part) {
     this.parts.push(part)
     if (part.isBoundary) this.lastBoundaryPart = part
   }
 
-  hasUnEmittedParts(): boolean {
+  hasUnEmittedParts() {
     // First chunk.
     if (this.lastEmittedPart === null) return this.parts.length > 0
 
@@ -271,15 +283,17 @@ class ChunkParts {
     return false
   }
 
-  emit(): Chunk {
+  /** @returns {Chunk} */
+  emit() {
     // Sanity check.
     if (this.parts.length === 0) throw new Error('Chunk parts is empty')
 
     // Prepare chunk.
-    const start: number = this.parts[0].start
+    const start = this.parts[0].start
     this.lastEmittedPart = this.parts[this.parts.length - 1]
-    const end: number = this.lastEmittedPart.end
-    const chunk: Chunk = {
+    const end = this.lastEmittedPart.end
+    /** @type {Chunk} */
+    const chunk = {
       text: getChunk(this.input, start, end),
       start,
       end
@@ -319,48 +333,45 @@ class ChunkParts {
  * - `paragraph`: Group tokens by paragraphs. If a paragraph exceeds the chunk size, it will be split across multiple chunks.
  *
  * @param {string|string[]} input - The input (string or array of strings) to split.
- * @param {Object} options
- * @param {number} options.chunkSize - The max number of tokens (from splitter) of each chunk.
- * @param {number} options.chunkOverlap - The overlapping number of tokens (from splitter) to include from previous chunk.
- * @param {Function} options.splitter - The function to split the text.
- * @param {string} options.chunkStrategy - The strategy used to group tokens into chunks.
- * @returns {Array<{text: string | null, start: number, end: number}>}
+ * @param {SplitOptions} [options]
+ * @returns {Chunk[]}
  */
 export function split(
-  input: string | string[],
+  input,
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter = (text: string): string[] => text.split(''),
+    splitter = text => text.split(''),
     chunkStrategy = ChunkStrategy.character
-  }: SplitOptions = {}
+  } = {}
 ) {
   // Validation
   splitValidate({ chunkSize, chunkOverlap, splitter, chunkStrategy })
 
   // Chunk handling.
-  const chunks: Chunk[] = []
+  /** @type {Chunk[]} */
+  const chunks = []
   const chunkParts = new ChunkParts(input, chunkOverlap)
 
   // Inputs.
-  const inputAsArray: string[] = Array.isArray(input) ? input : [input]
-  const inputAsString: string = inputAsArray.join('')
-  const groups: string[][] = BOUNDARIES[chunkStrategy](inputAsArray)
+  const inputAsArray = Array.isArray(input) ? input : [input]
+  const inputAsString = inputAsArray.join('')
+  const groups = BOUNDARIES[chunkStrategy](inputAsArray)
 
   // Iteration.
-  let baseOffset: number = -1
+  let baseOffset = -1
   for (const group of groups) {
     // Empty pre-processed group.
     if (group.length === 0) continue
 
     // Find the start of the first part in the group and update our offset.
-    const firstPart: string = group[0]
+    const firstPart = group[0]
     baseOffset = inputAsString.indexOf(firstPart, baseOffset + 1)
     if (baseOffset === -1)
       throw new Error(`Could not find start of group: ${group.slice(0, 20)}...`)
 
     // Split with parts plus our offset.
-    const parts: Chunk[] = splitToParts(group, splitter, baseOffset)
+    const parts = splitToParts(group, splitter, baseOffset)
 
     // Empty post-processed group.
     if (parts.length === 0) continue

@@ -27,3 +27,4 @@ dist-ssr
 coverage
 demo-public
 tmp-*
+.claude
