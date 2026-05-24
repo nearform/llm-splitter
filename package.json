@@ -3,9 +3,26 @@
   "private": false,
   "version": "0.2.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
+  "license": "MIT",
+  "author": "Ryan Roemer <ryan.roemer@nearform.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nearform/llm-splitter.git"
+  },
+  "homepage": "https://github.com/nearform/llm-splitter#readme",
+  "bugs": {
+    "url": "https://github.com/nearform/llm-splitter/issues"
+  },
+  "keywords": [
+    "llm",
+    "splitter",
+    "chunking",
+    "text",
+    "vectorization"
+  ],
+  "type": "module",
   "main": "src/index.js",
   "types": "dist/index.d.ts",
-  "type": "module",
   "files": [
     "src",
     "dist"
@@ -22,23 +39,6 @@
     "test": "node --test 'test/*.test.js'",
     "test:only": "node --test --test-only 'test/*.test.js'"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nearform/llm-splitter.git"
-  },
-  "keywords": [
-    "llm",
-    "splitter",
-    "chunking",
-    "text",
-    "vectorization"
-  ],
-  "author": "Ryan Roemer <ryan.roemer@nearform.com>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/nearform/llm-splitter/issues"
-  },
-  "homepage": "https://github.com/nearform/llm-splitter#readme",
   "devDependencies": {
     "@eslint/js": "^9.30.0",
     "@types/node": "^25.0.2",
