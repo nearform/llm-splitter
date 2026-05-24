@@ -24,7 +24,7 @@ $ npm install llm-splitter
 ## Usage
 
 ```js
-import { split, getChunk } from 'llm-splitter'
+import { split, getChunk } from "llm-splitter";
 ```
 
 ## API
@@ -73,64 +73,64 @@ Returns an array of chunk objects with the following structure:
 **Basic usage with default options:**
 
 ```js
-const text = 'Hello world! This is a test.'
-const chunks = split(text)
+const text = "Hello world! This is a test.";
+const chunks = split(text);
 
 // =>
 // Splits into character-level chunks of 512 characters, which is just the original string here ;)
-;[{ text: 'Hello world! This is a test.', start: 0, end: 28 }]
+[{ text: "Hello world! This is a test.", start: 0, end: 28 }];
 ```
 
 **Custom chunk size and overlap:**
 
 ```js
-const text = 'Hello world! This is a test.'
+const text = "Hello world! This is a test.";
 const chunks = split(text, {
   chunkSize: 10,
-  chunkOverlap: 2
-})
+  chunkOverlap: 2,
+});
 
 // =>
-;[
-  { text: 'Hello worl', start: 0, end: 10 },
-  { text: 'rld! This ', start: 8, end: 18 },
-  { text: 's is a tes', start: 16, end: 26 },
-  { text: 'est.', start: 24, end: 28 }
-]
+[
+  { text: "Hello worl", start: 0, end: 10 },
+  { text: "rld! This ", start: 8, end: 18 },
+  { text: "s is a tes", start: 16, end: 26 },
+  { text: "est.", start: 24, end: 28 },
+];
 ```
 
 **Word-based splitting:**
 
 ```js
-const text = 'Hello world! This is a test.'
+const text = "Hello world! This is a test.";
 const chunks = split(text, {
   chunkSize: 3,
   chunkOverlap: 1,
-  splitter: text => text.split(/\s+/)
-})
+  splitter: (text) => text.split(/\s+/),
+});
 
 // =>
-;[
-  { text: 'Hello world! This', start: 0, end: 17 },
-  { text: 'This is a', start: 13, end: 22 },
-  { text: 'a test.', start: 21, end: 28 }
-]
+[
+  { text: "Hello world! This", start: 0, end: 17 },
+  { text: "This is a", start: 13, end: 22 },
+  { text: "a test.", start: 21, end: 28 },
+];
 ```
 
 **Array of strings:**
 
 ```js
-const texts = ['Hello world!', 'This is a test.']
+const texts = ["Hello world!", "This is a test."];
 const chunks = split(texts, {
   chunkSize: 5,
-  splitter: text => text.split(' ')
-})
+  splitter: (text) => text.split(" "),
+});
 
 // =>
-;[
-  { text: ['Hello world!', 'This is a'], start: 0, end: 21 },
-  { text: ['test.'], start: 22, end: 27 }
-]
+[
+  { text: ["Hello world!", "This is a"], start: 0, end: 21 },
+  { text: ["test."], start: 22, end: 27 },
+];
 ```
 
 **Paragraph chunking**
@@ -143,46 +143,46 @@ By default, we assemble chunks with as many tokens fit in. This default is consi
 ```js
 // Mix of paragraphs across array items and within items with `\n\n` marker.
 const texts = [
-  'Who has seen the wind?\n\nNeither I nor you.',
-  'But when the leaves hang trembling,',
-  'The wind is passing through.',
-  'Who has seen the wind?\n\nNeither you nor I.',
-  'But when the trees bow down their heads,',
-  'The wind is passing by.'
-]
+  "Who has seen the wind?\n\nNeither I nor you.",
+  "But when the leaves hang trembling,",
+  "The wind is passing through.",
+  "Who has seen the wind?\n\nNeither you nor I.",
+  "But when the trees bow down their heads,",
+  "The wind is passing by.",
+];
 const chunks = split(text10, {
   chunkSize: 20,
   chunkOverlap: 2,
-  chunkStrategy: 'paragraph',
-  splitter: text => text.split(/\s+/)
-})
+  chunkStrategy: "paragraph",
+  splitter: (text) => text.split(/\s+/),
+});
 
 // =>
-;[
+[
   {
     text: [
-      'Who has seen the wind?\n\nNeither I nor you.',
-      'But when the leaves hang trembling,',
-      'The wind is passing through.'
+      "Who has seen the wind?\n\nNeither I nor you.",
+      "But when the leaves hang trembling,",
+      "The wind is passing through.",
     ],
     start: 0,
-    end: 105
+    end: 105,
   },
   {
     text: [
-      'passing through.',
-      'Who has seen the wind?\n\nNeither you nor I.',
-      'But when the trees bow down their heads,'
+      "passing through.",
+      "Who has seen the wind?\n\nNeither you nor I.",
+      "But when the trees bow down their heads,",
     ],
     start: 89,
-    end: 187
+    end: 187,
   },
   {
-    text: ['their heads,', 'The wind is passing by.'],
+    text: ["their heads,", "The wind is passing by."],
     start: 175,
-    end: 210
-  }
-]
+    end: 210,
+  },
+];
 ```
 
 </details>
@@ -207,15 +207,15 @@ Note that for arrays, the returned result will be an array and that the first an
 #### Examples
 
 ```js
-const text = 'Hello world! This is a test.'
-const chunk = getChunk(text, 0, 12)
+const text = "Hello world! This is a test.";
+const chunk = getChunk(text, 0, 12);
 // =>
-;('Hello world!')
+("Hello world!");
 
-const texts = ['Hello world!', 'This is a test.']
-const chunk = getChunk(texts, 0, 16)
+const texts = ["Hello world!", "This is a test."];
+const chunk = getChunk(texts, 0, 16);
 // =>
-;['Hello world!', 'This']
+["Hello world!", "This"];
 ```
 
 ## Advanced Usage
@@ -230,14 +230,14 @@ Split by sentences using a regular expression.
 
 ```js
 // Sentence-based splitting
-const sentenceSplitter = text => text.split(/[.!?]+/)
+const sentenceSplitter = (text) => text.split(/[.!?]+/);
 const chunks = split(text, {
   chunkSize: 5,
-  splitter: sentenceSplitter
-})
+  splitter: sentenceSplitter,
+});
 
 // =>
-;[{ text: 'Hello world! This is a test', start: 0, end: 27 }]
+[{ text: "Hello world! This is a test", start: 0, end: 27 }];
 ```
 
 #### TikToken
@@ -248,35 +248,35 @@ Split using the TikToken tokenizer with the commonly used `text-embedding-ada-00
   <summary>See example...</summary>
 
 ```js
-import tiktoken from 'tiktoken'
+import tiktoken from "tiktoken";
 
 // Create a tokenizer for a specific model
-const tokenizer = tiktoken.encoding_for_model('text-embedding-ada-002')
-const td = new TextDecoder()
+const tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002");
+const td = new TextDecoder();
 
 // Create a token splitter function
-const tokenSplitter = text =>
-  Array.from(tokenizer.encode(text)).map(token =>
-    td.decode(tokenizer.decode([token]))
-  )
+const tokenSplitter = (text) =>
+  Array.from(tokenizer.encode(text)).map((token) =>
+    td.decode(tokenizer.decode([token])),
+  );
 
-const text = 'Hello world! This is a test.'
+const text = "Hello world! This is a test.";
 const chunks = split(text, {
   chunkSize: 3,
   chunkOverlap: 1,
-  splitter: tokenSplitter
-})
+  splitter: tokenSplitter,
+});
 
 // Don't forget to free the tokenizer when done
-tokenizer.free()
+tokenizer.free();
 
 // =>
-;[
-  { text: 'Hello world!', start: 0, end: 12 },
-  { text: '! This is', start: 11, end: 20 },
-  { text: ' is a test', start: 17, end: 27 },
-  { text: ' test.', start: 22, end: 28 }
-]
+[
+  { text: "Hello world!", start: 0, end: 12 },
+  { text: "! This is", start: 11, end: 20 },
+  { text: " is a test", start: 17, end: 27 },
+  { text: " test.", start: 22, end: 28 },
+];
 ```
 
 </details>
@@ -289,22 +289,22 @@ Chunk overlap is useful for maintaining context between chunks:
   <summary>See example...</summary>
 
 ```js
-const text = 'This is a very long document that needs to be split into chunks.'
+const text = "This is a very long document that needs to be split into chunks.";
 const chunks = split(text, {
   chunkSize: 10,
   chunkOverlap: 3,
-  splitter: text => text.split(' ')
-})
+  splitter: (text) => text.split(" "),
+});
 // Each chunk will share 3 words with the previous chunk
 // =>
-;[
+[
   {
-    text: 'This is a very long document that needs to be',
+    text: "This is a very long document that needs to be",
     start: 0,
-    end: 45
+    end: 45,
   },
-  { text: 'needs to be split into chunks.', start: 34, end: 64 }
-]
+  { text: "needs to be split into chunks.", start: 34, end: 64 },
+];
 ```
 
 </details>
@@ -328,34 +328,34 @@ const text = `
 A noiseless 🤫 patient spider, 🕷️
 I mark'd where on a little 🏔️ promontory it stood isolated,
 Mark'd how to explore 🔍 the vacant vast 🌌 surrounding,
-`
+`;
 
 const chunks = split(text, {
   chunkSize: 15,
   chunkOverlap: 2,
-  chunkStrategy: 'paragraph',
-  splitter: tokenSplitter // from examples above
-})
+  chunkStrategy: "paragraph",
+  splitter: tokenSplitter, // from examples above
+});
 
-console.log(JSON.stringify(chunks, null, 2))
+console.log(JSON.stringify(chunks, null, 2));
 // =>
-;[
+[
   {
     text: "\nA noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
     start: 0,
-    end: 53
+    end: 53,
   },
   {
     text: " where on a little 🏔️ promontory it stood isolated,\nMark'd how",
     start: 44,
-    end: 107
+    end: 107,
   },
   {
     text: "'d how to explore 🔍 the vacant vast 🌌 surrounding,\n",
     start: 101,
-    end: 154
-  }
-]
+    end: 154,
+  },
+];
 ```
 
 Ultimately, this approach represents a tradeoff: while some higher-level Unicode data may be under counted during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.

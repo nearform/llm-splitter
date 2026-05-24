@@ -1,25 +1,25 @@
-import js from '@eslint/js'
-import prettierRecommended from 'eslint-plugin-prettier/recommended'
+import js from "@eslint/js";
+import prettierRecommended from "eslint-plugin-prettier/recommended";
 
 export default [
   js.configs.recommended,
   prettierRecommended,
   {
     ignores: [
-      '**/dist/**',
-      '**/build/**',
-      '**/coverage/**',
-      '**/node_modules/**',
-      './tmp-*'
-    ]
+      "**/dist/**",
+      "**/build/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "./tmp-*",
+    ],
   },
   {
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
+      ecmaVersion: "latest",
+      sourceType: "module",
       globals: {
-        TextDecoder: 'readonly'
-      }
-    }
-  }
-]
+        TextDecoder: "readonly",
+      },
+    },
+  },
+];

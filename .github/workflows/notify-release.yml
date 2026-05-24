@@ -1,5 +1,5 @@
 name: Notify release
-'on':
+"on":
   workflow_dispatch:
   schedule:
     - cron: 30 8 * * *

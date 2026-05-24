@@ -56,10 +56,10 @@ $ npx serve
     <style>
       body {
         font-family:
-          'Inter',
+          "Inter",
           -apple-system,
           BlinkMacSystemFont,
-          'Segoe UI',
+          "Segoe UI",
           Roboto,
           sans-serif;
         line-height: 1.6;
@@ -252,7 +252,7 @@ $ npx serve
         color: #e2e8f0;
         padding: 24px;
         border-radius: 8px;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
         font-size: 13px;
         overflow-x: auto;
         white-space: pre-wrap;
@@ -304,7 +304,7 @@ $ npx serve
         border: 1px solid #e2e8f0;
         border-radius: 6px;
         padding: 14px;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
         font-size: 13px;
         white-space: pre-wrap;
         max-height: 200px;
@@ -382,52 +382,52 @@ $ npx serve
       }
     </script>
     <script type="module">
-      import React, { useState, useCallback, Fragment } from 'react'
-      import { createRoot } from 'react-dom/client'
-      import htm from 'htm'
-      import { split } from './src/index.js'
+      import React, { useState, useCallback, Fragment } from "react";
+      import { createRoot } from "react-dom/client";
+      import htm from "htm";
+      import { split } from "./src/index.js";
 
-      const html = htm.bind(React.createElement)
+      const html = htm.bind(React.createElement);
 
       // Predefined splitter functions
       const PRESET_SPLITTERS = {
         character: {
-          name: 'Character',
-          description: 'Split into individual characters',
-          func: text => text.split('')
+          name: "Character",
+          description: "Split into individual characters",
+          func: (text) => text.split(""),
         },
         word: {
-          name: 'Word',
-          description: 'Split by whitespace',
-          func: text => text.split(/\s+/).filter(Boolean)
+          name: "Word",
+          description: "Split by whitespace",
+          func: (text) => text.split(/\s+/).filter(Boolean),
         },
         sentence: {
-          name: 'Sentence',
-          description: 'Split by sentence endings',
-          func: text => text.split(/[.!?]+/).filter(Boolean)
+          name: "Sentence",
+          description: "Split by sentence endings",
+          func: (text) => text.split(/[.!?]+/).filter(Boolean),
         },
         line: {
-          name: 'Line',
-          description: 'Split by line breaks',
-          func: text => text.split(/\n/).filter(Boolean)
-        }
-      }
+          name: "Line",
+          description: "Split by line breaks",
+          func: (text) => text.split(/\n/).filter(Boolean),
+        },
+      };
 
       const ResultsDisplay = ({ results, viewMode, setViewMode }) => {
-        if (!results) return null
+        if (!results) return null;
 
-        const totalChunks = results.length
+        const totalChunks = results.length;
         const avgChunkSize =
           results.length > 0
             ? Math.round(
                 results.reduce((sum, chunk) => sum + chunk.text.length, 0) /
-                  results.length
+                  results.length,
               )
-            : 0
+            : 0;
         const totalLength = results.reduce(
           (sum, chunk) => sum + chunk.text.length,
-          0
-        )
+          0,
+        );
 
         return html`
           <div className="results-section">
@@ -446,20 +446,20 @@ $ npx serve
 
             <div className="results-toggle">
               <button
-                className=${viewMode === 'cards' ? 'active' : ''}
-                onClick=${() => setViewMode('cards')}
+                className=${viewMode === "cards" ? "active" : ""}
+                onClick=${() => setViewMode("cards")}
               >
                 <i className="ph ph-cards"></i> Chunk View
               </button>
               <button
-                className=${viewMode === 'json' ? 'active' : ''}
-                onClick=${() => setViewMode('json')}
+                className=${viewMode === "json" ? "active" : ""}
+                onClick=${() => setViewMode("json")}
               >
                 <i className="ph ph-code"></i> JSON View
               </button>
             </div>
 
-            ${viewMode === 'cards'
+            ${viewMode === "cards"
               ? html`
                   <div className="cards-output">
                     ${results.map(
@@ -476,7 +476,7 @@ $ npx serve
                           </div>
                           <div className="chunk-text">${chunk.text}</div>
                         </div>
-                      `
+                      `,
                     )}
                   </div>
                 `
@@ -486,60 +486,60 @@ $ npx serve
                   </div>
                 `}
           </div>
-        `
-      }
+        `;
+      };
 
       const SplitterDemo = () => {
-        const [inputText, setInputText] = useState('')
-        const [chunkSize, setChunkSize] = useState(200)
-        const [chunkOverlap, setChunkOverlap] = useState(10)
-        const [chunkStrategy, setChunkStrategy] = useState('paragraph')
-        const [splitterType, setSplitterType] = useState('word')
+        const [inputText, setInputText] = useState("");
+        const [chunkSize, setChunkSize] = useState(200);
+        const [chunkOverlap, setChunkOverlap] = useState(10);
+        const [chunkStrategy, setChunkStrategy] = useState("paragraph");
+        const [splitterType, setSplitterType] = useState("word");
         const [customSplitterCode, setCustomSplitterCode] = useState(
-          '(text) => text.split(/\\s+/).filter(Boolean)'
-        )
-        const [showCustomSplitter, setShowCustomSplitter] = useState(true)
-        const [results, setResults] = useState(null)
-        const [error, setError] = useState(null)
-        const [isProcessing, setIsProcessing] = useState(false)
-        const [viewMode, setViewMode] = useState('cards') // 'cards' or 'json'
+          "(text) => text.split(/\\s+/).filter(Boolean)",
+        );
+        const [showCustomSplitter, setShowCustomSplitter] = useState(true);
+        const [results, setResults] = useState(null);
+        const [error, setError] = useState(null);
+        const [isProcessing, setIsProcessing] = useState(false);
+        const [viewMode, setViewMode] = useState("cards"); // 'cards' or 'json'
 
         const handleSplit = useCallback(async () => {
           if (!inputText.trim()) {
-            setError('Please enter some text to split')
-            return
+            setError("Please enter some text to split");
+            return;
           }
 
-          setIsProcessing(true)
-          setError(null)
+          setIsProcessing(true);
+          setError(null);
 
           try {
-            let splitterFunc
+            let splitterFunc;
 
-            if (splitterType === 'custom') {
+            if (splitterType === "custom") {
               try {
                 // Evaluate the custom splitter function
-                splitterFunc = new Function('return ' + customSplitterCode)()
+                splitterFunc = new Function("return " + customSplitterCode)();
               } catch (err) {
-                throw new Error(`Custom splitter error: ${err.message}`)
+                throw new Error(`Custom splitter error: ${err.message}`);
               }
             } else {
-              splitterFunc = PRESET_SPLITTERS[splitterType].func
+              splitterFunc = PRESET_SPLITTERS[splitterType].func;
             }
 
             const chunks = split(inputText, {
               chunkSize: parseInt(chunkSize),
               chunkOverlap: parseInt(chunkOverlap),
               splitter: splitterFunc,
-              chunkStrategy: chunkStrategy
-            })
+              chunkStrategy: chunkStrategy,
+            });
 
-            setResults(chunks)
+            setResults(chunks);
           } catch (err) {
-            setError(err.message)
-            setResults(null)
+            setError(err.message);
+            setResults(null);
           } finally {
-            setIsProcessing(false)
+            setIsProcessing(false);
           }
         }, [
           inputText,
@@ -547,8 +547,8 @@ $ npx serve
           chunkOverlap,
           chunkStrategy,
           splitterType,
-          customSplitterCode
-        ])
+          customSplitterCode,
+        ]);
 
         return html`
           <div className="container">
@@ -560,11 +560,11 @@ $ npx serve
               </p>
               <div
                 style=${{
-                  marginTop: '15px',
-                  display: 'flex',
-                  gap: '10px',
-                  justifyContent: 'center',
-                  flexWrap: 'wrap'
+                  marginTop: "15px",
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
                 }}
               >
                 <a
@@ -599,7 +599,7 @@ $ npx serve
                     type="number"
                     id="chunkSize"
                     value=${chunkSize}
-                    onChange=${e => setChunkSize(e.target.value)}
+                    onChange=${(e) => setChunkSize(e.target.value)}
                     min="1"
                     className="pure-input-1"
                   />
@@ -611,7 +611,7 @@ $ npx serve
                     type="number"
                     id="chunkOverlap"
                     value=${chunkOverlap}
-                    onChange=${e => setChunkOverlap(e.target.value)}
+                    onChange=${(e) => setChunkOverlap(e.target.value)}
                     min="0"
                     className="pure-input-1"
                   />
@@ -624,7 +624,7 @@ $ npx serve
                   <select
                     id="chunkStrategy"
                     value=${chunkStrategy}
-                    onChange=${e => setChunkStrategy(e.target.value)}
+                    onChange=${(e) => setChunkStrategy(e.target.value)}
                     className="pure-input-1"
                   >
                     <option value="character">Character</option>
@@ -637,20 +637,20 @@ $ npx serve
                   <select
                     id="splitterType"
                     value=${splitterType}
-                    onChange=${e => setSplitterType(e.target.value)}
+                    onChange=${(e) => setSplitterType(e.target.value)}
                     className="pure-input-1"
                   >
                     ${Object.entries(PRESET_SPLITTERS).map(
                       ([key, preset]) => html`
                         <option key=${key} value=${key}>${preset.name}</option>
-                      `
+                      `,
                     )}
                     <option value="custom">Custom Function</option>
                   </select>
                 </div>
               </div>
 
-              ${splitterType === 'custom'
+              ${splitterType === "custom"
                 ? html`
                     <div className="custom-splitter-section">
                       <div
@@ -660,19 +660,19 @@ $ npx serve
                       >
                         <i
                           className=${showCustomSplitter
-                            ? 'ph ph-caret-down'
-                            : 'ph ph-caret-right'}
+                            ? "ph ph-caret-down"
+                            : "ph ph-caret-right"}
                         ></i>
                         Custom Splitter Function
                       </div>
                       <div
-                        className=${`custom-splitter-content ${showCustomSplitter ? 'open' : ''}`}
+                        className=${`custom-splitter-content ${showCustomSplitter ? "open" : ""}`}
                       >
                         <p
                           style=${{
-                            margin: '0 0 10px',
-                            fontSize: '14px',
-                            color: '#7f8c8d'
+                            margin: "0 0 10px",
+                            fontSize: "14px",
+                            color: "#7f8c8d",
                           }}
                         >
                           Enter a JavaScript function that takes a string and
@@ -680,21 +680,22 @@ $ npx serve
                         </p>
                         <textarea
                           value=${customSplitterCode}
-                          onChange=${e => setCustomSplitterCode(e.target.value)}
+                          onChange=${(e) =>
+                            setCustomSplitterCode(e.target.value)}
                           placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
                           rows="3"
                           style=${{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px',
-                            padding: '12px 16px',
-                            fontSize: '13px',
+                            width: "100%",
+                            boxSizing: "border-box",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "8px",
+                            padding: "12px 16px",
+                            fontSize: "13px",
                             fontFamily:
                               "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-                            transition: 'all 0.2s ease',
-                            background: 'rgba(255, 255, 255, 0.8)',
-                            resize: 'vertical'
+                            transition: "all 0.2s ease",
+                            background: "rgba(255, 255, 255, 0.8)",
+                            resize: "vertical",
                           }}
                         />
                       </div>
@@ -708,11 +709,11 @@ $ npx serve
               <div className="form-row">
                 <textarea
                   value=${inputText}
-                  onChange=${e => setInputText(e.target.value)}
+                  onChange=${(e) => setInputText(e.target.value)}
                   placeholder="Enter your text here to be chunked..."
                   rows="8"
                   className="pure-input-1"
-                  style=${{ resize: 'vertical' }}
+                  style=${{ resize: "vertical" }}
                 />
               </div>
 
@@ -747,34 +748,34 @@ $ npx serve
 
             <div
               className="demo-section"
-              style=${{ textAlign: 'center', marginTop: '40px' }}
+              style=${{ textAlign: "center", marginTop: "40px" }}
             >
               <a
                 href="https://www.nearform.com/contact/?utm_source=open-source&utm_medium=banner&utm_campaign=os-project-pages"
                 target="_blank"
                 rel="noopener noreferrer"
                 style=${{
-                  textDecoration: 'none'
+                  textDecoration: "none",
                 }}
               >
                 <img
                   src="https://raw.githubusercontent.com/nearform/.github/refs/heads/master/assets/os-banner-green.svg"
                   alt="Nearform Open Source"
                   style=${{
-                    maxWidth: '100%',
-                    height: 'auto',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    maxWidth: "100%",
+                    height: "auto",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
                   }}
                 />
               </a>
             </div>
           </div>
-        `
-      }
+        `;
+      };
 
-      const root = createRoot(document.getElementById('root'))
-      root.render(html`<${SplitterDemo} />`)
+      const root = createRoot(document.getElementById("root"));
+      root.render(html`<${SplitterDemo} />`);
     </script>
   </body>
 </html>

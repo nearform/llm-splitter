@@ -28,7 +28,7 @@ jobs:
         with:
           semver: ${{ github.event.inputs.semver }}
           publish-mode: oidc
-          commit-message: 'chore: release {version}'
+          commit-message: "chore: release {version}"
           build-command: |
             npm ci
             npm run build

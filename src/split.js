@@ -1,10 +1,10 @@
-import { getChunk } from './get-chunk.js'
+import { getChunk } from "./get-chunk.js";
 
 /** @enum {string} */
 export const ChunkStrategy = Object.freeze({
-  character: 'character',
-  paragraph: 'paragraph'
-})
+  character: "character",
+  paragraph: "paragraph",
+});
 
 /**
  * @typedef {object} Chunk
@@ -30,19 +30,19 @@ export const ChunkStrategy = Object.freeze({
 // apart in subsequent chunks.
 /** @type {Record<keyof typeof ChunkStrategy, BoundaryFunction>} */
 const BOUNDARIES = {
-  [ChunkStrategy.character]: inputs => [inputs],
-  [ChunkStrategy.paragraph]: inputs => {
+  [ChunkStrategy.character]: (inputs) => [inputs],
+  [ChunkStrategy.paragraph]: (inputs) => {
     /** @type {string[][]} */
-    const groups = []
+    const groups = [];
     for (const input of inputs)
-      for (const paragraph of input.split(/\n\n/)) groups.push([paragraph])
-    return groups
-  }
-}
+      for (const paragraph of input.split(/\n\n/)) groups.push([paragraph]);
+    return groups;
+  },
+};
 
-const CHUNK_STRATEGIES = new Set(Object.keys(BOUNDARIES))
+const CHUNK_STRATEGIES = new Set(Object.keys(BOUNDARIES));
 
-const SINGLE_BYTE_CHAR_LIMIT = 255
+const SINGLE_BYTE_CHAR_LIMIT = 255;
 
 /**
  * Assert that the chunk strategy is valid.
@@ -53,8 +53,8 @@ const SINGLE_BYTE_CHAR_LIMIT = 255
 function assertChunkStrategy(chunkStrategy) {
   if (!CHUNK_STRATEGIES.has(/** @type {string} */ (chunkStrategy)))
     throw new Error(
-      `Invalid chunk strategy. Must be one of: ${[...CHUNK_STRATEGIES].join(', ')}`
-    )
+      `Invalid chunk strategy. Must be one of: ${[...CHUNK_STRATEGIES].join(", ")}`,
+    );
 }
 
 /**
@@ -67,17 +67,17 @@ function assertChunkStrategy(chunkStrategy) {
  */
 const findMatches = (input, splitParts) => {
   /** @type {Chunk[]} */
-  const matchedParts = []
-  let inputIndex = 0
+  const matchedParts = [];
+  let inputIndex = 0;
 
   splitPartsLoop: for (const splitPart of splitParts) {
-    if (typeof splitPart !== 'string')
+    if (typeof splitPart !== "string")
       throw new Error(
-        `Splitter returned a non-string part: ${splitPart} for input: ${input}`
-      )
+        `Splitter returned a non-string part: ${splitPart} for input: ${input}`,
+      );
 
     if (splitPart.length === 0) {
-      continue
+      continue;
     }
 
     // Helper to accumulate matches.
@@ -86,85 +86,87 @@ const findMatches = (input, splitParts) => {
       matchedParts.push({
         text: splitPart,
         start,
-        end
-      })
-      inputIndex = end
-    }
+        end,
+      });
+      inputIndex = end;
+    };
 
     // Fast path -- simple string match
     // When we **do** get a match, we'll capture some multibyte strings that we
     // can't match with the character by character match that ignores multibyte chars.
     if (input.startsWith(splitPart, inputIndex)) {
-      addMatch({ start: inputIndex, end: inputIndex + splitPart.length })
-      continue
+      addMatch({ start: inputIndex, end: inputIndex + splitPart.length });
+      continue;
     }
 
     // Split the part and find first + last usable character indices.
-    const splitPartChars = splitPart.split('')
-    const splitPartCharsCodes = splitPartChars.map(char => char.charCodeAt(0))
-    let firstValidIndex = -1
-    let lastValidIndex = -1
+    const splitPartChars = splitPart.split("");
+    const splitPartCharsCodes = splitPartChars.map((char) =>
+      char.charCodeAt(0),
+    );
+    let firstValidIndex = -1;
+    let lastValidIndex = -1;
 
     for (let i = 0; i < splitPartChars.length; i++) {
       if (splitPartCharsCodes[i] <= SINGLE_BYTE_CHAR_LIMIT) {
         if (firstValidIndex === -1) {
-          firstValidIndex = i
+          firstValidIndex = i;
         }
-        lastValidIndex = i
+        lastValidIndex = i;
       }
     }
 
     if (firstValidIndex === -1) {
-      continue
+      continue;
     }
 
     // Find the first valid character in the **split part**.
     // We'll now search starting from here in the split part.
-    const firstValidChar = splitPartChars[firstValidIndex]
-    let startPos = -1
+    const firstValidChar = splitPartChars[firstValidIndex];
+    let startPos = -1;
 
     // Search for the first valid character in the **input**.
     // We'll loop on the input until we find the first valid character or hit the end and error out.
     for (let i = inputIndex; i < input.length; i++) {
       if (input[i] === firstValidChar) {
-        startPos = i
+        startPos = i;
 
         // Do the fast path again, in case we can catch other multibyte strings.
         if (input.startsWith(splitPart, startPos)) {
           // Found the whole part.
-          addMatch({ start: startPos, end: startPos + splitPart.length })
-          continue splitPartsLoop
+          addMatch({ start: startPos, end: startPos + splitPart.length });
+          continue splitPartsLoop;
         }
 
         // Slow path -- only match on non-multibyte chars. Will miss some strings.
-        let lastValidPos = startPos
+        let lastValidPos = startPos;
         for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
-          const nextValidChar = splitPartChars[j]
+          const nextValidChar = splitPartChars[j];
           if (splitPartCharsCodes[j] <= SINGLE_BYTE_CHAR_LIMIT) {
             // Find this character in the input after the current position
             for (let k = lastValidPos + 1; k < input.length; k++) {
               if (input[k] === nextValidChar) {
-                lastValidPos = k
-                break
+                lastValidPos = k;
+                break;
               }
             }
           }
         }
 
         // Found the best subset we could.
-        addMatch({ start: startPos, end: lastValidPos + 1 })
-        continue splitPartsLoop
+        addMatch({ start: startPos, end: lastValidPos + 1 });
+        continue splitPartsLoop;
       }
     }
 
     // Bail.
     throw new Error(
-      `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`
-    )
+      `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
+    );
   }
 
-  return matchedParts
-}
+  return matchedParts;
+};
 
 /**
  * Split text into parts of text (or null if the part is ignored) and their start and end indices.
@@ -182,27 +184,27 @@ const findMatches = (input, splitParts) => {
  */
 export function splitToParts(inputs, splitter, baseOffset = 0) {
   /** @type {Chunk[]} */
-  const parts = []
-  let inputsOffset = 0
+  const parts = [];
+  let inputsOffset = 0;
 
   for (const input of inputs) {
-    const splitParts = splitter(input)
+    const splitParts = splitter(input);
 
-    const matches = findMatches(input, splitParts)
+    const matches = findMatches(input, splitParts);
     for (const match of matches) {
       parts.push({
         text: match.text,
         start: baseOffset + inputsOffset + match.start,
-        end: baseOffset + inputsOffset + match.end
-      })
+        end: baseOffset + inputsOffset + match.end,
+      });
     }
 
     // Finished a single input string..
     // Ignore and discard unmatched parts.
-    inputsOffset += input.length
+    inputsOffset += input.length;
   }
 
-  return parts
+  return parts;
 }
 
 // Little helpers
@@ -218,99 +220,99 @@ const splitValidate = ({
   chunkSize,
   chunkOverlap,
   splitter,
-  chunkStrategy
+  chunkStrategy,
 }) => {
-  assertChunkStrategy(chunkStrategy)
+  assertChunkStrategy(chunkStrategy);
 
-  if (typeof chunkSize !== 'number' || !Number.isInteger(chunkSize))
-    throw new Error('Chunk size must be a positive integer')
+  if (typeof chunkSize !== "number" || !Number.isInteger(chunkSize))
+    throw new Error("Chunk size must be a positive integer");
 
-  if (chunkSize < 1) throw new Error('Chunk size must be at least 1')
+  if (chunkSize < 1) throw new Error("Chunk size must be at least 1");
 
-  if (typeof chunkOverlap !== 'number' || !Number.isInteger(chunkOverlap))
+  if (typeof chunkOverlap !== "number" || !Number.isInteger(chunkOverlap))
     throw new Error(
-      `Chunk overlap must be a non-negative integer. Found: ${chunkOverlap}`
-    )
+      `Chunk overlap must be a non-negative integer. Found: ${chunkOverlap}`,
+    );
 
-  if (chunkOverlap < 0) throw new Error('Chunk overlap must be at least 0')
+  if (chunkOverlap < 0) throw new Error("Chunk overlap must be at least 0");
 
   if (chunkOverlap >= chunkSize)
-    throw new Error('Chunk overlap must be less than chunk size')
+    throw new Error("Chunk overlap must be less than chunk size");
 
-  if (typeof splitter !== 'function')
-    throw new Error('Splitter must be a function')
-}
+  if (typeof splitter !== "function")
+    throw new Error("Splitter must be a function");
+};
 
 class ChunkParts {
   /** @type {Chunk[]} */
-  parts = []
+  parts = [];
   /** @type {Chunk | null} */
-  lastEmittedPart = null
+  lastEmittedPart = null;
   /** @type {Chunk | null} */
-  lastBoundaryPart = null
+  lastBoundaryPart = null;
 
   /**
    * @param {string | string[]} input
    * @param {number} chunkOverlap
    */
   constructor(input, chunkOverlap) {
-    this.input = input
-    this.chunkOverlap = chunkOverlap
+    this.input = input;
+    this.chunkOverlap = chunkOverlap;
   }
 
   get length() {
-    return this.parts.length
+    return this.parts.length;
   }
 
   /** @param {Chunk} part */
   push(part) {
-    this.parts.push(part)
-    if (part.isBoundary) this.lastBoundaryPart = part
+    this.parts.push(part);
+    if (part.isBoundary) this.lastBoundaryPart = part;
   }
 
   hasUnEmittedParts() {
     // First chunk.
-    if (this.lastEmittedPart === null) return this.parts.length > 0
+    if (this.lastEmittedPart === null) return this.parts.length > 0;
 
     // Subsequent chunks.
     if (this.parts.length > 0) {
       // Check if have un-emitted parts past the end of last emitted part.
-      const lastPart = this.parts[this.parts.length - 1]
-      return lastPart.end > this.lastEmittedPart.end
+      const lastPart = this.parts[this.parts.length - 1];
+      return lastPart.end > this.lastEmittedPart.end;
     }
 
     // Otherwise, we have no un-emitted parts.
-    return false
+    return false;
   }
 
   /** @returns {Chunk} */
   emit() {
     // Sanity check.
-    if (this.parts.length === 0) throw new Error('Chunk parts is empty')
+    if (this.parts.length === 0) throw new Error("Chunk parts is empty");
 
     // Prepare chunk.
-    const start = this.parts[0].start
-    this.lastEmittedPart = this.parts[this.parts.length - 1]
-    const end = this.lastEmittedPart.end
+    const start = this.parts[0].start;
+    this.lastEmittedPart = this.parts[this.parts.length - 1];
+    const end = this.lastEmittedPart.end;
     /** @type {Chunk} */
     const chunk = {
       text: getChunk(this.input, start, end),
       start,
-      end
-    }
+      end,
+    };
 
     // Reset state.
     // At this point, we seed the new parts array with the overlap, if any found.
     if (this.chunkOverlap > 0) {
-      this.parts = this.parts.slice(-this.chunkOverlap)
+      this.parts = this.parts.slice(-this.chunkOverlap);
     } else {
-      this.parts = []
+      this.parts = [];
     }
 
     // Clear out last boundary. We consider a new chunk to have "no" previous boundary.
-    this.lastBoundaryPart = null
+    this.lastBoundaryPart = null;
 
-    return chunk
+    return chunk;
   }
 }
 
@@ -341,43 +343,45 @@ export function split(
   {
     chunkSize = 512,
     chunkOverlap = 0,
-    splitter = text => text.split(''),
-    chunkStrategy = ChunkStrategy.character
-  } = {}
+    splitter = (text) => text.split(""),
+    chunkStrategy = ChunkStrategy.character,
+  } = {},
 ) {
   // Validation
-  splitValidate({ chunkSize, chunkOverlap, splitter, chunkStrategy })
+  splitValidate({ chunkSize, chunkOverlap, splitter, chunkStrategy });
 
   // Chunk handling.
   /** @type {Chunk[]} */
-  const chunks = []
-  const chunkParts = new ChunkParts(input, chunkOverlap)
+  const chunks = [];
+  const chunkParts = new ChunkParts(input, chunkOverlap);
 
   // Inputs.
-  const inputAsArray = Array.isArray(input) ? input : [input]
-  const inputAsString = inputAsArray.join('')
-  const groups = BOUNDARIES[chunkStrategy](inputAsArray)
+  const inputAsArray = Array.isArray(input) ? input : [input];
+  const inputAsString = inputAsArray.join("");
+  const groups = BOUNDARIES[chunkStrategy](inputAsArray);
 
   // Iteration.
-  let baseOffset = -1
+  let baseOffset = -1;
   for (const group of groups) {
     // Empty pre-processed group.
-    if (group.length === 0) continue
+    if (group.length === 0) continue;
 
     // Find the start of the first part in the group and update our offset.
-    const firstPart = group[0]
-    baseOffset = inputAsString.indexOf(firstPart, baseOffset + 1)
+    const firstPart = group[0];
+    baseOffset = inputAsString.indexOf(firstPart, baseOffset + 1);
     if (baseOffset === -1)
-      throw new Error(`Could not find start of group: ${group.slice(0, 20)}...`)
+      throw new Error(
+        `Could not find start of group: ${group.slice(0, 20)}...`,
+      );
 
     // Split with parts plus our offset.
-    const parts = splitToParts(group, splitter, baseOffset)
+    const parts = splitToParts(group, splitter, baseOffset);
 
     // Empty post-processed group.
-    if (parts.length === 0) continue
+    if (parts.length === 0) continue;
 
     // Mark the **last** part as the boundary.
-    parts[parts.length - 1].isBoundary = true
+    parts[parts.length - 1].isBoundary = true;
 
     // If the current chunk has a portion with a boundary, and we can't fit this entire group
     // in the current chunk, emit the existing chunk and then continue adding to a fresh chunk.
@@ -386,26 +390,26 @@ export function split(
       chunkParts.lastBoundaryPart !== null &&
       chunkParts.length + parts.length > chunkSize
     ) {
-      chunks.push(chunkParts.emit())
+      chunks.push(chunkParts.emit());
     }
 
     // Should add parts to chunks. Start iterating.
     for (const part of parts) {
       // Add the part to the current chunk.
-      chunkParts.push(part)
+      chunkParts.push(part);
 
       // Sanity check.
       if (chunkParts.length > chunkSize)
         throw new Error(
-          `Chunk size is ${chunkSize}, but chunkParts.length is ${chunkParts.length} -- ${JSON.stringify(chunkParts)}`
-        )
+          `Chunk size is ${chunkSize}, but chunkParts.length is ${chunkParts.length} -- ${JSON.stringify(chunkParts)}`,
+        );
 
-      if (chunkParts.length === chunkSize) chunks.push(chunkParts.emit())
+      if (chunkParts.length === chunkSize) chunks.push(chunkParts.emit());
     }
   }
 
   // Handle last chunk.
-  if (chunkParts.hasUnEmittedParts()) chunks.push(chunkParts.emit())
+  if (chunkParts.hasUnEmittedParts()) chunks.push(chunkParts.emit());
 
-  return chunks
+  return chunks;
 }
