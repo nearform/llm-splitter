@@ -14,14 +14,15 @@ built-in `node --test` runner — no ts-node loader.
 
 ```
 npm run lint         # eslint
-npm run check-types  # tsc -p tsconfig.check.json  (validates JSDoc on src + test)
+npm run check:types  # tsc -p tsconfig.check.json  (validates JSDoc on src + test)
+npm run check:format # prettier checks
 npm test             # node --test
 npm run build        # tsc -p tsconfig.json  (emits dist/*.d.ts only)
-npm run check        # lint + check-types + test + format check
+npm run check        # lint + check:types + test + format check
 npm run format       # prettier + eslint --fix
 ```
 
-`check-types` and `build` use **two different tsconfigs**: `tsconfig.json` builds
+`check:types` and `build` use **two different tsconfigs**: `tsconfig.json` builds
 declarations from `src/` only; `tsconfig.check.json` extends it, sets `noEmit`, and adds
 `test/` to `include`.
 
