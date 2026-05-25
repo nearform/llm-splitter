@@ -104,27 +104,27 @@ const firstAnchorGrapheme = (splitPart) => {
 };
 
 /**
- * Find `anchorGrapheme` in `input` at or after `cursor`, as a grapheme (not a
- * substring), so we don't land mid-surrogate.
- *
- * @param {string} input
- * @param {number} cursor
- * @param {string} anchorGrapheme
- * @returns {number} position in input (>= cursor), or -1.
- */
-const findGrapheme = (input, cursor, anchorGrapheme) => {
-  for (const { segment, index } of SEGMENTER.segment(input.slice(cursor))) {
-    if (segment === anchorGrapheme) {
-      return cursor + index;
-    }
-  }
-
-  return -1;
-};
-
-/**
  * Anchor splitter parts against a single source string, producing parts with
  * absolute (offset-adjusted) `start`/`end` positions.
+ *
+ * Three-tier locate strategy, cheapest first:
+ *  1. `startsWith` at the current cursor — byte-preserving splitter with the
+ *     cursor sitting exactly on the next part (char/tiktoken happy path).
+ *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops
+ *     bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so
+ *     the cursor lands in the gap and `startsWith` fails). The whole part
+ *     still exists verbatim in source, so a substring search finds it in
+ *     native code without allocating.
+ *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter
+ *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find
+ *     the first positionable grapheme inside splitPart and anchor there.
+ *
+ * indexOf is safe for the anchor case because `firstAnchorGrapheme` returns
+ * a full Intl.Segmenter grapheme cluster that (by construction) never starts
+ * with a low surrogate or combining mark — so a code-unit match cannot land
+ * mid-surrogate or mid-cluster. Replacing an earlier `Intl.Segmenter` walk
+ * over `input.slice(cursor)` per call (O(n) allocation each) with a native
+ * `indexOf` is the main perf win for byte-dropping splitters.
  *
  * @param {string} input
  * @param {(input: string) => string[]} splitter
@@ -156,8 +156,13 @@ const anchorParts = (input, splitter, baseOffset) => {
 
     let start;
     if (input.startsWith(splitPart, cursor)) {
+      // Tier 1: byte-preserving splitter, cursor at exact match.
       start = cursor;
+    } else if ((start = input.indexOf(splitPart, cursor)) !== -1) {
+      // Tier 2: byte-preserving splitter with a gap before this part.
+      // `start` was assigned in the condition.
     } else {
+      // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
       const anchor = firstAnchorGrapheme(splitPart);
       // splitPart is entirely U+FFFD or combining marks (tokenizer's decode
       // emitted nothing positionable). It claims no source bytes — silently
@@ -166,7 +171,7 @@ const anchorParts = (input, splitter, baseOffset) => {
         continue;
       }
 
-      start = findGrapheme(input, cursor, anchor);
+      start = input.indexOf(anchor, cursor);
       if (start === -1) {
         throw new Error(
           `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
