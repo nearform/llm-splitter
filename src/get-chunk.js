@@ -17,10 +17,11 @@ export const getChunk = (input, start, end) => {
 
   for (const item of inputs) {
     // Error if not string.
-    if (typeof item !== "string")
+    if (typeof item !== "string") {
       throw new TypeError(
         `Input must be a string or array of strings, got ${typeof item} for ${item}`,
       );
+    }
 
     const itemLength = item.length;
     const itemStart = offset;

@@ -128,7 +128,7 @@ const chunks = split(texts, {
 
 // =>
 [
-  { text: ["Hello world!", "This is a"], start: 0, end: 21 },
+  { text: ["Hello world!", "This is a "], start: 0, end: 22 },
   { text: ["test."], start: 22, end: 27 },
 ];
 ```
@@ -237,7 +237,7 @@ const chunks = split(text, {
 });
 
 // =>
-[{ text: "Hello world! This is a test", start: 0, end: 27 }];
+[{ text: "Hello world! This is a test.", start: 0, end: 28 }];
 ```
 
 #### TikToken
@@ -309,6 +309,23 @@ const chunks = split(text, {
 
 </details>
 
+### Chunk Coverage and Positions
+
+`split()` is **lossless on positions** from `chunks[0].start` onward: every byte of the source string at position `p` (where `chunks[0].start <= p < input.length`) appears in at least one chunk's `[start, end)` range. Concretely:
+
+- `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
+- `chunks[chunks.length - 1].end === input.length`.
+
+The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped bytes that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those bytes would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the bytes back) is impossible without re-reading the source. So the library keeps everything.
+
+Practical consequences:
+
+- **Chunk starts are clean.** In `chunkStrategy: "paragraph"` mode, leading whitespace inside a paragraph is stripped before anchoring, so `chunks[i].start` (for `i > 0`) lands on real content.
+- **Chunk ends may carry trailing whitespace.** When the splitter drops bytes at a paragraph or token boundary, those bytes get absorbed into the _previous_ chunk by extending its `end` forward to meet the next chunk's `start`. So a chunk's `text` may end with `"\n\n"` or trailing whitespace — those bytes weren't "extra," they were the gap between the splitter's last token in this chunk and the first token in the next.
+- **Leading bytes before `chunks[0].start` are uncovered.** If the very first paragraph has leading whitespace, those bytes appear in no chunk (no previous chunk to extend forward into them). This is the one place coverage is not full.
+
+For LLM input this also tends to help, not hurt: a chunk ending with `"\n\n"` carries an explicit paragraph-boundary signal that the model can read.
+
 ### Multibyte / Unicode Strings
 
 Processing text with multibyte Unicode characters (emoji, CJK, accented Latin, combining marks) is problematic for tokenizers that split byte streams without regard to character boundaries (as noted by [other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). When a tokenizer like `tiktoken` decodes a token that straddles a multi-byte sequence, the result is a JavaScript string containing U+FFFD replacement characters (and sometimes isolated combining marks). `llm-splitter` needs to map each such part back to a `start`/`end` position in the original input.
@@ -342,22 +359,24 @@ console.log(JSON.stringify(chunks, null, 2));
 // =>
 [
   {
-    text: "\nA noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
-    start: 0,
-    end: 53,
+    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on a",
+    start: 1,
+    end: 55,
   },
   {
-    text: " where on a little 🏔️ promontory it stood isolated,\nMark'd how",
-    start: 44,
-    end: 107,
+    text: " on a little 🏔️ promontory it stood isolated,\nMark'd how to",
+    start: 50,
+    end: 110,
   },
   {
-    text: "'d how to explore 🔍 the vacant vast 🌌 surrounding,\n",
-    start: 101,
+    text: " how to explore 🔍 the vacant vast 🌌 surrounding,\n",
+    start: 103,
     end: 154,
   },
 ];
 ```
+
+The leading `\n` in the input doesn't appear in any chunk — paragraph mode strips leading whitespace from each paragraph and the very first chunk has no previous chunk to extend back into. See "Chunk Coverage and Positions" above.
 
 Ultimately, this approach represents a tradeoff: while some higher-level Unicode data may be under counted during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
 
