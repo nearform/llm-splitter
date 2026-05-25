@@ -46,10 +46,12 @@ Each chunk contains positional data (`start` and `end`) that may be used to sepa
 
 Notes:
 
+- `input` must be a `string` or an array whose elements are all strings; anything else throws `TypeError`.
 - `chunkSize` must be a positive integer ≥ 1
 - `chunkOverlap` must be a non-negative integer ≥ 0
 - `chunkOverlap` must be less than `chunkSize`
-- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`).
+- `splitter` must return an array of strings; returning a non-array throws `TypeError`.
+- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter will throw at runtime when a token can't be located in the source.
 - Here are some sample `splitter` functions:
   - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`

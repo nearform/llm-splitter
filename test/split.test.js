@@ -1318,10 +1318,7 @@ describe("split", () => {
       });
     });
 
-    // Lock in current behavior for malformed splitters and inputs.
-    // FIXME(B4): once B4 decides whether to throw on these, update assertions
-    // and remove the FIXME comments.
-    describe("negative inputs (current behavior)", () => {
+    describe("negative inputs", () => {
       it("propagates errors thrown by the splitter", () => {
         const boomSplitter = () => {
           throw new Error("boom");
@@ -1331,38 +1328,54 @@ describe("split", () => {
         });
       });
 
-      it("FIXME(B4): splitter returning a string (not an array) iterates per-character", () => {
-        // Each char of the returned string is treated as a separate part
-        // because `for…of` over a string yields characters. Anchor logic
-        // happens to make this work for the trivial case where the returned
-        // string equals input.
-        const result = split("hello", {
-          chunkSize: 1,
-          // @ts-expect-error testing non-array splitter return
-          splitter: (text) => text,
-        });
-        assert.deepStrictEqual(result, [
-          { text: "h", start: 0, end: 1 },
-          { text: "e", start: 1, end: 2 },
-          { text: "l", start: 2, end: 3 },
-          { text: "l", start: 3, end: 4 },
-          { text: "o", start: 4, end: 5 },
-        ]);
-      });
-
-      it("FIXME(B4): null input throws an opaque TypeError from the default splitter", () => {
+      it("rejects splitter that returns a string instead of an array", () => {
         assert.throws(
-          // @ts-expect-error null is not a valid input type
-          () => split(null),
-          { name: "TypeError", message: /Cannot read properties of null/ },
+          () =>
+            split("hello", {
+              chunkSize: 1,
+              // @ts-expect-error testing non-array splitter return
+              splitter: (text) => text,
+            }),
+          {
+            name: "TypeError",
+            message:
+              "Splitter must return an array of strings. Received: string",
+          },
         );
       });
 
-      it("FIXME(B4): number input throws an opaque TypeError from the splitter", () => {
+      it("rejects null input with a clear TypeError", () => {
+        assert.throws(
+          // @ts-expect-error null is not a valid input type
+          () => split(null),
+          {
+            name: "TypeError",
+            message:
+              "Input must be a string or array of strings. Received: object",
+          },
+        );
+      });
+
+      it("rejects number input with a clear TypeError", () => {
         assert.throws(
           // @ts-expect-error number is not a valid input type
           () => split(42),
-          { name: "TypeError" },
+          {
+            name: "TypeError",
+            message:
+              "Input must be a string or array of strings. Received: number",
+          },
+        );
+      });
+
+      it("rejects array input containing non-string elements", () => {
+        assert.throws(
+          // @ts-expect-error number inside array is not valid
+          () => split(["hello", 42, "world"]),
+          {
+            name: "TypeError",
+            message: "Input array elements must be strings. Found: number",
+          },
         );
       });
     });

@@ -132,11 +132,18 @@ const findGrapheme = (input, cursor, anchorGrapheme) => {
  * @returns {Chunk[]}
  */
 const anchorParts = (input, splitter, baseOffset) => {
+  const splits = splitter(input);
+  if (!Array.isArray(splits)) {
+    throw new TypeError(
+      `Splitter must return an array of strings. Received: ${typeof splits}`,
+    );
+  }
+
   /** @type {Chunk[]} */
   const parts = [];
   let cursor = 0;
 
-  for (const splitPart of splitter(input)) {
+  for (const splitPart of splits) {
     if (typeof splitPart !== "string") {
       throw new Error(
         `Splitter returned a non-string part: ${splitPart} for input: ${input}`,
@@ -298,7 +305,19 @@ export const split = (
 ) => {
   splitValidate({ chunkSize, chunkOverlap, splitter, chunkStrategy });
 
+  if (typeof input !== "string" && !Array.isArray(input)) {
+    throw new TypeError(
+      `Input must be a string or array of strings. Received: ${typeof input}`,
+    );
+  }
   const inputAsArray = Array.isArray(input) ? input : [input];
+  for (const item of inputAsArray) {
+    if (typeof item !== "string") {
+      throw new TypeError(
+        `Input array elements must be strings. Found: ${typeof item}`,
+      );
+    }
+  }
   const groups = boundaryGroups(chunkStrategy, inputAsArray);
 
   /** @type {Chunk[]} */
