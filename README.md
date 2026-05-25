@@ -343,6 +343,21 @@ Two failure modes worth knowing about:
 - **Unanchorable parts** — if the entire part consists of U+FFFD and/or combining marks (i.e. the tokenizer produced nothing positionable), the part is silently dropped. The source bytes it represented are still preserved in chunk text, because chunks span from their first part's `start` to their last part's `end` and gaps between parts are absorbed forward by `getChunk` (see "Chunk Coverage and Positions" above).
 - **Mutating splitters** — if a part has anchorable graphemes but none of them are found in the input (e.g. a splitter that lowercases or strips accents), the library throws. Splitters must not transform tokens.
 
+### Supported tokenizers (and a known limitation)
+
+The anchoring model above assumes a splitter whose **decoded part length equals the source span it consumed**. Concretely:
+
+- ✅ `text.split('')`, `text.split(/\s+/)`, sentence/line regex splitters — preserve source bytes verbatim.
+- ✅ `tiktoken` (OpenAI cl100k, ada-002, gpt-4o, etc.) — substitutes exactly one U+FFFD per undecodable byte, so length matches source span.
+- ⚠️ Embedding models whose tokenizer pipeline **normalizes during decode** (e.g. `gte-small`, `bge-small`, uncased BERT-style WordPiece — typically loaded via `@huggingface/transformers`) — can produce decoded strings longer than the source bytes they consumed. The cursor advances past the next real source position; subsequent tokens either throw `"Splitter returned a part that could not be located in input"` or anchor in the wrong place. To be precise, it's the _model_'s tokenizer config that drives this (lowercase, accent strip, NFC/NFD); the runtime is just executing what the model ships.
+
+If you're using one of the affected embedding-model tokenizers today, the safest workarounds are:
+
+1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
+2. Wrap your splitter to pad/trim decoded output to match source length before returning.
+
+Expanding tolerance for length-inflating tokenizers is tracked in [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md) — it's a planned future enhancement, not a permanent constraint.
+
 When parts are gathered into chunks, this means that some chunks may _undercount_ the number of tokens the splitter produced — there can be more semantic tokens in a chunk than `chunkSize` specifies. In a simple test on 10MB of blog post content using the `tiktoken` tokenizer, 99.6% of parts matched the input on tier 1. If your downstream has a hard token limit (like an embedding API's max tokens), apply a small `chunkSize` discount to accommodate multibyte undercounting.
 
 Let's take a quick look at multibyte handling with some emojis and a `tiktoken`-based splitter:
