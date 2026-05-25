@@ -1,17 +1,10 @@
 import { getChunk } from "./get-chunk.js";
 
-/** @enum {string} */
-export const ChunkStrategy = Object.freeze({
-  character: "character",
-  paragraph: "paragraph",
-});
-
 /**
  * @typedef {object} Chunk
- * @property {string|string[]|null} text
+ * @property {string|string[]} text
  * @property {number} start
  * @property {number} end
- * @property {boolean} [isBoundary]
  */
 
 /**
@@ -19,194 +12,21 @@ export const ChunkStrategy = Object.freeze({
  * @property {number} [chunkSize]
  * @property {number} [chunkOverlap]
  * @property {(input: string) => string[]} [splitter]
- * @property {keyof typeof ChunkStrategy} [chunkStrategy]
+ * @property {"character"|"paragraph"} [chunkStrategy]
  */
 
-/** @typedef {(inputs: string[]) => string[][]} BoundaryFunction */
+const CHUNK_STRATEGIES = new Set(["character", "paragraph"]);
+const REPLACEMENT_CHAR = "�";
+// Single source of truth for what counts as a paragraph break in
+// `chunkStrategy: "paragraph"`. Currently a literal "\n\n"; in the future
+// this may expand to an array of delimiters or accept user input.
+const PARAGRAPH_DELIMITER = "\n\n";
+// Locale `undefined` resolves to the host default, but grapheme segmentation
+// per UAX #29 is locale-independent in practice — verified against en, th,
+// ja, ar, hi, und and the host default on every multilingual fixture in the
+// test suite; outputs were identical for all.
+const SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-// Boundary functions take an array of string input and then return an array of arrays.
-// (Confusing!). The key part is that each sub-array is a group of parts that must *all* be
-// included in the same chunk if another sub-array is in the chunk, or fill the chunk and split
-// apart in subsequent chunks.
-/** @type {Record<keyof typeof ChunkStrategy, BoundaryFunction>} */
-const BOUNDARIES = {
-  [ChunkStrategy.character]: (inputs) => [inputs],
-  [ChunkStrategy.paragraph]: (inputs) => {
-    /** @type {string[][]} */
-    const groups = [];
-    for (const input of inputs)
-      for (const paragraph of input.split(/\n\n/)) groups.push([paragraph]);
-    return groups;
-  },
-};
-
-const CHUNK_STRATEGIES = new Set(Object.keys(BOUNDARIES));
-
-const SINGLE_BYTE_CHAR_LIMIT = 255;
-
-/**
- * Assert that the chunk strategy is valid.
- * @param {unknown} chunkStrategy The chunk strategy to validate.
- * @returns {asserts chunkStrategy is keyof typeof ChunkStrategy}
- * @throws {Error} If the chunk strategy is invalid.
- */
-function assertChunkStrategy(chunkStrategy) {
-  if (!CHUNK_STRATEGIES.has(/** @type {string} */ (chunkStrategy)))
-    throw new Error(
-      `Invalid chunk strategy. Must be one of: ${[...CHUNK_STRATEGIES].join(", ")}`,
-    );
-}
-
-/**
- * Finds and returns the matched parts (chunks) of the input string based on the provided split parts.
- *
- * @param {string} input - The original string to be split and matched.
- * @param {string[]} splitParts - The array of string parts to match within the input string.
- * @returns {Chunk[]} An array of Chunk objects, each representing a matched part of the input string.
- * @throws {Error} If a split part cannot be matched in the input string in the expected order.
- */
-const findMatches = (input, splitParts) => {
-  /** @type {Chunk[]} */
-  const matchedParts = [];
-  let inputIndex = 0;
-
-  splitPartsLoop: for (const splitPart of splitParts) {
-    if (typeof splitPart !== "string")
-      throw new Error(
-        `Splitter returned a non-string part: ${splitPart} for input: ${input}`,
-      );
-
-    if (splitPart.length === 0) {
-      continue;
-    }
-
-    // Helper to accumulate matches.
-    /** @param {{ start: number; end: number }} range */
-    const addMatch = ({ start, end }) => {
-      matchedParts.push({
-        text: splitPart,
-        start,
-        end,
-      });
-      inputIndex = end;
-    };
-
-    // Fast path -- simple string match
-    // When we **do** get a match, we'll capture some multibyte strings that we
-    // can't match with the character by character match that ignores multibyte chars.
-    if (input.startsWith(splitPart, inputIndex)) {
-      addMatch({ start: inputIndex, end: inputIndex + splitPart.length });
-      continue;
-    }
-
-    // Split the part and find first + last usable character indices.
-    const splitPartChars = splitPart.split("");
-    const splitPartCharsCodes = splitPartChars.map((char) =>
-      char.charCodeAt(0),
-    );
-    let firstValidIndex = -1;
-    let lastValidIndex = -1;
-
-    for (let i = 0; i < splitPartChars.length; i++) {
-      if (splitPartCharsCodes[i] <= SINGLE_BYTE_CHAR_LIMIT) {
-        if (firstValidIndex === -1) {
-          firstValidIndex = i;
-        }
-        lastValidIndex = i;
-      }
-    }
-
-    if (firstValidIndex === -1) {
-      continue;
-    }
-
-    // Find the first valid character in the **split part**.
-    // We'll now search starting from here in the split part.
-    const firstValidChar = splitPartChars[firstValidIndex];
-
-    // Search for the first valid character in the **input**.
-    // We'll loop on the input until we find the first valid character or hit the end and error out.
-    for (let i = inputIndex; i < input.length; i++) {
-      if (input[i] === firstValidChar) {
-        const startPos = i;
-
-        // Do the fast path again, in case we can catch other multibyte strings.
-        if (input.startsWith(splitPart, startPos)) {
-          // Found the whole part.
-          addMatch({ start: startPos, end: startPos + splitPart.length });
-          continue splitPartsLoop;
-        }
-
-        // Slow path -- only match on non-multibyte chars. Will miss some strings.
-        let lastValidPos = startPos;
-        for (let j = firstValidIndex + 1; j <= lastValidIndex; j++) {
-          const nextValidChar = splitPartChars[j];
-          if (splitPartCharsCodes[j] <= SINGLE_BYTE_CHAR_LIMIT) {
-            // Find this character in the input after the current position
-            for (let k = lastValidPos + 1; k < input.length; k++) {
-              if (input[k] === nextValidChar) {
-                lastValidPos = k;
-                break;
-              }
-            }
-          }
-        }
-
-        // Found the best subset we could.
-        addMatch({ start: startPos, end: lastValidPos + 1 });
-        continue splitPartsLoop;
-      }
-    }
-
-    // Bail.
-    throw new Error(
-      `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
-    );
-  }
-
-  return matchedParts;
-};
-
-/**
- * Split text into parts of text (or null if the part is ignored) and their start and end indices.
- *
- * While this function takes an array of strings, the `start` and `end` indices are from the
- * perspective of the entire input array as a joined long single string.
- *
- * **Note**: `start` and `end` are based on string indexing (`input[i]` or `input.split('')`) and
- * not on array-like iteration of the string (e.g. `[...input]` or `Array.from(input)`)
- *
- * @param {string[]} inputs - The inputs to split.
- * @param {(input: string) => string[]} splitter - The function to split the text.
- * @param {number} [baseOffset] - The base offset to add to the start and end positions.
- * @returns {Chunk[]}
- */
-export function splitToParts(inputs, splitter, baseOffset = 0) {
-  /** @type {Chunk[]} */
-  const parts = [];
-  let inputsOffset = 0;
-
-  for (const input of inputs) {
-    const splitParts = splitter(input);
-
-    const matches = findMatches(input, splitParts);
-    for (const match of matches) {
-      parts.push({
-        text: match.text,
-        start: baseOffset + inputsOffset + match.start,
-        end: baseOffset + inputsOffset + match.end,
-      });
-    }
-
-    // Finished a single input string..
-    // Ignore and discard unmatched parts.
-    inputsOffset += input.length;
-  }
-
-  return parts;
-}
-
-// Little helpers
 /**
  * @param {{
  *   chunkSize: number
@@ -221,194 +41,388 @@ const splitValidate = ({
   splitter,
   chunkStrategy,
 }) => {
-  assertChunkStrategy(chunkStrategy);
+  if (!CHUNK_STRATEGIES.has(chunkStrategy)) {
+    throw new Error(
+      `Invalid chunk strategy. Must be one of: ${[...CHUNK_STRATEGIES].join(", ")}`,
+    );
+  }
 
-  if (typeof chunkSize !== "number" || !Number.isInteger(chunkSize))
-    throw new Error("Chunk size must be a positive integer");
+  if (typeof chunkSize !== "number" || !Number.isInteger(chunkSize)) {
+    throw new Error(
+      `Chunk size must be a positive integer. Found: ${chunkSize}`,
+    );
+  }
 
-  if (chunkSize < 1) throw new Error("Chunk size must be at least 1");
+  if (chunkSize < 1) {
+    throw new Error("Chunk size must be at least 1");
+  }
 
-  if (typeof chunkOverlap !== "number" || !Number.isInteger(chunkOverlap))
+  if (typeof chunkOverlap !== "number" || !Number.isInteger(chunkOverlap)) {
     throw new Error(
       `Chunk overlap must be a non-negative integer. Found: ${chunkOverlap}`,
     );
+  }
 
-  if (chunkOverlap < 0) throw new Error("Chunk overlap must be at least 0");
+  if (chunkOverlap < 0) {
+    throw new Error("Chunk overlap must be at least 0");
+  }
 
-  if (chunkOverlap >= chunkSize)
+  if (chunkOverlap >= chunkSize) {
     throw new Error("Chunk overlap must be less than chunk size");
+  }
 
-  if (typeof splitter !== "function")
+  if (typeof splitter !== "function") {
     throw new Error("Splitter must be a function");
+  }
 };
 
-class ChunkParts {
+// First grapheme of `splitPart` that can plausibly stand alone in `input`.
+// Used when fast-path `startsWith` fails because the splitter mutated bytes
+// (typically: tiktoken decoded a token straddling a multi-byte char and
+// emitted U+FFFD, or emitted an isolated combining mark like a variation
+// selector that only ever appears merged into a preceding base grapheme).
+/**
+ * @param {string} splitPart
+ * @returns {string|null}
+ */
+const firstAnchorGrapheme = (splitPart) => {
+  for (const { segment } of SEGMENTER.segment(splitPart)) {
+    if (segment === REPLACEMENT_CHAR) {
+      continue;
+    }
+
+    // Combining marks (including variation selectors FE00-FE0F, class Mn)
+    // merge into a preceding base grapheme in real text — they have no
+    // standalone position to anchor against.
+    if (/^\p{M}+$/u.test(segment)) {
+      continue;
+    }
+
+    return segment;
+  }
+  return null;
+};
+
+/**
+ * Anchor splitter parts against a single source string, producing parts with
+ * absolute (offset-adjusted) `start`/`end` positions.
+ *
+ * Three-tier locate strategy, cheapest first:
+ *  1. `startsWith` at the current cursor — byte-preserving splitter with the
+ *     cursor sitting exactly on the next part (char/tiktoken happy path).
+ *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops
+ *     bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so
+ *     the cursor lands in the gap and `startsWith` fails). The whole part
+ *     still exists verbatim in source, so a substring search finds it in
+ *     native code without allocating.
+ *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter
+ *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find
+ *     the first positionable grapheme inside splitPart and anchor there.
+ *
+ * indexOf is safe for the anchor case because `firstAnchorGrapheme` returns
+ * a full Intl.Segmenter grapheme cluster that (by construction) never starts
+ * with a low surrogate or combining mark — so a code-unit match cannot land
+ * mid-surrogate or mid-cluster. Replacing an earlier `Intl.Segmenter` walk
+ * over `input.slice(cursor)` per call (O(n) allocation each) with a native
+ * `indexOf` is the main perf win for byte-dropping splitters.
+ *
+ * @param {string} input
+ * @param {(input: string) => string[]} splitter
+ * @param {number} baseOffset
+ * @returns {Chunk[]}
+ */
+const anchorParts = (input, splitter, baseOffset) => {
+  const splits = splitter(input);
+  if (!Array.isArray(splits)) {
+    throw new TypeError(
+      `Splitter must return an array of strings. Received: ${typeof splits}`,
+    );
+  }
+
   /** @type {Chunk[]} */
-  parts = [];
-  /** @type {Chunk | null} */
-  lastEmittedPart = null;
-  /** @type {Chunk | null} */
-  lastBoundaryPart = null;
+  const parts = [];
+  let cursor = 0;
 
-  /**
-   * @param {string | string[]} input
-   * @param {number} chunkOverlap
-   */
-  constructor(input, chunkOverlap) {
-    this.input = input;
-    this.chunkOverlap = chunkOverlap;
-  }
-
-  get length() {
-    return this.parts.length;
-  }
-
-  /** @param {Chunk} part */
-  push(part) {
-    this.parts.push(part);
-    if (part.isBoundary) this.lastBoundaryPart = part;
-  }
-
-  hasUnEmittedParts() {
-    // First chunk.
-    if (this.lastEmittedPart === null) return this.parts.length > 0;
-
-    // Subsequent chunks.
-    if (this.parts.length > 0) {
-      // Check if have un-emitted parts past the end of last emitted part.
-      const lastPart = this.parts[this.parts.length - 1];
-      return lastPart.end > this.lastEmittedPart.end;
+  for (const splitPart of splits) {
+    if (typeof splitPart !== "string") {
+      throw new Error(
+        `Splitter returned a non-string part: ${splitPart} for input: ${input}`,
+      );
     }
 
-    // Otherwise, we have no un-emitted parts.
-    return false;
-  }
+    if (splitPart.length === 0) {
+      continue;
+    }
 
-  /** @returns {Chunk} */
-  emit() {
-    // Sanity check.
-    if (this.parts.length === 0) throw new Error("Chunk parts is empty");
-
-    // Prepare chunk.
-    const start = this.parts[0].start;
-    this.lastEmittedPart = this.parts[this.parts.length - 1];
-    const end = this.lastEmittedPart.end;
-    /** @type {Chunk} */
-    const chunk = {
-      text: getChunk(this.input, start, end),
-      start,
-      end,
-    };
-
-    // Reset state.
-    // At this point, we seed the new parts array with the overlap, if any found.
-    if (this.chunkOverlap > 0) {
-      this.parts = this.parts.slice(-this.chunkOverlap);
+    let start;
+    if (input.startsWith(splitPart, cursor)) {
+      // Tier 1: byte-preserving splitter, cursor at exact match.
+      start = cursor;
+    } else if ((start = input.indexOf(splitPart, cursor)) !== -1) {
+      // Tier 2: byte-preserving splitter with a gap before this part.
+      // `start` was assigned in the condition.
     } else {
-      this.parts = [];
+      // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
+      const anchor = firstAnchorGrapheme(splitPart);
+      // splitPart is entirely U+FFFD or combining marks (tokenizer's decode
+      // emitted nothing positionable). It claims no source bytes — silently
+      // drop it.
+      if (anchor === null) {
+        continue;
+      }
+
+      start = input.indexOf(anchor, cursor);
+      if (start === -1) {
+        throw new Error(
+          `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
+        );
+      }
     }
 
-    // Clear out last boundary. We consider a new chunk to have "no" previous boundary.
-    this.lastBoundaryPart = null;
-
-    return chunk;
+    const end = Math.min(start + splitPart.length, input.length);
+    parts.push({
+      text: splitPart,
+      start: baseOffset + start,
+      end: baseOffset + end,
+    });
+    cursor = end;
   }
-}
+
+  return parts;
+};
+
+/**
+ * @typedef {object} BoundaryGroup
+ * @property {number} baseOffset - Absolute position of `parts[0]` in joined input.
+ * @property {string[]} parts
+ */
+
+/**
+ * Group inputs into "boundary groups" per strategy. Parts within a group are
+ * preferred to stay together in the same chunk; parts across groups can split
+ * if a boundary is reached and the next group wouldn't fit.
+ *
+ * Each group carries its absolute `baseOffset` in the joined input string so
+ * callers don't need to recover it by searching. This is what makes paragraph
+ * mode robust against adversarial inputs where a paragraph's content appears
+ * as a substring inside an earlier paragraph or where empty elements shift
+ * what `indexOf` would have returned (B1, B2).
+ *
+ * @param {string} strategy
+ * @param {string[]} inputs
+ * @returns {BoundaryGroup[]}
+ */
+const boundaryGroups = (strategy, inputs) => {
+  if (strategy === "paragraph") {
+    /** @type {BoundaryGroup[]} */
+    const groups = [];
+    let elementStart = 0;
+    for (const input of inputs) {
+      let cursor = 0;
+      for (const paragraph of input.split(PARAGRAPH_DELIMITER)) {
+        // B6: trim leading/trailing whitespace from the paragraph and shift
+        // baseOffset to match the trimmed content. The trimmed bytes still
+        // exist in the input string — they end up in adjacent chunks via the
+        // B5 forward-extension pass (or remain uncovered if they precede
+        // chunks[0].start).
+        const leadingMatch = paragraph.match(/^\s+/);
+        const leadLen = leadingMatch ? leadingMatch[0].length : 0;
+        const trailingMatch = paragraph.match(/\s+$/);
+        const trailLen = trailingMatch ? trailingMatch[0].length : 0;
+        const trimmed = paragraph.slice(leadLen, paragraph.length - trailLen);
+        groups.push({
+          baseOffset: elementStart + cursor + leadLen,
+          parts: [trimmed],
+        });
+
+        // `PARAGRAPH_DELIMITER` is the only delimiter `split()` consumes, so
+        // adjacent paragraphs are separated by exactly its length in source.
+        // Use the pre-trim paragraph length to advance — we're tracking
+        // positions in the original input.
+        cursor += paragraph.length + PARAGRAPH_DELIMITER.length;
+      }
+
+      elementStart += input.length;
+    }
+
+    return groups;
+  }
+
+  return [{ baseOffset: 0, parts: inputs }];
+};
 
 /**
  * Split text into chunks.
  *
- * ## Chunk Structure
- * Note that when splitting into tokens if an array is passed to input, the array item boundary is
- * *always* a token boundary.
+ * ## Chunk structure
+ * - `start`/`end` are UTF-16 code-unit offsets into the joined input string.
+ * - When input is an array, array boundaries are always token boundaries —
+ *   a token never spans two array elements.
+ * - `chunk.text === getChunk(input, chunk.start, chunk.end)`: the returned
+ *   text is exactly what the positions point to.
  *
- * In the returned structure, `start` is the start of the first token in the chunk and `end` is
- * the end of the last token. In between there may be unmatched / discarded parts between tokens
- * (e.g. if you split on whitespace, there may be spaces between tokens). The `text` field of
- * the returned chunk will include all the text or array of texts from the start to the end,
- * inclusive of the unmatched parts.
+ * ## Coverage / position semantics
+ * From `chunks[0].start` onward, every UTF-16 code unit of the source
+ * appears in exactly one chunk (modulo `chunkOverlap`, which causes
+ * adjacent chunks to overlap by `chunkOverlap` *parts*):
+ * - `chunks[i].end >= chunks[i+1].start` for adjacent pairs.
+ * - `chunks[chunks.length - 1].end === total input length`.
  *
- * ## Chunk Strategy
- * The `chunkStrategy` option allows you to specify how the chunks are grouped.
- * - `character`: There is no grouping preference here. Fit as many whole tokens as possible into a chunk.
- * - `paragraph`: Group tokens by paragraphs. If a paragraph exceeds the chunk size, it will be split across multiple chunks.
+ * Code units between the splitter's anchored parts (whitespace stripped by
+ * `split(/\s+/)`, paragraph `\n\n` delimiters, tokenizer-dropped multi-byte
+ * fragments) are absorbed into the *previous* chunk by extending its `end`
+ * forward to the next chunk's `start`. This means callers can rely on
+ * positions to attribute every source code unit to a chunk — useful for
+ * RAG citations, source highlighting, and re-chunking. The one exception
+ * is code units before `chunks[0].start`, which have no previous chunk to
+ * extend into and remain uncovered.
  *
- * @param {string|string[]} input - The input (string or array of strings) to split.
+ * Trade-off: chunk text may carry trailing whitespace or `\n\n` delimiters
+ * absorbed from the gap. A caller who wants trimmed text can call
+ * `chunk.text.trim()`; the reverse (dropped content, want it back) would
+ * require re-reading source. The library prefers lossless.
+ *
+ * ## chunkSize
+ * `chunkSize` counts splitter *parts*, not code units or graphemes. With
+ * multi-byte content the part-count may *undercount* relative to user
+ * expectation if the tokenizer drops un-anchorable parts (see Multibyte
+ * section in README).
+ *
+ * ## Chunk strategies
+ * - `"character"` (default): pack as many parts as fit per chunk.
+ * - `"paragraph"`: prefer to keep paragraphs (split on `\n\n` or array
+ *   boundaries) intact; paragraphs larger than `chunkSize` are split
+ *   across chunks. Leading and trailing whitespace inside each paragraph
+ *   is stripped before anchoring, so chunk *starts* land on real content.
+ *
+ * @param {string|string[]} input
  * @param {SplitOptions} [options]
  * @returns {Chunk[]}
  */
-export function split(
+export const split = (
   input,
   {
     chunkSize = 512,
     chunkOverlap = 0,
     splitter = (text) => text.split(""),
-    chunkStrategy = ChunkStrategy.character,
+    chunkStrategy = "character",
   } = {},
-) {
-  // Validation
+) => {
   splitValidate({ chunkSize, chunkOverlap, splitter, chunkStrategy });
 
-  // Chunk handling.
+  if (typeof input !== "string" && !Array.isArray(input)) {
+    throw new TypeError(
+      `Input must be a string or array of strings. Received: ${typeof input}`,
+    );
+  }
+  const inputAsArray = Array.isArray(input) ? input : [input];
+  for (const item of inputAsArray) {
+    if (typeof item !== "string") {
+      throw new TypeError(
+        `Input array elements must be strings. Found: ${typeof item}`,
+      );
+    }
+  }
+  const groups = boundaryGroups(chunkStrategy, inputAsArray);
+
   /** @type {Chunk[]} */
   const chunks = [];
-  const chunkParts = new ChunkParts(input, chunkOverlap);
+  /** @type {Chunk[]} */
+  let currentParts = [];
+  let lastEmittedEnd = -1;
+  let hasBoundary = false;
 
-  // Inputs.
-  const inputAsArray = Array.isArray(input) ? input : [input];
-  const inputAsString = inputAsArray.join("");
-  const groups = BOUNDARIES[chunkStrategy](inputAsArray);
+  const emit = () => {
+    const start = currentParts[0].start;
+    const end = currentParts[currentParts.length - 1].end;
+    chunks.push({ text: getChunk(input, start, end), start, end });
+    lastEmittedEnd = end;
+    currentParts = chunkOverlap > 0 ? currentParts.slice(-chunkOverlap) : [];
+    // Any boundary reached on the just-emitted chunk is consumed by it;
+    // carried-over overlap parts are interior to the next chunk.
+    hasBoundary = false;
+  };
 
-  // Iteration.
-  let baseOffset = -1;
   for (const group of groups) {
-    // Empty pre-processed group.
-    if (group.length === 0) continue;
-
-    // Find the start of the first part in the group and update our offset.
-    const firstPart = group[0];
-    baseOffset = inputAsString.indexOf(firstPart, baseOffset + 1);
-    if (baseOffset === -1)
-      throw new Error(
-        `Could not find start of group: ${group.slice(0, 20)}...`,
-      );
-
-    // Split with parts plus our offset.
-    const parts = splitToParts(group, splitter, baseOffset);
-
-    // Empty post-processed group.
-    if (parts.length === 0) continue;
-
-    // Mark the **last** part as the boundary.
-    parts[parts.length - 1].isBoundary = true;
-
-    // If the current chunk has a portion with a boundary, and we can't fit this entire group
-    // in the current chunk, emit the existing chunk and then continue adding to a fresh chunk.
-    if (
-      chunkParts.hasUnEmittedParts() &&
-      chunkParts.lastBoundaryPart !== null &&
-      chunkParts.length + parts.length > chunkSize
-    ) {
-      chunks.push(chunkParts.emit());
+    if (group.parts.length === 0) {
+      continue;
     }
 
-    // Should add parts to chunks. Start iterating.
-    for (const part of parts) {
-      // Add the part to the current chunk.
-      chunkParts.push(part);
+    /** @type {Chunk[]} */
+    const groupParts = [];
+    let groupOffset = group.baseOffset;
+    for (const groupInput of group.parts) {
+      for (const part of anchorParts(groupInput, splitter, groupOffset)) {
+        groupParts.push(part);
+      }
+      groupOffset += groupInput.length;
+    }
 
-      // Sanity check.
-      if (chunkParts.length > chunkSize)
-        throw new Error(
-          `Chunk size is ${chunkSize}, but chunkParts.length is ${chunkParts.length} -- ${JSON.stringify(chunkParts)}`,
-        );
+    if (groupParts.length === 0) {
+      continue;
+    }
 
-      if (chunkParts.length === chunkSize) chunks.push(chunkParts.emit());
+    // If the current chunk already has a boundary and adding this whole group
+    // would overflow, emit now so the next chunk can hold the full group.
+    if (
+      hasBoundary &&
+      currentParts.length > 0 &&
+      currentParts.length + groupParts.length > chunkSize
+    ) {
+      emit();
+    }
+
+    for (let i = 0; i < groupParts.length; i++) {
+      const part = groupParts[i];
+      currentParts.push(part);
+      if (i === groupParts.length - 1) {
+        hasBoundary = true;
+      }
+
+      if (currentParts.length === chunkSize) {
+        emit();
+      }
     }
   }
 
-  // Handle last chunk.
-  if (chunkParts.hasUnEmittedParts()) chunks.push(chunkParts.emit());
+  // Final chunk: emit only if there are parts past the last emitted end.
+  if (
+    currentParts.length > 0 &&
+    currentParts[currentParts.length - 1].end > lastEmittedEnd
+  ) {
+    emit();
+  }
+
+  // B5: extend each chunk's `end` forward to absorb gaps to the next chunk;
+  // the final chunk extends to end of input. Leading code units before
+  // chunks[0] are intentionally left uncovered (no "previous" chunk to
+  // extend).
+  //
+  // Why we preserve gap content rather than dropping it: chunks return
+  // {start,end} positions (UTF-16 code-unit offsets) so callers can locate
+  // them in the source. Coverage means `chunks[i].end >= chunks[i+1].start`
+  // (modulo overlap) and `chunks[last].end === input.length` — a downstream
+  // consumer can attribute every source code unit to a chunk for RAG
+  // citations, highlighting, re-chunking, etc. Dropping content would make
+  // positions ambiguous and citation ranges disjoint. Callers who want
+  // trimmed text can always do `chunk.text.trim()`; the reverse (we trim,
+  // they want it back) is impossible without re-reading source. Lossless
+  // library, lossy caller.
+  //
+  // Consequence: chunks have clean starts (B6 strips paragraph-leading
+  // whitespace before anchoring) but may carry trailing whitespace and
+  // `\n\n` delimiters that B5 absorbs forward from the gap.
+  const totalLength = inputAsArray.reduce((sum, s) => sum + s.length, 0);
+  for (let i = 0; i < chunks.length; i++) {
+    const nextStart = i < chunks.length - 1 ? chunks[i + 1].start : totalLength;
+    if (chunks[i].end < nextStart) {
+      chunks[i] = {
+        text: getChunk(input, chunks[i].start, nextStart),
+        start: chunks[i].start,
+        end: nextStart,
+      };
+    }
+  }
 
   return chunks;
-}
+};

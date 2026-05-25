@@ -21,5 +21,10 @@ export default [
         TextDecoder: "readonly",
       },
     },
+    rules: {
+      curly: ["error", "all"],
+      "func-style": ["error", "expression"],
+      "prefer-arrow-callback": "error",
+    },
   },
 ];

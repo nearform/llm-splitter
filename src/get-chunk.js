@@ -9,7 +9,7 @@
  * @param {number} end - The end of the chunk.
  * @returns {string|string[]} The text or array of texts of the chunk.
  */
-export function getChunk(input, start, end) {
+export const getChunk = (input, start, end) => {
   /** @type {string[]} */
   const matches = [];
   let offset = 0;
@@ -17,10 +17,11 @@ export function getChunk(input, start, end) {
 
   for (const item of inputs) {
     // Error if not string.
-    if (typeof item !== "string")
+    if (typeof item !== "string") {
       throw new TypeError(
         `Input must be a string or array of strings, got ${typeof item} for ${item}`,
       );
+    }
 
     const itemLength = item.length;
     const itemStart = offset;
@@ -42,4 +43,4 @@ export function getChunk(input, start, end) {
 
   // Return single string for single input, array for array input
   return Array.isArray(input) ? matches : matches[0] || "";
-}
+};

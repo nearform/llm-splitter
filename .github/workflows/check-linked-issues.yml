@@ -6,6 +6,8 @@ name: Check linked issues
       - edited
       - reopened
       - synchronize
+      - labeled
+      - unlabeled
 jobs:
   check_pull_requests:
     runs-on: ubuntu-latest

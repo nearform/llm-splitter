@@ -1,7 +1,7 @@
 import { describe, it, after, before } from "node:test";
 import assert from "node:assert";
 import tiktoken from "tiktoken";
-import { splitToParts, split, ChunkStrategy } from "../src/split.js";
+import { split } from "../src/split.js";
 import { getChunk } from "../src/get-chunk.js";
 
 /** @typedef {import('../src/split.js').Chunk} Chunk */
@@ -31,166 +31,6 @@ describe("split", () => {
     tokenizer.free();
   });
 
-  describe("splitToParts", () => {
-    it("should yield nothing for empty input array", () => {
-      /** @type {string[]} */
-      const input = [];
-      /** @type {Chunk[]} */
-      const expected = [];
-      const result = splitToParts(input, charSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split with default splitter (char split)", () => {
-      const input = ["hello world!"];
-      const expected = [
-        { text: "h", start: 0, end: 1 },
-        { text: "e", start: 1, end: 2 },
-        { text: "l", start: 2, end: 3 },
-        { text: "l", start: 3, end: 4 },
-        { text: "o", start: 4, end: 5 },
-        { text: " ", start: 5, end: 6 },
-        { text: "w", start: 6, end: 7 },
-        { text: "o", start: 7, end: 8 },
-        { text: "r", start: 8, end: 9 },
-        { text: "l", start: 9, end: 10 },
-        { text: "d", start: 10, end: 11 },
-        { text: "!", start: 11, end: 12 },
-      ];
-      const result = splitToParts(input, charSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split with whitespace splitter", () => {
-      const input = ["hello world!"];
-      const expected = [
-        { text: "hello", start: 0, end: 5 },
-        { text: "world!", start: 6, end: 12 },
-      ];
-      const result = splitToParts(input, whitespaceSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split with tiktoken splitter", () => {
-      const input = ["hello world! "];
-      const expected = [
-        { text: "hello", start: 0, end: 5 },
-        { text: " world", start: 5, end: 11 },
-        { text: "!", start: 11, end: 12 },
-        { text: " ", start: 12, end: 13 },
-      ];
-      const result = splitToParts(input, tokenSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split multiple items with default splitter", () => {
-      const input = ["foo bar", "baz! qux"];
-      const expected = [
-        { text: "f", start: 0, end: 1 },
-        { text: "o", start: 1, end: 2 },
-        { text: "o", start: 2, end: 3 },
-        { text: " ", start: 3, end: 4 },
-        { text: "b", start: 4, end: 5 },
-        { text: "a", start: 5, end: 6 },
-        { text: "r", start: 6, end: 7 },
-        { text: "b", start: 7, end: 8 },
-        { text: "a", start: 8, end: 9 },
-        { text: "z", start: 9, end: 10 },
-        { text: "!", start: 10, end: 11 },
-        { text: " ", start: 11, end: 12 },
-        { text: "q", start: 12, end: 13 },
-        { text: "u", start: 13, end: 14 },
-        { text: "x", start: 14, end: 15 },
-      ];
-      const result = splitToParts(input, charSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split multiple items with whitespace splitter", () => {
-      const input = [" 123 567", "89z! qux "];
-      const expected = [
-        { text: "123", start: 1, end: 4 },
-        { text: "567", start: 5, end: 8 },
-        { text: "89z!", start: 8, end: 12 },
-        { text: "qux", start: 13, end: 16 },
-      ];
-
-      const result = splitToParts(input, whitespaceSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("should split multiple items with tiktoken splitter", () => {
-      const input = ["foo bar", "baz! qux"];
-      const expected = [
-        { text: "foo", start: 0, end: 3 },
-        { text: " bar", start: 3, end: 7 },
-        { text: "baz", start: 7, end: 10 },
-        { text: "!", start: 10, end: 11 },
-        { text: " qu", start: 11, end: 14 },
-        { text: "x", start: 14, end: 15 },
-      ];
-      const result = splitToParts(input, tokenSplitter);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("throws if splitter returns non string outputs", () => {
-      const inputs = ["hello"];
-      const splitter = () => [400, 1, 2, 3, 4];
-      assert.throws(
-        () => {
-          // @ts-expect-error test
-          splitToParts(inputs, splitter);
-        },
-        {
-          message: "Splitter returned a non-string part: 400 for input: hello",
-        },
-      );
-    });
-
-    it("throws if splitter returns a part not found in input", () => {
-      const inputs = ["hello"];
-      const splitter = () => ["notfound"];
-      assert.throws(
-        () => {
-          splitToParts(inputs, splitter);
-        },
-        {
-          message:
-            'Splitter did not return any parts for input (5): "hello"... with part (8): "notfound"...',
-        },
-      );
-    });
-
-    it("throws if splitter returns a part that only partially matches", () => {
-      const inputs = ["abc"];
-      const splitter = () => ["a", "z"];
-      assert.throws(
-        () => {
-          splitToParts(inputs, splitter);
-        },
-        {
-          message:
-            'Splitter did not return any parts for input (3): "abc"... with part (1): "z"...',
-        },
-      );
-    });
-
-    it("does not throw if all parts are found", () => {
-      const inputs = ["abc"];
-      const splitter = () => ["a", "b", "c"];
-      assert.doesNotThrow(() => {
-        splitToParts(inputs, splitter);
-      });
-    });
-  });
-
   describe("split", () => {
     describe("basics", () => {
       it("should split array with whitespace splitter and extra whitespace", () => {
@@ -204,8 +44,8 @@ describe("split", () => {
           splitter: whitespaceSplitter,
         });
         assert.deepStrictEqual(result, [
-          { text: ["hello world! ", "This is the"], start: 1, end: 25 },
-          { text: ["split test string. Of words."], start: 26, end: 54 },
+          { text: ["hello world! ", "This is the "], start: 1, end: 26 },
+          { text: ["split test string. Of words. ", " "], start: 26, end: 56 },
         ]);
       });
 
@@ -298,7 +138,7 @@ describe("split", () => {
           splitter: whitespaceSplitter,
         });
         assert.deepStrictEqual(result, [
-          { text: "hello world", start: 0, end: 11 },
+          { text: "hello world ", start: 0, end: 12 },
           { text: "test", start: 12, end: 16 },
         ]);
       });
@@ -374,126 +214,64 @@ describe("split", () => {
         ]);
       });
 
-      it("should throw error for chunkSize of 0", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 0 });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be at least 1",
-          },
-        );
-      });
+      // Argument validation — matrix.
+      /** @type {Array<{ name: string, opts: any, msg: string }>} */
+      const invalidOptionCases = [
+        {
+          name: "chunkSize 0",
+          opts: { chunkSize: 0 },
+          msg: "Chunk size must be at least 1",
+        },
+        {
+          name: "negative chunkSize",
+          opts: { chunkSize: -1 },
+          msg: "Chunk size must be at least 1",
+        },
+        {
+          name: "non-integer chunkSize",
+          opts: { chunkSize: 1.5 },
+          msg: "Chunk size must be a positive integer. Found: 1.5",
+        },
+        {
+          name: "non-number chunkSize (string)",
+          opts: { chunkSize: "invalid" },
+          msg: "Chunk size must be a positive integer. Found: invalid",
+        },
+        {
+          name: "negative chunkOverlap",
+          opts: { chunkSize: 5, chunkOverlap: -1 },
+          msg: "Chunk overlap must be at least 0",
+        },
+        {
+          name: "non-integer chunkOverlap",
+          opts: { chunkSize: 5, chunkOverlap: 1.5 },
+          msg: "Chunk overlap must be a non-negative integer. Found: 1.5",
+        },
+        {
+          name: "non-number chunkOverlap (string)",
+          opts: { chunkSize: 5, chunkOverlap: "invalid" },
+          msg: "Chunk overlap must be a non-negative integer. Found: invalid",
+        },
+        {
+          name: "chunkOverlap equal to chunkSize",
+          opts: { chunkSize: 5, chunkOverlap: 5 },
+          msg: "Chunk overlap must be less than chunk size",
+        },
+        {
+          name: "chunkOverlap greater than chunkSize",
+          opts: { chunkSize: 3, chunkOverlap: 5 },
+          msg: "Chunk overlap must be less than chunk size",
+        },
+      ];
 
-      // Validation tests
-      it("should throw error for negative chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: -1 });
-          },
-          {
+      for (const { name, opts, msg } of invalidOptionCases) {
+        it(`rejects ${name}`, () => {
+          assert.throws(() => split("hello", opts), {
             name: "Error",
-            message: "Chunk size must be at least 1",
-          },
-        );
-      });
-
-      it("should throw error for non-integer chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 1.5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be a positive integer",
-          },
-        );
-      });
-
-      it("should throw error for non-number chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            // @ts-expect-error test
-            split(input, { chunkSize: "invalid" });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be a positive integer",
-          },
-        );
-      });
-
-      it("should throw error for negative chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: -1 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be at least 0",
-          },
-        );
-      });
-
-      it("should throw error for non-integer chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: 1.5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be a non-negative integer. Found: 1.5",
-          },
-        );
-      });
-
-      it("should throw error for non-number chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            // @ts-expect-error test
-            split(input, { chunkSize: 5, chunkOverlap: "invalid" });
-          },
-          {
-            name: "Error",
-            message:
-              "Chunk overlap must be a non-negative integer. Found: invalid",
-          },
-        );
-      });
-
-      it("should throw error when chunkOverlap >= chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: 5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be less than chunk size",
-          },
-        );
-      });
-
-      it("should throw error when chunkOverlap > chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 3, chunkOverlap: 5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be less than chunk size",
-          },
-        );
-      });
+            message: msg,
+          });
+        });
+      }
 
       // Token splitter tests
       it("should handle string input with token splitter", () => {
@@ -537,7 +315,7 @@ describe("split", () => {
           splitter: whitespaceSplitter,
         });
         assert.deepStrictEqual(result, [
-          { text: "hello   world!", start: 0, end: 14 },
+          { text: "hello   world!  ", start: 0, end: 16 },
           { text: "test", start: 16, end: 20 },
         ]);
       });
@@ -818,21 +596,30 @@ describe("split", () => {
       });
 
       // Overlap behavior verification
-      it("should verify overlap parts are correctly carried forward", () => {
+      it("overlap=2 carries last 2 chars of each chunk to next, with forward progress", () => {
         const input = "abcdefghijklmnop";
         const result = split(input, { chunkSize: 4, chunkOverlap: 2 });
-        // Verify that each chunk (except first) starts with the last 2 chars of previous chunk
+        assert.ok(result.length > 1, "expected multiple chunks");
         for (let i = 1; i < result.length; i++) {
           const prevChunk = result[i - 1];
           const currChunk = result[i];
           const prevText = /** @type {string} */ (prevChunk.text);
           const currText = /** @type {string} */ (currChunk.text);
 
-          // The current chunk should start with the last 2 characters of the previous chunk
           assert.strictEqual(
             currText.substring(0, 2),
             prevText.substring(prevText.length - 2),
             `Chunk ${i} should start with last 2 chars of chunk ${i - 1}`,
+          );
+          // Forward progress: each chunk must start strictly after the previous
+          // (otherwise we'd loop) and must have non-empty span.
+          assert.ok(
+            currChunk.start > prevChunk.start,
+            `Chunk ${i} start (${currChunk.start}) must exceed chunk ${i - 1} start (${prevChunk.start})`,
+          );
+          assert.ok(
+            currChunk.end > currChunk.start,
+            `Chunk ${i} must have positive width`,
           );
         }
       });
@@ -850,7 +637,7 @@ describe("split", () => {
       });
 
       // Stress tests
-      it("should handle chunkOverlap with very small chunkSize and large overlap", () => {
+      it("chunkSize=2 chunkOverlap=1 produces overlapping 2-char chunks across the full input", () => {
         const input = "abcdefghijklmnopqrstuvwxyz";
         const result = split(input, { chunkSize: 2, chunkOverlap: 1 });
         // Should have many overlapping chunks
@@ -871,7 +658,7 @@ describe("split", () => {
         assert.deepStrictEqual(result, [
           { text: "hello   world", start: 2, end: 15 },
           { text: "world  test", start: 10, end: 21 },
-          { text: "test  string", start: 17, end: 29 },
+          { text: "test  string  ", start: 17, end: 31 },
         ]);
       });
     });
@@ -915,7 +702,7 @@ describe("split", () => {
           });
           assert.deepStrictEqual(result, [
             { text: "hel", start: 0, end: 3 },
-            { text: "lo", start: 3, end: 5 },
+            { text: "lo\n\n", start: 3, end: 7 },
             { text: "wor", start: 7, end: 10 },
             { text: "ld", start: 10, end: 12 },
           ]);
@@ -942,7 +729,7 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: "hello world", start: 0, end: 11 },
+            { text: "hello world ", start: 0, end: 12 },
             { text: "test", start: 12, end: 16 },
           ]);
         });
@@ -989,8 +776,8 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: "hello", start: 0, end: 5 },
-            { text: "world", start: 7, end: 12 },
+            { text: "hello\n\n", start: 0, end: 7 },
+            { text: "world\n\n", start: 7, end: 14 },
             { text: "test", start: 14, end: 18 },
           ]);
         });
@@ -1016,7 +803,7 @@ describe("split", () => {
           });
           // Should split across multiple chunks since paragraph is too large
           assert.deepStrictEqual(result, [
-            { text: "hello world", start: 0, end: 11 },
+            { text: "hello world ", start: 0, end: 12 },
             { text: "test string", start: 12, end: 23 },
           ]);
         });
@@ -1030,9 +817,9 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: "short", start: 0, end: 5 },
-            { text: "very long paragraph", start: 7, end: 26 },
-            { text: "with many words", start: 27, end: 42 },
+            { text: "short\n\n", start: 0, end: 7 },
+            { text: "very long paragraph ", start: 7, end: 27 },
+            { text: "with many words\n\n", start: 27, end: 44 },
             { text: "another short", start: 44, end: 57 },
           ]);
         });
@@ -1045,7 +832,7 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: "hello", start: 0, end: 5 },
+            { text: "hello\n\n\n\n", start: 0, end: 9 },
             { text: "world", start: 9, end: 14 },
           ]);
         });
@@ -1058,7 +845,7 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: "hello", start: 0, end: 5 },
+            { text: "hello\n\n   \n\n", start: 0, end: 12 },
             { text: "world", start: 12, end: 17 },
           ]);
         });
@@ -1071,9 +858,9 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
           assert.deepStrictEqual(result, [
-            { text: ["hello"], start: 0, end: 5 },
+            { text: ["hello\n\n"], start: 0, end: 7 },
             { text: ["world"], start: 7, end: 12 },
-            { text: ["test"], start: 12, end: 16 },
+            { text: ["test\n\n"], start: 12, end: 18 },
             { text: ["string"], start: 18, end: 24 },
           ]);
         });
@@ -1087,7 +874,7 @@ describe("split", () => {
           });
           assert.deepStrictEqual(result, [
             { text: "hel", start: 0, end: 3 },
-            { text: "lo", start: 3, end: 5 },
+            { text: "lo\n\n", start: 3, end: 7 },
             { text: "wor", start: 7, end: 10 },
             { text: "ld", start: 10, end: 12 },
           ]);
@@ -1128,16 +915,16 @@ describe("split", () => {
           });
           assert.deepStrictEqual(result, [
             { text: ["hello\n\nworld"], start: 0, end: 12 },
-            { text: ["test", "string"], start: 12, end: 22 },
+            { text: ["test", "string\n\n"], start: 12, end: 24 },
             { text: ["end"], start: 24, end: 27 },
           ]);
         });
 
-        it("should compare character vs paragraph strategies", () => {
+        it("paragraph strategy produces fewer-or-equal chunks than character for the same input", () => {
           const input = "hello\n\nworld test";
           const charResult = split(input, {
             chunkSize: 3,
-            chunkStrategy: ChunkStrategy.character,
+            chunkStrategy: "character",
             splitter: whitespaceSplitter,
           });
           const paragraphResult = split(input, {
@@ -1191,7 +978,7 @@ describe("split", () => {
               start: 48,
               end: 97,
             },
-            { text: ["Hi there", "Another."], start: 89, end: 105 },
+            { text: ["Hi there", "Another.", " "], start: 89, end: 106 },
           ]);
         });
       });
@@ -1201,7 +988,7 @@ describe("split", () => {
         it("should handle empty input with both strategies", () => {
           const emptyInput = "";
           const charResult = split(emptyInput, {
-            chunkStrategy: ChunkStrategy.character,
+            chunkStrategy: "character",
           });
           const paragraphResult = split(emptyInput, {
             chunkStrategy: "paragraph",
@@ -1213,7 +1000,7 @@ describe("split", () => {
         it("should handle array with empty strings with both strategies", () => {
           const emptyArray = ["", "", ""];
           const charResult = split(emptyArray, {
-            chunkStrategy: ChunkStrategy.character,
+            chunkStrategy: "character",
           });
           const paragraphResult = split(emptyArray, {
             chunkStrategy: "paragraph",
@@ -1226,7 +1013,7 @@ describe("split", () => {
           const input = "a";
           const charResult = split(input, {
             chunkSize: 1,
-            chunkStrategy: ChunkStrategy.character,
+            chunkStrategy: "character",
           });
           const paragraphResult = split(input, {
             chunkSize: 1,
@@ -1240,7 +1027,7 @@ describe("split", () => {
           const input = "   ";
           const charResult = split(input, {
             chunkSize: 1,
-            chunkStrategy: ChunkStrategy.character,
+            chunkStrategy: "character",
             splitter: whitespaceSplitter,
           });
           const paragraphResult = split(input, {
@@ -1272,9 +1059,12 @@ describe("split", () => {
             { text: ["he¦"], start: 0, end: 3 },
             // Second two tokens: '¦', 'o'
             { text: ["¦o"], start: 3, end: 5 },
-            // Here, we get: 'world', then ignore all single >255 code chars, then ' �' but just the first space.
-            // This has the effect of grabbing the emoji wave in between.
-            { text: ["world", "👋🏻", " "], start: 5, end: 15 },
+            // 'world' (full match) plus the ' �' token which anchors at the
+            // space and claims its splitPart.length=2 of source — covering
+            // the trailing '¦'. The 5 all-replacement tokens for '👋🏻' have
+            // no anchor grapheme and are silently dropped, but the source
+            // bytes are still preserved in chunk.text via getChunk.
+            { text: ["world", "👋🏻", " ¦"], start: 5, end: 16 },
           ]);
         });
 
@@ -1286,7 +1076,7 @@ describe("split", () => {
           });
 
           assert.deepStrictEqual(result, [
-            { text: "hello w", start: 0, end: 7 },
+            { text: "hello w👋🏻", start: 0, end: 11 },
             { text: "rld", start: 11, end: 14 },
             { text: " extra", start: 14, end: 20 },
           ]);
@@ -1300,7 +1090,7 @@ describe("split", () => {
           });
 
           assert.deepStrictEqual(result, [
-            { text: "hello w👋🏻rld", start: 0, end: 14 },
+            { text: "hello w👋🏻rld ", start: 0, end: 15 },
             { text: "extra", start: 15, end: 20 },
           ]);
         });
@@ -1318,9 +1108,15 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
 
+          // The new grapheme-based anchoring correctly locates the inner '🚀'
+          // token in "more 🚀 text here". The previous algorithm silently
+          // dropped tokens that were entirely surrogate-pair code units
+          // (charCode > 255), producing 8 anchored tokens instead of 9. With
+          // 9 real tokens at chunkSize=5/chunkOverlap=2 we get 3 chunks, not 2.
           assert.deepStrictEqual(result, [
             { text: ["hi👋 w🌍rld wow😃", "🚀", "more"], start: 0, end: 23 },
-            { text: ["🚀", "more 🚀 text here", "yay!🎉"], start: 17, end: 42 },
+            { text: ["🚀", "more 🚀 text here"], start: 17, end: 36 },
+            { text: ["text here", "yay!🎉"], start: 27, end: 42 },
           ]);
         });
 
@@ -1353,9 +1149,24 @@ describe("split", () => {
             splitter: tokenSplitter,
           });
 
-          for (const chunk of chunks) {
+          assert.ok(chunks.length > 0, "expected at least one chunk");
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            // chunk.text matches positions
             const retrievedText = getChunk(input, chunk.start, chunk.end);
             assert.deepStrictEqual(chunk.text, retrievedText);
+            // positive width
+            assert.ok(
+              chunk.end > chunk.start,
+              `Chunk ${i} must have positive width`,
+            );
+            // monotonic ordering (no overlap=0 means no backward jumps)
+            if (i > 0) {
+              assert.ok(
+                chunk.start >= chunks[i - 1].start,
+                `Chunk ${i} start (${chunk.start}) must not precede chunk ${i - 1} start (${chunks[i - 1].start})`,
+              );
+            }
           }
         });
 
@@ -1370,11 +1181,262 @@ describe("split", () => {
             },
             {
               message:
-                'Splitter did not return any parts for input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...',
+                'Splitter returned a part that could not be located in input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...',
             },
           );
         });
       });
+    });
+
+    // B6: paragraph mode trims leading/trailing whitespace from each paragraph
+    // before anchoring. Trimmed bytes are absorbed by B5 forward-extension or
+    // left uncovered if they precede chunks[0].start.
+    describe("paragraph trim (B6)", () => {
+      it("leading whitespace in a paragraph is stripped from anchored parts (char splitter)", () => {
+        const input = "  hello\n\nworld";
+        const result = split(input, {
+          chunkSize: 5,
+          chunkStrategy: "paragraph",
+          splitter: charSplitter,
+        });
+        // Without B6, chunks[0] would have anchored the two leading spaces
+        // and started at position 0. With B6, chunks[0].start === 2 (where
+        // 'h' lives); the leading "  " is uncovered. The trailing "\n\n" is
+        // absorbed forward into chunks[0] via B5 extension.
+        assert.deepStrictEqual(result, [
+          { text: "hello\n\n", start: 2, end: 9 },
+          { text: "world", start: 9, end: 14 },
+        ]);
+      });
+
+      it("trailing whitespace in a paragraph is stripped but absorbed by B5 extension", () => {
+        const input = "hello   \n\nworld";
+        const result = split(input, {
+          chunkSize: 5,
+          chunkStrategy: "paragraph",
+          splitter: charSplitter,
+        });
+        // chunks[0] anchors only "hello"; trailing "   " is unanchored.
+        // B5 then extends chunks[0].end forward to chunks[1].start=10.
+        assert.deepStrictEqual(result, [
+          { text: "hello   \n\n", start: 0, end: 10 },
+          { text: "world", start: 10, end: 15 },
+        ]);
+      });
+
+      it("paragraph with only whitespace contributes no anchored parts", () => {
+        const input = "hello\n\n   \n\nworld";
+        const result = split(input, {
+          chunkSize: 5,
+          chunkStrategy: "paragraph",
+          splitter: charSplitter,
+        });
+        // Middle paragraph "   " trims to "" — no anchored parts.
+        // chunks[0] (from "hello") extends forward through "\n\n   \n\n".
+        assert.deepStrictEqual(result, [
+          { text: "hello\n\n   \n\n", start: 0, end: 12 },
+          { text: "world", start: 12, end: 17 },
+        ]);
+      });
+    });
+
+    // B5 invariant: chunks fully cover input from chunks[0].start onward.
+    // (Leading bytes before chunks[0].start may be uncovered by design.)
+    describe("coverage invariant (B5)", () => {
+      /**
+       * @param {import("../src/split.js").Chunk[]} chunks
+       * @param {number} totalLength
+       */
+      const assertCoversFromStart = (chunks, totalLength) => {
+        if (chunks.length === 0) {
+          return;
+        }
+        for (let i = 0; i < chunks.length - 1; i++) {
+          assert.ok(
+            chunks[i].end >= chunks[i + 1].start,
+            `gap between chunk ${i} (end=${chunks[i].end}) and chunk ${i + 1} (start=${chunks[i + 1].start})`,
+          );
+        }
+        assert.strictEqual(
+          chunks[chunks.length - 1].end,
+          totalLength,
+          "last chunk must extend to end of input",
+        );
+      };
+
+      it("whitespace-splitter string: gap whitespace absorbed", () => {
+        const input = "hello   world!  test";
+        const chunks = split(input, {
+          chunkSize: 2,
+          splitter: whitespaceSplitter,
+        });
+        assertCoversFromStart(chunks, input.length);
+      });
+
+      it("token-splitter string with emoji: dropped emoji bytes absorbed", () => {
+        const input = "hello w👋🏻rld extra";
+        const chunks = split(input, { chunkSize: 2, splitter: tokenSplitter });
+        assertCoversFromStart(chunks, input.length);
+      });
+
+      it("paragraph mode: \\n\\n delimiters absorbed", () => {
+        const input = "hello\n\nworld\n\ntest";
+        const chunks = split(input, {
+          chunkSize: 1,
+          chunkStrategy: "paragraph",
+          splitter: whitespaceSplitter,
+        });
+        assertCoversFromStart(chunks, input.length);
+      });
+
+      it("array input with overlap: total length is sum of element lengths", () => {
+        const input = ["hello world", "test string"];
+        const chunks = split(input, {
+          chunkSize: 2,
+          chunkOverlap: 1,
+          splitter: whitespaceSplitter,
+        });
+        const totalLength = input.reduce((sum, s) => sum + s.length, 0);
+        assertCoversFromStart(chunks, totalLength);
+      });
+
+      it("paragraph mode with array: every chunk's text matches its position", () => {
+        const input = ["hello\n\nworld", "test\n\nstring"];
+        const chunks = split(input, {
+          chunkSize: 1,
+          chunkStrategy: "paragraph",
+          splitter: whitespaceSplitter,
+        });
+        const totalLength = input.reduce((sum, s) => sum + s.length, 0);
+        assertCoversFromStart(chunks, totalLength);
+        for (const chunk of chunks) {
+          assert.deepStrictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
+    });
+
+    describe("negative inputs", () => {
+      it("propagates errors thrown by the splitter", () => {
+        const boomSplitter = () => {
+          throw new Error("boom");
+        };
+        assert.throws(() => split("hello", { splitter: boomSplitter }), {
+          message: "boom",
+        });
+      });
+
+      it("rejects splitter that returns a string instead of an array", () => {
+        assert.throws(
+          () =>
+            split("hello", {
+              chunkSize: 1,
+              // @ts-expect-error testing non-array splitter return
+              splitter: (text) => text,
+            }),
+          {
+            name: "TypeError",
+            message:
+              "Splitter must return an array of strings. Received: string",
+          },
+        );
+      });
+
+      it("rejects null input with a clear TypeError", () => {
+        assert.throws(
+          // @ts-expect-error null is not a valid input type
+          () => split(null),
+          {
+            name: "TypeError",
+            message:
+              "Input must be a string or array of strings. Received: object",
+          },
+        );
+      });
+
+      it("rejects number input with a clear TypeError", () => {
+        assert.throws(
+          // @ts-expect-error number is not a valid input type
+          () => split(42),
+          {
+            name: "TypeError",
+            message:
+              "Input must be a string or array of strings. Received: number",
+          },
+        );
+      });
+
+      it("rejects array input containing non-string elements", () => {
+        assert.throws(
+          // @ts-expect-error number inside array is not valid
+          () => split(["hello", 42, "world"]),
+          {
+            name: "TypeError",
+            message: "Input array elements must be strings. Found: number",
+          },
+        );
+      });
+    });
+
+    // Regression tests for bugs surfaced in the adversarial review.
+    // Active tests assert post-fix behavior. `it.todo` markers remain only
+    // for bugs whose fix hasn't shipped yet.
+    describe("regressions", () => {
+      it("B1: paragraph mode anchors next group at its real position, not first substring match", () => {
+        // Adversarial: second array element's content ("b") appears as a
+        // substring inside the first element ("ab"). Pre-fix the second
+        // paragraph anchored at offset 1 (inside "ab") instead of offset 2
+        // and the trailing "b" was silently dropped. Fix: boundaryGroups
+        // carries baseOffset explicitly.
+        const result = split(["ab", "b"], { chunkStrategy: "paragraph" });
+        assert.deepStrictEqual(result, [
+          { text: ["ab", "b"], start: 0, end: 3 },
+        ]);
+      });
+
+      it("B2: empty paragraphs do not poison subsequent group offset lookup", () => {
+        // Adversarial: an empty middle array element advanced baseOffset by
+        // one position pre-fix; the next paragraph's indexOf then started
+        // past its real location and returned -1, throwing "Could not find
+        // start of group". The empty middle element appears as "" in chunk
+        // text because getChunk includes zero-width items that sit between
+        // start and end positions.
+        const result = split(["b", "", "b"], { chunkStrategy: "paragraph" });
+        assert.deepStrictEqual(result, [
+          { text: ["b", "", "b"], start: 0, end: 2 },
+        ]);
+      });
+
+      it.todo(
+        "B7: cursor does not drift when splitter inflates a part's length",
+        () => {
+          // Synthetic splitter: appends a U+FFFD byte to each character so
+          // splitPart.length (2) exceeds source span (1). Current
+          // implementation uses splitPart.length to set `end` and then
+          // `cursor = end`, drifting one position per part; the second
+          // part's anchor 'b' (at source position 1) can't be found from
+          // cursor=2 and the call throws.
+          //
+          // Real-world relevance: tiktoken maintains 1:1 byte↔char (each
+          // un-decodable byte becomes exactly one U+FFFD) so the length-based
+          // cursor is exact for it. HuggingFace tokenizers like `gte-small`
+          // (via transformers.js) CAN inflate decoded length during
+          // normalization, so a real B7 fix is needed for them. A first
+          // attempt at anchor-based cursor walking undershot tiktoken's case
+          // and broke real Devanagari fixtures, so the fix needs to detect
+          // inflation rather than just switch cursor algorithms. Deferred to
+          // Phase 3.
+          const driftSplitter = (/** @type {string} */ text) =>
+            text.split("").map((ch) => ch + "�");
+          const result = split("abc", {
+            chunkSize: 3,
+            splitter: driftSplitter,
+          });
+          assert.deepStrictEqual(result, [{ text: "abc", start: 0, end: 3 }]);
+        },
+      );
     });
   });
 });

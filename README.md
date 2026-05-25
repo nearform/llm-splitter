@@ -46,10 +46,12 @@ Each chunk contains positional data (`start` and `end`) that may be used to sepa
 
 Notes:
 
+- `input` must be a `string` or an array whose elements are all strings; anything else throws `TypeError`.
 - `chunkSize` must be a positive integer ≥ 1
 - `chunkOverlap` must be a non-negative integer ≥ 0
 - `chunkOverlap` must be less than `chunkSize`
-- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`).
+- `splitter` must return an array of strings; returning a non-array throws `TypeError`.
+- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter will throw at runtime when a token can't be located in the source.
 - Here are some sample `splitter` functions:
   - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`
@@ -128,7 +130,7 @@ const chunks = split(texts, {
 
 // =>
 [
-  { text: ["Hello world!", "This is a"], start: 0, end: 21 },
+  { text: ["Hello world!", "This is a "], start: 0, end: 22 },
   { text: ["test."], start: 22, end: 27 },
 ];
 ```
@@ -237,7 +239,7 @@ const chunks = split(text, {
 });
 
 // =>
-[{ text: "Hello world! This is a test", start: 0, end: 27 }];
+[{ text: "Hello world! This is a test.", start: 0, end: 28 }];
 ```
 
 #### TikToken
@@ -309,17 +311,54 @@ const chunks = split(text, {
 
 </details>
 
+### Chunk Coverage and Positions
+
+`split()` is **lossless on positions** from `chunks[0].start` onward: every UTF-16 code unit of the source string at index `p` (where `chunks[0].start <= p < input.length`) appears in at least one chunk's `[start, end)` range. `start` and `end` are JavaScript string indices — i.e. UTF-16 code-unit offsets — so for non-ASCII text a single character may occupy one or two code units (a typical emoji is two; a CJK character is one). Concretely:
+
+- `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
+- `chunks[chunks.length - 1].end === input.length`.
+
+The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
+
+Practical consequences:
+
+- **Chunk starts are clean.** In `chunkStrategy: "paragraph"` mode, leading whitespace inside a paragraph is stripped before anchoring, so `chunks[i].start` (for `i > 0`) lands on real content.
+- **Chunk ends may carry trailing whitespace.** When the splitter drops code units at a paragraph or token boundary, those positions get absorbed into the _previous_ chunk by extending its `end` forward to meet the next chunk's `start`. So a chunk's `text` may end with `"\n\n"` or trailing whitespace — those positions weren't "extra," they were the gap between the splitter's last token in this chunk and the first token in the next.
+- **Leading code units before `chunks[0].start` are uncovered.** If the very first paragraph has leading whitespace, those positions appear in no chunk (no previous chunk to extend forward into them). This is the one place coverage is not full.
+
+For LLM input this also tends to help, not hurt: a chunk ending with `"\n\n"` carries an explicit paragraph-boundary signal that the model can read.
+
 ### Multibyte / Unicode Strings
 
-Processing text with multibyte characters (Unicode characters with char codes greater than 255 -- e.g. emojis) is problematic for tokenizers that can split strings across byte boundaries (as noted by [other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). `llm-splitter` needs to determine the `start`/`end` locations of each chunk and thus have to find locations for the split parts in the original input(s).
+Processing text with multibyte Unicode characters (emoji, CJK, accented Latin, combining marks) is problematic for tokenizers that split byte streams without regard to character boundaries (as noted by [other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). When a tokenizer like `tiktoken` decodes a token that straddles a multi-byte sequence, the result is a JavaScript string containing U+FFFD replacement characters (and sometimes isolated combining marks). `llm-splitter` needs to map each such part back to a `start`/`end` position in the original input.
 
-`llm-splitter` approaches the multibyte characters problem as follows: For each part produced by `splitter()`...
+`llm-splitter` anchors each part against the source string with a three-tier locate strategy (cheapest first):
 
-- If the part doesn't have multibyte characters, then it should be completely matched.
-- Next, try to do a simple string `startsWith(part)` match. This will correctly match on many strings with multibyte characters in them.
-- If that fails, then ignore the multibyte characters, and iterate through the part until we find a match on the single-byte parts. At this point we will potentially skip multibyte characters to just match on strings starting with single-byte characters.
+1. **`startsWith` at cursor** — byte-preserving splitter with the cursor sitting exactly on the next part (the char and tiktoken happy paths).
+2. **`indexOf(part)` forward from cursor** — byte-preserving splitter that drops bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so the cursor lands in the gap and tier 1 fails). The whole part still exists verbatim in source, so a native substring search finds it without allocating.
+3. **`indexOf(firstAnchorGrapheme(part))` forward from cursor** — byte-mutating splitter (e.g. `tiktoken` emitting U+FFFD when a token straddles a multi-byte sequence). Walk the part's [`Intl.Segmenter`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter) graphemes to find the first one that is _anchorable_ (not U+FFFD, not a combining mark or variation selector); locate that grapheme in input and anchor there. `end` is `start + part.length` (clamped to input length). indexOf is safe here because anchor graphemes are full grapheme clusters that, by construction, never start with a low surrogate or combining mark — a code-unit match cannot land mid-surrogate.
 
-When the parts are then gathered into chunks and aggregated into `{ text, start, end }` array items, this means that some of the chunks will _undercount_ the number of parts produced by the `splitter()` function -- put another way, there may be more parts in `chunkSize` than specified. In a simple test we conducted on 10MB of blog post content using the `tiktoken` tokenizer in our `splitter()` function, our results were as follows: for the 3 million parts produced, 99.6% of them matched the input strings without needing to ignore multibyte characters. So, if your chunking implementation is need hard constraints (like embedding API max tokens) on how large the chunks can be, we would advise to add a reduction in `chunkSize` to accomodate. Additionally, if a large number of multibyte characters are present, it would likely make sense to do some upfront analysis to determine a proper discount factor for `chunkSize`.
+Two failure modes worth knowing about:
+
+- **Unanchorable parts** — if the entire part consists of U+FFFD and/or combining marks (i.e. the tokenizer produced nothing positionable), the part is silently dropped. The source bytes it represented are still preserved in chunk text, because chunks span from their first part's `start` to their last part's `end` and gaps between parts are absorbed forward by `getChunk` (see "Chunk Coverage and Positions" above).
+- **Mutating splitters** — if a part has anchorable graphemes but none of them are found in the input (e.g. a splitter that lowercases or strips accents), the library throws. Splitters must not transform tokens.
+
+### Supported tokenizers (and a known limitation)
+
+The anchoring model above assumes a splitter whose **decoded part length equals the source span it consumed**. Concretely:
+
+- ✅ `text.split('')`, `text.split(/\s+/)`, sentence/line regex splitters — preserve source bytes verbatim.
+- ✅ `tiktoken` (OpenAI cl100k, ada-002, gpt-4o, etc.) — substitutes exactly one U+FFFD per undecodable byte, so length matches source span.
+- ⚠️ Embedding models whose tokenizer pipeline **normalizes during decode** (e.g. `gte-small`, `bge-small`, uncased BERT-style WordPiece — typically loaded via `@huggingface/transformers`) — can produce decoded strings longer than the source bytes they consumed. The cursor advances past the next real source position; subsequent tokens either throw `"Splitter returned a part that could not be located in input"` or anchor in the wrong place. To be precise, it's the _model_'s tokenizer config that drives this (lowercase, accent strip, NFC/NFD); the runtime is just executing what the model ships.
+
+If you're using one of the affected embedding-model tokenizers today, the safest workarounds are:
+
+1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
+2. Wrap your splitter to pad/trim decoded output to match source length before returning.
+
+Expanding tolerance for length-inflating tokenizers is tracked in [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md) — it's a planned future enhancement, not a permanent constraint.
+
+When parts are gathered into chunks, this means that some chunks may _undercount_ the number of tokens the splitter produced — there can be more semantic tokens in a chunk than `chunkSize` specifies. In a simple test on 10MB of blog post content using the `tiktoken` tokenizer, 99.6% of parts matched the input on tier 1. If your downstream has a hard token limit (like an embedding API's max tokens), apply a small `chunkSize` discount to accommodate multibyte undercounting.
 
 Let's take a quick look at multibyte handling with some emojis and a `tiktoken`-based splitter:
 
@@ -341,22 +380,24 @@ console.log(JSON.stringify(chunks, null, 2));
 // =>
 [
   {
-    text: "\nA noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
-    start: 0,
-    end: 53,
+    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on a",
+    start: 1,
+    end: 55,
   },
   {
-    text: " where on a little 🏔️ promontory it stood isolated,\nMark'd how",
-    start: 44,
-    end: 107,
+    text: " on a little 🏔️ promontory it stood isolated,\nMark'd how to",
+    start: 50,
+    end: 110,
   },
   {
-    text: "'d how to explore 🔍 the vacant vast 🌌 surrounding,\n",
-    start: 101,
+    text: " how to explore 🔍 the vacant vast 🌌 surrounding,\n",
+    start: 103,
     end: 154,
   },
 ];
 ```
+
+The leading `\n` in the input doesn't appear in any chunk — paragraph mode strips leading whitespace from each paragraph and the very first chunk has no previous chunk to extend back into. See "Chunk Coverage and Positions" above.
 
 Ultimately, this approach represents a tradeoff: while some higher-level Unicode data may be under counted during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
 
