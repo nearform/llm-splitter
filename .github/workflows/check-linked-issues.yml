@@ -6,6 +6,8 @@ name: Check linked issues
       - edited
       - reopened
       - synchronize
+      - labeled
+      - unlabeled
 jobs:
   check_pull_requests:
     runs-on: ubuntu-latest
@@ -18,3 +20,4 @@ jobs:
         id: check-linked-issues
         with:
           exclude-branches: release/**, dependabot/**
+          skip-linked-issues-check-label: skip-linked-issues
