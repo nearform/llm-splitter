@@ -214,126 +214,64 @@ describe("split", () => {
         ]);
       });
 
-      it("should throw error for chunkSize of 0", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 0 });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be at least 1",
-          },
-        );
-      });
+      // Argument validation — matrix.
+      /** @type {Array<{ name: string, opts: any, msg: string }>} */
+      const invalidOptionCases = [
+        {
+          name: "chunkSize 0",
+          opts: { chunkSize: 0 },
+          msg: "Chunk size must be at least 1",
+        },
+        {
+          name: "negative chunkSize",
+          opts: { chunkSize: -1 },
+          msg: "Chunk size must be at least 1",
+        },
+        {
+          name: "non-integer chunkSize",
+          opts: { chunkSize: 1.5 },
+          msg: "Chunk size must be a positive integer. Found: 1.5",
+        },
+        {
+          name: "non-number chunkSize (string)",
+          opts: { chunkSize: "invalid" },
+          msg: "Chunk size must be a positive integer. Found: invalid",
+        },
+        {
+          name: "negative chunkOverlap",
+          opts: { chunkSize: 5, chunkOverlap: -1 },
+          msg: "Chunk overlap must be at least 0",
+        },
+        {
+          name: "non-integer chunkOverlap",
+          opts: { chunkSize: 5, chunkOverlap: 1.5 },
+          msg: "Chunk overlap must be a non-negative integer. Found: 1.5",
+        },
+        {
+          name: "non-number chunkOverlap (string)",
+          opts: { chunkSize: 5, chunkOverlap: "invalid" },
+          msg: "Chunk overlap must be a non-negative integer. Found: invalid",
+        },
+        {
+          name: "chunkOverlap equal to chunkSize",
+          opts: { chunkSize: 5, chunkOverlap: 5 },
+          msg: "Chunk overlap must be less than chunk size",
+        },
+        {
+          name: "chunkOverlap greater than chunkSize",
+          opts: { chunkSize: 3, chunkOverlap: 5 },
+          msg: "Chunk overlap must be less than chunk size",
+        },
+      ];
 
-      // Validation tests
-      it("should throw error for negative chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: -1 });
-          },
-          {
+      for (const { name, opts, msg } of invalidOptionCases) {
+        it(`rejects ${name}`, () => {
+          assert.throws(() => split("hello", opts), {
             name: "Error",
-            message: "Chunk size must be at least 1",
-          },
-        );
-      });
-
-      it("should throw error for non-integer chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 1.5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be a positive integer",
-          },
-        );
-      });
-
-      it("should throw error for non-number chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            // @ts-expect-error test
-            split(input, { chunkSize: "invalid" });
-          },
-          {
-            name: "Error",
-            message: "Chunk size must be a positive integer",
-          },
-        );
-      });
-
-      it("should throw error for negative chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: -1 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be at least 0",
-          },
-        );
-      });
-
-      it("should throw error for non-integer chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: 1.5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be a non-negative integer. Found: 1.5",
-          },
-        );
-      });
-
-      it("should throw error for non-number chunkOverlap", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            // @ts-expect-error test
-            split(input, { chunkSize: 5, chunkOverlap: "invalid" });
-          },
-          {
-            name: "Error",
-            message:
-              "Chunk overlap must be a non-negative integer. Found: invalid",
-          },
-        );
-      });
-
-      it("should throw error when chunkOverlap >= chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 5, chunkOverlap: 5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be less than chunk size",
-          },
-        );
-      });
-
-      it("should throw error when chunkOverlap > chunkSize", () => {
-        const input = "hello";
-        assert.throws(
-          () => {
-            split(input, { chunkSize: 3, chunkOverlap: 5 });
-          },
-          {
-            name: "Error",
-            message: "Chunk overlap must be less than chunk size",
-          },
-        );
-      });
+            message: msg,
+          });
+        });
+      }
 
       // Token splitter tests
       it("should handle string input with token splitter", () => {
@@ -658,21 +596,30 @@ describe("split", () => {
       });
 
       // Overlap behavior verification
-      it("should verify overlap parts are correctly carried forward", () => {
+      it("overlap=2 carries last 2 chars of each chunk to next, with forward progress", () => {
         const input = "abcdefghijklmnop";
         const result = split(input, { chunkSize: 4, chunkOverlap: 2 });
-        // Verify that each chunk (except first) starts with the last 2 chars of previous chunk
+        assert.ok(result.length > 1, "expected multiple chunks");
         for (let i = 1; i < result.length; i++) {
           const prevChunk = result[i - 1];
           const currChunk = result[i];
           const prevText = /** @type {string} */ (prevChunk.text);
           const currText = /** @type {string} */ (currChunk.text);
 
-          // The current chunk should start with the last 2 characters of the previous chunk
           assert.strictEqual(
             currText.substring(0, 2),
             prevText.substring(prevText.length - 2),
             `Chunk ${i} should start with last 2 chars of chunk ${i - 1}`,
+          );
+          // Forward progress: each chunk must start strictly after the previous
+          // (otherwise we'd loop) and must have non-empty span.
+          assert.ok(
+            currChunk.start > prevChunk.start,
+            `Chunk ${i} start (${currChunk.start}) must exceed chunk ${i - 1} start (${prevChunk.start})`,
+          );
+          assert.ok(
+            currChunk.end > currChunk.start,
+            `Chunk ${i} must have positive width`,
           );
         }
       });
@@ -690,7 +637,7 @@ describe("split", () => {
       });
 
       // Stress tests
-      it("should handle chunkOverlap with very small chunkSize and large overlap", () => {
+      it("chunkSize=2 chunkOverlap=1 produces overlapping 2-char chunks across the full input", () => {
         const input = "abcdefghijklmnopqrstuvwxyz";
         const result = split(input, { chunkSize: 2, chunkOverlap: 1 });
         // Should have many overlapping chunks
@@ -973,7 +920,7 @@ describe("split", () => {
           ]);
         });
 
-        it("should compare character vs paragraph strategies", () => {
+        it("paragraph strategy produces fewer-or-equal chunks than character for the same input", () => {
           const input = "hello\n\nworld test";
           const charResult = split(input, {
             chunkSize: 3,
@@ -1202,9 +1149,24 @@ describe("split", () => {
             splitter: tokenSplitter,
           });
 
-          for (const chunk of chunks) {
+          assert.ok(chunks.length > 0, "expected at least one chunk");
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            // chunk.text matches positions
             const retrievedText = getChunk(input, chunk.start, chunk.end);
             assert.deepStrictEqual(chunk.text, retrievedText);
+            // positive width
+            assert.ok(
+              chunk.end > chunk.start,
+              `Chunk ${i} must have positive width`,
+            );
+            // monotonic ordering (no overlap=0 means no backward jumps)
+            if (i > 0) {
+              assert.ok(
+                chunk.start >= chunks[i - 1].start,
+                `Chunk ${i} start (${chunk.start}) must not precede chunk ${i - 1} start (${chunks[i - 1].start})`,
+              );
+            }
           }
         });
 
@@ -1219,11 +1181,115 @@ describe("split", () => {
             },
             {
               message:
-                'Splitter did not return any parts for input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...',
+                'Splitter returned a part that could not be located in input (23): "h👋🏻llo w👋🏻rld ex"... with part (8): "H👋🏻LLO"...',
             },
           );
         });
       });
+    });
+
+    // Lock in current behavior for malformed splitters and inputs.
+    // FIXME(B4): once B4 decides whether to throw on these, update assertions
+    // and remove the FIXME comments.
+    describe("negative inputs (current behavior)", () => {
+      it("propagates errors thrown by the splitter", () => {
+        const boomSplitter = () => {
+          throw new Error("boom");
+        };
+        assert.throws(() => split("hello", { splitter: boomSplitter }), {
+          message: "boom",
+        });
+      });
+
+      it("FIXME(B4): splitter returning a string (not an array) iterates per-character", () => {
+        // Each char of the returned string is treated as a separate part
+        // because `for…of` over a string yields characters. Anchor logic
+        // happens to make this work for the trivial case where the returned
+        // string equals input.
+        const result = split("hello", {
+          chunkSize: 1,
+          // @ts-expect-error testing non-array splitter return
+          splitter: (text) => text,
+        });
+        assert.deepStrictEqual(result, [
+          { text: "h", start: 0, end: 1 },
+          { text: "e", start: 1, end: 2 },
+          { text: "l", start: 2, end: 3 },
+          { text: "l", start: 3, end: 4 },
+          { text: "o", start: 4, end: 5 },
+        ]);
+      });
+
+      it("FIXME(B4): null input throws an opaque 'could not find start of group' error", () => {
+        assert.throws(
+          // @ts-expect-error null is not a valid input type
+          () => split(null),
+          { message: /Could not find start of group/ },
+        );
+      });
+
+      it("FIXME(B4): number input throws an opaque TypeError from the splitter", () => {
+        assert.throws(
+          // @ts-expect-error number is not a valid input type
+          () => split(42),
+          { name: "TypeError" },
+        );
+      });
+    });
+
+    // Failing-by-design regression tests for bugs surfaced in the adversarial
+    // review. These use `it.todo` so they don't fail the suite, but they
+    // assert the *post-fix* expected behavior — when the fix lands, flip them
+    // back to plain `it`.
+    describe("regressions (pending Phase 2 fix)", () => {
+      it.todo(
+        "B1: paragraph mode anchors next group at its real position, not first substring match",
+        () => {
+          // Adversarial: second array element's content ("b") appears as a
+          // substring inside the first element ("ab"). Current implementation
+          // anchors the second paragraph at offset 1 (inside "ab") instead of
+          // offset 2 (start of second array element), and the trailing "b" is
+          // silently dropped from output.
+          const result = split(["ab", "b"], { chunkStrategy: "paragraph" });
+          assert.deepStrictEqual(result, [
+            { text: ["ab", "b"], start: 0, end: 3 },
+          ]);
+        },
+      );
+
+      it.todo(
+        "B2: empty paragraphs do not poison subsequent group offset lookup",
+        () => {
+          // Adversarial: an empty middle array element advances baseOffset by
+          // one position; the next paragraph's indexOf then starts past its
+          // real location and returns -1, throwing "Could not find start of
+          // group". Should produce a normal chunk covering both "b" elements.
+          const result = split(["b", "", "b"], { chunkStrategy: "paragraph" });
+          assert.deepStrictEqual(result, [
+            { text: ["b", "b"], start: 0, end: 2 },
+          ]);
+        },
+      );
+
+      it.todo(
+        "B7: cursor does not drift when splitter inflates a part's length",
+        () => {
+          // Synthetic splitter: appends a U+FFFD byte to each character so
+          // splitPart.length (2) exceeds source span (1). Current
+          // implementation uses splitPart.length to set `end` and then
+          // `cursor = end`, drifting one position per part; the second
+          // part's anchor 'b' (at source position 1) can't be found from
+          // cursor=2 and the call throws. Note: real tokenizers (tiktoken)
+          // don't produce this exact shape — this is a synthetic regression.
+          const driftSplitter = (/** @type {string} */ text) =>
+            text.split("").map((ch) => ch + "�");
+          const result = split("abc", {
+            chunkSize: 3,
+            splitter: driftSplitter,
+          });
+          assert.deepStrictEqual(result, [{ text: "abc", start: 0, end: 3 }]);
+        },
+      );
     });
   });
 });

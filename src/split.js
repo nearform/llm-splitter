@@ -39,7 +39,9 @@ const splitValidate = ({
     );
 
   if (typeof chunkSize !== "number" || !Number.isInteger(chunkSize))
-    throw new Error("Chunk size must be a positive integer");
+    throw new Error(
+      `Chunk size must be a positive integer. Found: ${chunkSize}`,
+    );
 
   if (chunkSize < 1) throw new Error("Chunk size must be at least 1");
 
@@ -126,7 +128,7 @@ const anchorParts = (input, splitter, baseOffset) => {
       start = findGrapheme(input, cursor, anchor);
       if (start === -1)
         throw new Error(
-          `Splitter did not return any parts for input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
+          `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
         );
     }
 
@@ -209,6 +211,8 @@ export const split = (
     chunks.push({ text: getChunk(input, start, end), start, end });
     lastEmittedEnd = end;
     currentParts = chunkOverlap > 0 ? currentParts.slice(-chunkOverlap) : [];
+    // Any boundary reached on the just-emitted chunk is consumed by it;
+    // carried-over overlap parts are interior to the next chunk.
     hasBoundary = false;
   };
 
