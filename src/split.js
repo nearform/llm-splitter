@@ -262,24 +262,24 @@ const boundaryGroups = (strategy, inputs) => {
  *   text is exactly what the positions point to.
  *
  * ## Coverage / position semantics
- * From `chunks[0].start` onward, every source byte appears in exactly one
- * chunk (modulo `chunkOverlap`, which causes adjacent chunks to overlap by
- * `chunkOverlap` *parts*):
+ * From `chunks[0].start` onward, every UTF-16 code unit of the source
+ * appears in exactly one chunk (modulo `chunkOverlap`, which causes
+ * adjacent chunks to overlap by `chunkOverlap` *parts*):
  * - `chunks[i].end >= chunks[i+1].start` for adjacent pairs.
  * - `chunks[chunks.length - 1].end === total input length`.
  *
- * Gap bytes between the splitter's anchored parts (whitespace stripped by
+ * Code units between the splitter's anchored parts (whitespace stripped by
  * `split(/\s+/)`, paragraph `\n\n` delimiters, tokenizer-dropped multi-byte
  * fragments) are absorbed into the *previous* chunk by extending its `end`
  * forward to the next chunk's `start`. This means callers can rely on
- * positions to attribute every source byte to a chunk — useful for RAG
- * citations, source highlighting, and re-chunking. The one exception is
- * bytes before `chunks[0].start`, which have no previous chunk to extend
- * into and remain uncovered.
+ * positions to attribute every source code unit to a chunk — useful for
+ * RAG citations, source highlighting, and re-chunking. The one exception
+ * is code units before `chunks[0].start`, which have no previous chunk to
+ * extend into and remain uncovered.
  *
  * Trade-off: chunk text may carry trailing whitespace or `\n\n` delimiters
  * absorbed from the gap. A caller who wants trimmed text can call
- * `chunk.text.trim()`; the reverse (dropped bytes, want them back) would
+ * `chunk.text.trim()`; the reverse (dropped content, want it back) would
  * require re-reading source. The library prefers lossless.
  *
  * ## chunkSize
@@ -394,18 +394,20 @@ export const split = (
   }
 
   // B5: extend each chunk's `end` forward to absorb gaps to the next chunk;
-  // the final chunk extends to end of input. Leading bytes before chunks[0]
-  // are intentionally left uncovered (no "previous" chunk to extend).
+  // the final chunk extends to end of input. Leading code units before
+  // chunks[0] are intentionally left uncovered (no "previous" chunk to
+  // extend).
   //
-  // Why we preserve gap bytes rather than dropping them: chunks return
-  // {start,end} positions so callers can locate them in the source. Coverage
-  // means `chunks[i].end >= chunks[i+1].start` (modulo overlap) and
-  // `chunks[last].end === input.length` — a downstream consumer can attribute
-  // every source byte to a chunk for RAG citations, highlighting,
-  // re-chunking, etc. Dropping bytes would make positions ambiguous and
-  // citation ranges disjoint. Callers who want trimmed text can always do
-  // `chunk.text.trim()`; the reverse (we trim, they want it back) is
-  // impossible without re-reading source. Lossless library, lossy caller.
+  // Why we preserve gap content rather than dropping it: chunks return
+  // {start,end} positions (UTF-16 code-unit offsets) so callers can locate
+  // them in the source. Coverage means `chunks[i].end >= chunks[i+1].start`
+  // (modulo overlap) and `chunks[last].end === input.length` — a downstream
+  // consumer can attribute every source code unit to a chunk for RAG
+  // citations, highlighting, re-chunking, etc. Dropping content would make
+  // positions ambiguous and citation ranges disjoint. Callers who want
+  // trimmed text can always do `chunk.text.trim()`; the reverse (we trim,
+  // they want it back) is impossible without re-reading source. Lossless
+  // library, lossy caller.
   //
   // Consequence: chunks have clean starts (B6 strips paragraph-leading
   // whitespace before anchoring) but may carry trailing whitespace and

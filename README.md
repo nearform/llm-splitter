@@ -313,18 +313,18 @@ const chunks = split(text, {
 
 ### Chunk Coverage and Positions
 
-`split()` is **lossless on positions** from `chunks[0].start` onward: every byte of the source string at position `p` (where `chunks[0].start <= p < input.length`) appears in at least one chunk's `[start, end)` range. Concretely:
+`split()` is **lossless on positions** from `chunks[0].start` onward: every UTF-16 code unit of the source string at index `p` (where `chunks[0].start <= p < input.length`) appears in at least one chunk's `[start, end)` range. `start` and `end` are JavaScript string indices — i.e. UTF-16 code-unit offsets — so for non-ASCII text a single character may occupy one or two code units (a typical emoji is two; a CJK character is one). Concretely:
 
 - `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
 - `chunks[chunks.length - 1].end === input.length`.
 
-The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped bytes that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those bytes would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the bytes back) is impossible without re-reading the source. So the library keeps everything.
+The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
 
 Practical consequences:
 
 - **Chunk starts are clean.** In `chunkStrategy: "paragraph"` mode, leading whitespace inside a paragraph is stripped before anchoring, so `chunks[i].start` (for `i > 0`) lands on real content.
-- **Chunk ends may carry trailing whitespace.** When the splitter drops bytes at a paragraph or token boundary, those bytes get absorbed into the _previous_ chunk by extending its `end` forward to meet the next chunk's `start`. So a chunk's `text` may end with `"\n\n"` or trailing whitespace — those bytes weren't "extra," they were the gap between the splitter's last token in this chunk and the first token in the next.
-- **Leading bytes before `chunks[0].start` are uncovered.** If the very first paragraph has leading whitespace, those bytes appear in no chunk (no previous chunk to extend forward into them). This is the one place coverage is not full.
+- **Chunk ends may carry trailing whitespace.** When the splitter drops code units at a paragraph or token boundary, those positions get absorbed into the _previous_ chunk by extending its `end` forward to meet the next chunk's `start`. So a chunk's `text` may end with `"\n\n"` or trailing whitespace — those positions weren't "extra," they were the gap between the splitter's last token in this chunk and the first token in the next.
+- **Leading code units before `chunks[0].start` are uncovered.** If the very first paragraph has leading whitespace, those positions appear in no chunk (no previous chunk to extend forward into them). This is the one place coverage is not full.
 
 For LLM input this also tends to help, not hurt: a chunk ending with `"\n\n"` carries an explicit paragraph-boundary signal that the model can read.
 
