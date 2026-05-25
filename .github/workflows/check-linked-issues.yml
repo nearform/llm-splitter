@@ -20,4 +20,3 @@ jobs:
         id: check-linked-issues
         with:
           exclude-branches: release/**, dependabot/**
-          skip-linked-issues-check-label: skip-linked-issues
