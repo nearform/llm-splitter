@@ -56,7 +56,7 @@ gte-small fixtures (see [Phase 1 findings](#phase-1-findings-2026-05-25-real-gte
 All three surface as one of two visible symptoms:
 
 - **Hard throw** — `anchorParts` raises `Splitter returned a part that
-  could not be located in input (…)`. Loud, easy to detect.
+could not be located in input (…)`. Loud, easy to detect.
 - **Silent mis-anchoring** — anchored positions land on the wrong source
   bytes. Usually masked by a later cascading throw, but for inputs
   without repeating anchor graphemes the corruption persists. The more
