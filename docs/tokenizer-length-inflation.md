@@ -1,9 +1,8 @@
 # Tokenizer length inflation
 
-> **Status:** open. Captured here for future work; may be promoted to a GitHub
-> issue. Tracked internally as "B7" in
-> [/Users/rye/.claude/plans/i-want-an-adversarial-warm-peach.md](../) (the
-> adversarial review plan).
+> **Status:** open. Phase 1 (real-world test fixtures landed, gated by
+> `B7_TEST=1`) is complete; Phase 2 (implementation) is the next step. This
+> doc is self-contained and may be promoted to a GitHub issue as-is.
 
 ## Problem
 
@@ -38,18 +37,31 @@ is doing what it was trained to do.
 
 ## How it fails today
 
-When a tokenizer inflates a token's decoded length, `cursor` advances past
-where the next token actually starts in source. Two symptoms follow:
+Three distinct failure modes are now confirmed against the real-world
+gte-small fixtures (see [Phase 1 findings](#phase-1-findings-2026-05-25-real-gte-small-fixtures) below for evidence per mode):
 
-1. **Hard throw** — a later token's anchor grapheme isn't present at-or-after
-   the over-advanced cursor. `anchorParts` raises `Splitter returned a part
-that could not be located in input (…)`. Loud failure, easy to detect.
-2. **Wrong anchoring** — the over-advanced cursor still finds _some_ match
-   for the next token's anchor (e.g. the same letter reappearing later in
-   the text). Anchored positions get attributed to the wrong source bytes;
-   downstream consumers think the chunk covers content it doesn't.
+1. **Length inflation** — a token's decoded length exceeds its source
+   span. Examples: WordPiece `##` continuation prefixes (`"##ん"` decoded
+   length 3 vs. source span 1), special tokens (`"[CLS]"` decoded length 5
+   vs. source span 0). Cursor advances past genuine source bytes.
+2. **Equal-length content mutation** — a token's decoded length matches
+   the source span but the bytes differ. Examples: lowercase (`"Hi"` →
+   `"hi"`), accent strip (`"Evän"` → `"evan"`). Tier 1 `startsWith` and
+   Tier 2 `indexOf(splitPart)` both fail; Tier 3 anchor-grapheme lookup
+   either throws or mis-anchors silently.
+3. **Zero-span control tokens** — `[CLS]`, `[SEP]`, `[UNK]` have decoded
+   form but consume zero source. Tier 3 happily anchors them on the
+   literal `[`/`C`/`S` if those chars exist in source, polluting positions.
 
-Symptom 2 is the more dangerous one because it's silent.
+All three surface as one of two visible symptoms:
+
+- **Hard throw** — `anchorParts` raises `Splitter returned a part that
+  could not be located in input (…)`. Loud, easy to detect.
+- **Silent mis-anchoring** — anchored positions land on the wrong source
+  bytes. Usually masked by a later cascading throw, but for inputs
+  without repeating anchor graphemes the corruption persists. The more
+  dangerous of the two because the error (when it eventually comes)
+  names the wrong token.
 
 ## What the synthetic regression test captures
 
@@ -102,6 +114,15 @@ splitter is in, not pick one universal cursor strategy.
 
 These are not mutually exclusive. Listed cheapest first.
 
+> **Heads-up:** Direction A as written was the original favorite, but
+> [Phase 1 findings](#phase-1-findings-2026-05-25-real-gte-small-fixtures)
+> revealed it's necessary-but-not-sufficient. A handles length inflation
+> and the special-token case but not equal-length content mutation, which
+> turns out to be the most common gte-small failure. A complete fix
+> likely needs A plus either control-token filtering on the splitter side
+> or a Tier 3 strategy that compares normalized source against splitPart
+> (see "Implications for Phase 2" under Phase 1 findings).
+
 ### A. Inflation detection per part
 
 After locating `start`, compare `splitPart`'s code-point stream against
@@ -133,8 +154,12 @@ un-decoded bytes that are still present in source.
   normalization?). May need a similar "always matches" exemption.
 - ⚠️ Cost: O(splitPart.length) per part. Total O(input.length) across all
   parts in the byte-preserving case. Acceptable.
-
-This is currently my preferred candidate.
+- ❌ **Doesn't address equal-length content mutation.** Phase 1 evidence
+  showed lowercase/accent-strip mutations (same length, different bytes)
+  are the more common gte-small failure; A's divergence detector would
+  correctly report "diverges at index 0" but still wouldn't tell us
+  _where_ in source the part belongs. See Phase 1 findings for the
+  refined proposal.
 
 ### B. Tokenizer-kind option
 
@@ -190,36 +215,26 @@ Acceptable if A turns out to be infeasible; documenting upfront is also
 the right move regardless of which direction we go (so users hit it
 loudly, not silently).
 
-## Test fixture plan
+## Test fixtures: ✅ Phase 1 complete
 
-A real-world B7 fix needs a model whose tokenizer pipeline triggers the
-inflation. The easiest delivery vehicle in JS is `transformers.js` loading
-a model like `gte-small`. Plan:
+`@huggingface/transformers` is now a dev dependency. `Xenova/gte-small`
+loads lazily inside a `before()` hook only when `B7_TEST=1` is set —
+plain `npm test` doesn't touch the 23 MB model. Two splitter helpers
+(`gteSmallSplitterNaive` and `gteSmallSplitter`) and five fixtures live
+in [test/split.test.js](../test/split.test.js) under the `regressions`
+describe block. Run with:
 
-1. Add `@huggingface/transformers` as a **dev** dependency only (don't
-   force it on consumers).
-2. Build a `tokenSplitter` helper similar to the tiktoken one in
-   `test/split.test.js`. Load `gte-small` (or whichever lightweight model
-   reproduces the inflation; `bge-small` is a fallback). The model file
-   determines normalizer behavior — picking the right model is the
-   important part, the runtime is incidental.
-3. Reproduce the failure: input that triggers the model's normalizer
-   (lowercase, accent stripping, NFD/NFC differences). Suggested fixtures:
-   - `"CAFÉ"` — uppercase + accented; `gte-small` is uncased and likely
-     normalizes.
-   - `"naïve résumé"` — accent stripping.
-   - Multibyte: `"こんにちは world"` — CJK to verify cursor isn't broken
-     for byte-preserving multibyte after fix.
-4. Write the assertions for the **post-fix** expected behavior (chunks
-   that cover source correctly), and mark `it.todo` until B7 lands. Pair
-   with the synthetic test so both pass when the fix is correct.
-5. If the `transformers.js` install is heavy enough to slow `npm install`,
-   gate the test behind an env var (`B7_TEST=1 npm test`) or skip when
-   the dep isn't resolvable. Don't make CI mandatory until B7 is fixed.
+```sh
+B7_TEST=1 npm test
+```
 
-Other models worth eyeballing once the fixture works:
+See [Phase 1 findings](#phase-1-findings-2026-05-25-real-gte-small-fixtures)
+below for what those fixtures revealed.
 
-- `Xenova/bge-small-en-v1.5` — similar normalization profile.
+Other embedding models worth covering once B7 has a working fix
+(broader-profile regression coverage):
+
+- `Xenova/bge-small-en-v1.5` — similar normalizer profile.
 - `Xenova/all-MiniLM-L6-v2` — popular default for embedding pipelines.
 - `Xenova/multilingual-e5-small` — exercises broader Unicode.
 
@@ -227,11 +242,14 @@ Other models worth eyeballing once the fixture works:
 
 The original adversarial review identified B7 in Phase 1 with a synthetic
 regression test. Phase 2 attempted the hybrid fix described above; it
-broke tiktoken; reverted. Concurrently, the user identified `gte-small`
-(typically loaded via `transformers.js`) as the real-world driver — a
-model whose tokenizer pipeline applies decode-time normalization. Without
-that fixture available locally, blind algorithm changes weren't going to
-converge.
+broke tiktoken; reverted. Concurrently, `gte-small` (typically loaded
+via `transformers.js`) was identified as the real-world driver — a
+model whose tokenizer pipeline applies decode-time normalization.
+Without that fixture available locally, blind algorithm changes weren't
+going to converge.
+
+Phase 1 (test fixtures) has since landed (see above). Phase 2
+(implementation) is the next pass.
 
 ## Phase 1 findings (2026-05-25, real gte-small fixtures)
 
@@ -376,15 +394,12 @@ one-off integrations; not a long-term posture for a "RAG-first" library.
 
 ## References
 
-- [test/split.test.js:1397](../test/split.test.js#L1397) — synthetic
-  regression test (`it.todo`).
-- [test/split.test.js](../test/split.test.js) `regressions` block —
-  B7-real fixtures using gte-small, gated by `B7_TEST=1`.
-- [src/split.js:155-188](../src/split.js#L155-L188) — three-tier locate
-  strategy in `anchorParts`. Tier 3 (`firstAnchorGrapheme` + `indexOf`)
-  is what would need to change for inflation handling.
-- [README.md](../README.md) "Multibyte / Unicode Strings" — current
-  user-facing description; needs a tokenizer-constraint note added (see
-  parallel work for that).
-- `~/.claude/projects/-Users-rye-scm-nf-llm-splitter-rewrite/memory/project_tokenizer_length_inflation.md`
-  — agent-side note linking this work to ongoing development.
+- [test/split.test.js](../test/split.test.js) — synthetic regression
+  (`it.todo` near the top of the `regressions` describe) and the
+  B7-real fixtures gated by `B7_TEST=1` (same block).
+- [src/split.js](../src/split.js) `anchorParts` — three-tier locate
+  strategy. Tier 3 (`firstAnchorGrapheme` + `indexOf`) is what would
+  need to change for inflation handling.
+- [README.md](../README.md) "Multibyte / Unicode Strings" + "Supported
+  tokenizers (and a known limitation)" — current user-facing
+  description and constraint note.

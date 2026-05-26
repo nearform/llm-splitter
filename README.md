@@ -356,7 +356,7 @@ If you're using one of the affected embedding-model tokenizers today, the safest
 1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
 2. Wrap your splitter to pad/trim decoded output to match source length before returning.
 
-Expanding tolerance for length-inflating tokenizers is tracked in [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md) — it's a planned future enhancement, not a permanent constraint.
+Expanding tolerance for length-inflating tokenizers is tracked in [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md) — it's a planned future enhancement, not a permanent constraint. Real-world regression fixtures for this case live in [test/split.test.js](test/split.test.js) and can be exercised with `B7_TEST=1 npm test` (lazy-loads the `gte-small` model on demand; plain `npm test` doesn't touch it).
 
 When parts are gathered into chunks, this means that some chunks may _undercount_ the number of tokens the splitter produced — there can be more semantic tokens in a chunk than `chunkSize` specifies. In a simple test on 10MB of blog post content using the `tiktoken` tokenizer, 99.6% of parts matched the input on tier 1. If your downstream has a hard token limit (like an embedding API's max tokens), apply a small `chunkSize` discount to accommodate multibyte undercounting.
 
