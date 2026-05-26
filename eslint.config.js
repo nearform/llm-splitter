@@ -19,6 +19,7 @@ export default [
       sourceType: "module",
       globals: {
         TextDecoder: "readonly",
+        process: "readonly",
       },
     },
     rules: {

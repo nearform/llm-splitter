@@ -19,12 +19,49 @@ const tokenSplitter = (text) =>
     td.decode(tokenizer.decode(new Uint32Array([token]))),
   );
 
+// gte-small (BERT WordPiece via @huggingface/transformers). Loaded lazily in
+// before() only when B7_TEST=1 to avoid a 23 MB model download on plain
+// `npm test`. See test/split.test.js B7-real regression group and
+// docs/tokenizer-length-inflation.md.
+/** @type {{ encode: (text: string) => number[], decode: (ids: number[]) => string } | undefined} */
+let gteTokenizer;
+/** @param {string} text */
+const gteSmallSplitterNaive = (text) => {
+  if (!gteTokenizer) {
+    throw new Error("gteTokenizer not initialized");
+  }
+  const tok = gteTokenizer;
+  return tok.encode(text).map((id) => tok.decode([id]));
+};
+/** @param {string} text */
+const gteSmallSplitter = (text) => {
+  if (!gteTokenizer) {
+    throw new Error("gteTokenizer not initialized");
+  }
+  const tok = gteTokenizer;
+  return tok
+    .encode(text)
+    .map((id) => tok.decode([id]))
+    .filter((t) => t !== "[CLS]" && t !== "[SEP]" && t !== "[UNK]");
+};
+
+const B7_TEST_ENABLED = !!process.env.B7_TEST;
+const B7_SKIP_REASON =
+  "Set B7_TEST=1 to enable gte-small regression tests (downloads Xenova/gte-small ~23MB)";
+
 // Tests
 /** @type {import('tiktoken').Tiktoken} */
 let tokenizer;
 describe("split", () => {
-  before(() => {
+  before(async () => {
     tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002");
+    if (B7_TEST_ENABLED) {
+      const { AutoTokenizer } = await import("@huggingface/transformers");
+      const loaded = await AutoTokenizer.from_pretrained("Xenova/gte-small");
+      gteTokenizer = /** @type {typeof gteTokenizer} */ (
+        /** @type {unknown} */ (loaded)
+      );
+    }
   });
 
   after(() => {
@@ -1437,6 +1474,84 @@ describe("split", () => {
           assert.deepStrictEqual(result, [{ text: "abc", start: 0, end: 3 }]);
         },
       );
+
+      // B7-real: real-world fixtures using `gte-small` (BERT WordPiece via
+      // @huggingface/transformers). The model's normalizer pipeline
+      // (NFD + lowercase + strip-accents) plus WordPiece's `##` continuation
+      // prefix break the splitter's anchoring assumptions in several distinct
+      // ways. These tests are gated by B7_TEST=1 because they download a
+      // 23 MB model on first run and aren't a CI requirement until B7 is
+      // fixed. See docs/tokenizer-length-inflation.md.
+      //
+      // Two helpers are exercised per fixture:
+      //   - gteSmallSplitterNaive: encode + decode-each-token, nothing
+      //     filtered. Includes [CLS]/[SEP] and (if any) [UNK].
+      //   - gteSmallSplitter: filters [CLS]/[SEP]/[UNK] but keeps `##`
+      //     prefixes and the lowercase/accent-stripped output.
+      // nearform/joyce's documented workaround additionally pre-lowercases
+      // input and strips `##`; we deliberately do NOT do that here, to
+      // expose what the library handles unaided.
+      /**
+       * @param {import("../src/split.js").Chunk[]} chunks
+       * @param {number} totalLength
+       */
+      const assertCovers = (chunks, totalLength) => {
+        if (chunks.length === 0) {
+          return;
+        }
+        for (let i = 0; i < chunks.length - 1; i++) {
+          assert.ok(
+            chunks[i].end >= chunks[i + 1].start,
+            `gap between chunk ${i} (end=${chunks[i].end}) and chunk ${i + 1} (start=${chunks[i + 1].start})`,
+          );
+        }
+        assert.strictEqual(
+          chunks[chunks.length - 1].end,
+          totalLength,
+          "last chunk must extend to end of input",
+        );
+      };
+
+      const b7Fixtures = [
+        {
+          label:
+            "headline real-world case (uppercase + apostrophe + accented letter)",
+          input: "Hi there. I'm Evän.",
+        },
+        { label: "CAFÉ (uppercase + accent)", input: "CAFÉ" },
+        { label: "naïve résumé (accent-only)", input: "naïve résumé" },
+        {
+          label: "こんにちは world (CJK + ASCII control)",
+          input: "こんにちは world",
+        },
+        { label: "hello world (pure-ASCII control)", input: "hello world" },
+      ];
+
+      const skipB7 = B7_TEST_ENABLED ? false : B7_SKIP_REASON;
+      for (const { label, input } of b7Fixtures) {
+        it(
+          `B7-real (truly naive gte-small): ${label}`,
+          { skip: skipB7 },
+          () => {
+            const chunks = split(input, {
+              chunkSize: 4,
+              splitter: gteSmallSplitterNaive,
+            });
+            assertCovers(chunks, input.length);
+          },
+        );
+        it(
+          `B7-real (almost-naive gte-small): ${label}`,
+          { skip: skipB7 },
+          () => {
+            const chunks = split(input, {
+              chunkSize: 4,
+              splitter: gteSmallSplitter,
+            });
+            assertCovers(chunks, input.length);
+          },
+        );
+      }
     });
   });
 });

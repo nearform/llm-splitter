@@ -233,10 +233,153 @@ model whose tokenizer pipeline applies decode-time normalization. Without
 that fixture available locally, blind algorithm changes weren't going to
 converge.
 
+## Phase 1 findings (2026-05-25, real gte-small fixtures)
+
+After wiring `@huggingface/transformers` v4 + `Xenova/gte-small` into the test
+suite as B7-real regression tests (see
+[test/split.test.js](../test/split.test.js), `regressions` describe block,
+gated by `B7_TEST=1`), the failure modes are concrete and partly differ from
+this doc's original framing.
+
+### What the tokenizer actually emits
+
+For the headline fixture `"Hi there. I'm Evän."`, per-token decode produces:
+
+```
+["[CLS]","hi","there",".","i","'","m","evan",".","[SEP]"]
+```
+
+Two classes of mutation are visible in this single input:
+
+1. **Special tokens** `[CLS]`/`[SEP]` — zero source span, framing the input.
+2. **Lowercase + accent strip** — `"Hi"` → `"hi"`, `"Evän"` → `"evan"`.
+   NFD + lowercase + strip-accents is gte-small's normalizer pipeline,
+   applied at encode time and never inverted on decode. Note the
+   first-character mutation `"H"` → `"h"`: this is what breaks Tier 1
+   `startsWith` and Tier 2 `indexOf` at position 0, even though both source
+   and decoded forms have identical length.
+
+The third class — **WordPiece `##` continuation prefixes** — is exercised by
+the `"こんにちは world"` fixture, where decode of each CJK subword token
+returns the `##`-prefixed form verbatim. For example `"##ん"` has decoded
+length 3 versus source span 1 for `"ん"`. **That's genuine length inflation
+in the original B7 sense.** Longer English inputs with multi-syllable
+out-of-vocab words would exercise it too, but the deliberately small
+headline fixture above does not.
+
+### Failure mode by helper and fixture
+
+Tested with `chunkSize: 4`. Two helpers:
+
+- `gteSmallSplitterNaive` — encode + decode-each-token, no filtering.
+- `gteSmallSplitter` — same, but filters `[CLS]`/`[SEP]`/`[UNK]`.
+
+| Fixture                 | Truly naive      | Almost-naive                                                                       |
+| ----------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| `"Hi there. I'm Evän."` | Throw on `[CLS]` | Throw on `"there"` (after silent mis-anchor of `"hi"` to the `h` inside `"there"`) |
+| `"CAFÉ"`                | Throw on `[CLS]` | Throw on `"cafe"` (no lowercase `c` anywhere in source)                            |
+| `"naïve résumé"`        | Throw on `[CLS]` | **Passes** (anchors `n`→0 and `r`→6 happen to be correct)                          |
+| `"こんにちは world"`    | Throw on `[CLS]` | Throw on `"##ん"` (Tier 3 anchors on literal `#`, not present in source)           |
+| `"hello world"`         | Throw on `[CLS]` | **Passes** (no mutation: source already lowercase ASCII)                           |
+
+Eight of ten tests fail; the two that pass succeed only because their
+first-non-FFFD grapheme happens to match source verbatim.
+
+### What this changes vs. the original analysis
+
+1. **"Inflation" is one of three problems, not the dominant one.** The
+   original doc framed B7 as decoded length exceeding source span. That's
+   real for WordPiece `##` prefixes (`"##ん"` length 3 vs span 1) and for
+   special tokens (length 5 vs span 0). But the **more common and more
+   dangerous** failure for gte-small is **content mutation with equal
+   length** — `"hi"` (length 2) vs source `"Hi"` (length 2). Same length, no
+   inflation, but Tier 1 `startsWith` and Tier 2 `indexOf` both fail because
+   the bytes differ, forcing Tier 3 anchor-grapheme lookup, which then
+   either throws or silently picks a wrong position.
+
+2. **The "silent mis-anchoring" warned about in the original doc happens,
+   but a later throw usually catches it.** In the headline fixture,
+   `"hi"` silently mis-anchors into the `"there"` part of the input (the
+   first lowercase `h` after position 0), but the next token `"there"`
+   then has nowhere to anchor and throws. The silent corruption is
+   _masked_ by the cascading hard failure — which is good in practice (loud
+   error eventually) but bad for diagnosis (the error names the wrong
+   token). Cases where the mis-anchor doesn't cascade — e.g., where every
+   token happens to have a unique anchor grapheme present at the right
+   spot — would silently produce wrong `start`/`end`. `"naïve résumé"`
+   passes purely because `n` and `r` are each unique and in the right place;
+   add a second `r` later in the input and it would mis-anchor silently.
+
+3. **Tier 3 `firstAnchorGrapheme` actively harms when the splitter is
+   normalizing.** It assumes any non-FFFD grapheme in the part is a faithful
+   stand-in for source bytes. That holds for tiktoken's FFFD-substitution
+   pattern but breaks for case- or accent-mutated graphemes (looks fine,
+   anchors wrong) and for WordPiece `##` (anchors on the `#` literal, which
+   isn't in source). A fix that's robust here probably needs to
+   normalize-then-compare both sides (e.g. NFD + lowercase + strip-accents on
+   a window of source bytes before anchoring) rather than trust the part's
+   bytes.
+
+4. **The "library reslices chunk.text from source" behavior is doing real
+   work for us.** For `"naïve résumé"` the splitter returns
+   `["naive","resume"]` but `chunk.text` comes back as `"naïve résumé"` —
+   sliced from the source string using `start`/`end`, not concatenated from
+   splitter output. So when anchors land in the right places the output is
+   semantically correct even though the splitter mutated content. The risk
+   surface is entirely in the anchor positions, not the text payload.
+
+### Implications for Phase 2
+
+The original doc's **Direction A** (per-part inflation detection by
+comparing splitPart code-points against source until divergence, with FFFD
+as a wildcard) addresses the WordPiece `##` case and the special-token case
+but **does not address content mutation with equal length** — the
+divergence detector would correctly report "length 2 part diverges from
+source at index 0" and stop the cursor at the start, but it still wouldn't
+tell us _where in source_ the part belongs.
+
+Two complementary changes seem necessary:
+
+- **Pre-anchor: detect zero-source-span tokens** (special tokens like `[CLS]`
+  whose decoded form contains no source-anchorable graphemes). These should
+  emit an empty chunk position or be skipped, not propagate the cursor.
+- **Tier 3 replacement: normalized comparison anchor**. Instead of
+  `indexOf(firstAnchorGrapheme(splitPart), cursor)`, walk forward in source
+  from `cursor` applying the same normalization the splitter would
+  (NFD + lowercase + strip-accents + `##`-strip if user opts in) and find
+  the first position where `normalize(source[i..])` starts with
+  `normalize(splitPart)`. This is more expensive but only kicks in on
+  Tier 3 fallback, and it's the only thing that correctly handles mutated
+  content.
+
+The cleanest API shape is probably an opt-in normalization function passed
+alongside the splitter: `split(input, { splitter, sourceNormalize })`.
+Library default is identity. Users wiring up gte-small can pass
+`sourceNormalize: (s) => s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")`
+or equivalent. That's still cheaper than `splitterKind` enums from
+Direction B and doesn't require classification heuristics from Direction D.
+
+This is approximate — the real Phase 2 design needs to validate that
+proposal against tiktoken's existing fixtures (especially the Devanagari one
+that broke in the prior hybrid-cursor attempt). The point of Phase 1 is
+that the design space is now substantially narrower: inflation detection
+alone isn't sufficient.
+
+### Workaround status
+
+The current production workaround (from `nearform/joyce`) — lowercase input
+before `split`, strip `##` and special tokens from decoded output — works
+because it neutralizes both mutation classes from the splitter side. It
+costs the user a separate `[start, end]` lookup against the source-cased
+text (joyce uses `getChunk` against an un-lowercased copy). Acceptable for
+one-off integrations; not a long-term posture for a "RAG-first" library.
+
 ## References
 
 - [test/split.test.js:1397](../test/split.test.js#L1397) — synthetic
   regression test (`it.todo`).
+- [test/split.test.js](../test/split.test.js) `regressions` block —
+  B7-real fixtures using gte-small, gated by `B7_TEST=1`.
 - [src/split.js:155-188](../src/split.js#L155-L188) — three-tier locate
   strategy in `anchorParts`. Tier 3 (`firstAnchorGrapheme` + `indexOf`)
   is what would need to change for inflation handling.
