@@ -464,21 +464,21 @@ $ npx serve
                 ? html`
                     <div className="cards-output">
                       ${results.map(
-                      (chunk, index) => html`
-                        <div key=${index} className="chunk-card">
-                          <div className="chunk-header">
-                            <span className="chunk-index"
-                              >Chunk ${index + 1}</span
-                            >
-                            <span className="chunk-range"
-                              >${chunk.start}-${chunk.end} (${chunk.text.length}
-                              chars)</span
-                            >
+                        (chunk, index) => html`
+                          <div key=${index} className="chunk-card">
+                            <div className="chunk-header">
+                              <span className="chunk-index"
+                                >Chunk ${index + 1}</span
+                              >
+                              <span className="chunk-range"
+                                >${chunk.start}-${chunk.end}
+                                (${chunk.text.length} chars)</span
+                              >
+                            </div>
+                            <div className="chunk-text">${chunk.text}</div>
                           </div>
-                          <div className="chunk-text">${chunk.text}</div>
-                        </div>
-                      `,
-                    )}
+                        `,
+                      )}
                     </div>
                   `
                 : html`
@@ -659,14 +659,14 @@ $ npx serve
                         <div
                           className="custom-splitter-toggle"
                           onClick=${() =>
-                          setShowCustomSplitter(!showCustomSplitter)}
+                            setShowCustomSplitter(!showCustomSplitter)}
                         >
                           <i
                             className=${
-                            showCustomSplitter
-                              ? "ph ph-caret-down"
-                              : "ph ph-caret-right"
-                          }
+                              showCustomSplitter
+                                ? "ph ph-caret-down"
+                                : "ph ph-caret-right"
+                            }
                           ></i>
                           Custom Splitter Function
                         </div>
@@ -675,10 +675,10 @@ $ npx serve
                         >
                           <p
                             style=${{
-                            margin: "0 0 10px",
-                            fontSize: "14px",
-                            color: "#7f8c8d",
-                          }}
+                              margin: "0 0 10px",
+                              fontSize: "14px",
+                              color: "#7f8c8d",
+                            }}
                           >
                             Enter a JavaScript function that takes a string and
                             returns an array of strings:
@@ -686,22 +686,22 @@ $ npx serve
                           <textarea
                             value=${customSplitterCode}
                             onChange=${(e) =>
-                            setCustomSplitterCode(e.target.value)}
+                              setCustomSplitterCode(e.target.value)}
                             placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
                             rows="3"
                             style=${{
-                            width: "100%",
-                            boxSizing: "border-box",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: "8px",
-                            padding: "12px 16px",
-                            fontSize: "13px",
-                            fontFamily:
-                              "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-                            transition: "all 0.2s ease",
-                            background: "rgba(255, 255, 255, 0.8)",
-                            resize: "vertical",
-                          }}
+                              width: "100%",
+                              boxSizing: "border-box",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "8px",
+                              padding: "12px 16px",
+                              fontSize: "13px",
+                              fontFamily:
+                                "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                              transition: "all 0.2s ease",
+                              background: "rgba(255, 255, 255, 0.8)",
+                              resize: "vertical",
+                            }}
                           />
                         </div>
                       </div>
