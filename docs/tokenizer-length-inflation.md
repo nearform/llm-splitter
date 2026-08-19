@@ -1,8 +1,14 @@
 # Tokenizer length inflation
 
 > **Status:** open. Phase 1 (real-world test fixtures landed, gated by
-> `B7_TEST=1`) is complete; Phase 2 (implementation) is the next step. This
-> doc is self-contained and may be promoted to a GitHub issue as-is.
+> `B7_TEST=1`) is complete; Phase 2 (implementation) is the next step.
+>
+> **Tracking:** the work is tracked as the OpenSpec change
+> [`openspec/changes/tokenizer-length-inflation/`](../openspec/changes/tokenizer-length-inflation/)
+> (proposal, design, spec deltas, and a phased `tasks.md`). This document is the
+> long-form analysis and evidence record behind that change — the change's
+> `design.md` summarizes the decisions; the empirical detail lives here. Update
+> the change's `tasks.md` for status; update this doc when the analysis changes.
 
 ## Problem
 
@@ -63,12 +69,12 @@ could not be located in input (…)`. Loud, easy to detect.
   dangerous of the two because the error (when it eventually comes)
   names the wrong token.
 
-## What the synthetic regression test captures
+## What the synthetic regression captures
 
-[test/split.test.js:1397](../test/split.test.js#L1397) holds a deliberately
-length-inflating splitter that appends U+FFFD to every character. It runs
-under `it.todo` so the suite stays green; the assertion is what we want a
-fixed B7 to produce. Today it throws at the second token.
+A deliberately length-inflating splitter that appends U+FFFD to every
+character models the **shape** of the problem (decoded length > source
+span) without depending on a transformers.js install or a particular
+model file. Today it throws at the second token.
 
 ```js
 const driftSplitter = (text) => text.split("").map((ch) => ch + "�");
@@ -77,10 +83,15 @@ const driftSplitter = (text) => text.split("").map((ch) => ch + "�");
 // At "b�": cursor=2, but 'b' lives at source position 1.
 ```
 
-The test is intentionally synthetic. It models the **shape** of the
-problem (length > source span) without depending on a transformers.js
-install or a particular model file. Once B7 has a real fix, this test
-should pass; the real-world fixture (below) should also pass.
+This repro previously lived as an `it.todo` in `test/split.test.js`, but
+was extracted (Aug 2026) into the OpenSpec change so `npm test` stays
+clean while B7 is open — a throwing `it.todo` body still prints under
+node's "failing tests" banner. The repro and the exact expected
+assertion now live in
+[openspec/changes/tokenizer-length-inflation/design.md](../openspec/changes/tokenizer-length-inflation/design.md)
+under "Acceptance criteria"; task 4.1 re-adds it as an asserting test
+when B7 is fixed. Once fixed, both it and the real-world fixture (below)
+should pass.
 
 ## What was attempted in Phase 2 and why it was reverted
 
@@ -394,9 +405,11 @@ one-off integrations; not a long-term posture for a "RAG-first" library.
 
 ## References
 
-- [test/split.test.js](../test/split.test.js) — synthetic regression
-  (`it.todo` near the top of the `regressions` describe) and the
-  B7-real fixtures gated by `B7_TEST=1` (same block).
+- [openspec/changes/tokenizer-length-inflation/](../openspec/changes/tokenizer-length-inflation/)
+  — the change tracking the fix; `design.md` → "Acceptance criteria"
+  holds the extracted synthetic drift-splitter regression.
+- [test/split.test.js](../test/split.test.js) — the B7-real fixtures
+  gated by `B7_TEST=1` (in the `regressions` describe).
 - [src/split.js](../src/split.js) `anchorParts` — three-tier locate
   strategy. Tier 3 (`firstAnchorGrapheme` + `indexOf`) is what would
   need to change for inflation handling.

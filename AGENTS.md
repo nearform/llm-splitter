@@ -127,18 +127,36 @@ the bench after any algorithm change.
 ### Synthetic regression tests model shapes; real tokenizer fixtures catch the rest
 
 A first hybrid-cursor attempt for tokenizer length inflation (B7)
-passed the synthetic `it.todo` regression but broke `tiktoken` on a
+satisfied the synthetic drift regression but broke `tiktoken` on a
 Devanagari fixture. Don't take "synthetic passes" as license to ship;
 also run any tokenizer-affecting change against the multibyte +
-`B7_TEST=1` fixtures.
+`B7_TEST=1` fixtures. (The synthetic repro now lives in the B7 change's
+`design.md`, not the test suite — see "Open work / future".)
+
+## Spec-driven workflow (OpenSpec)
+
+This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) to track _what the
+library guarantees today_ vs _what we're going to change next_. See
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full workflow.
+
+- `openspec/specs/` — the current behavioral contract as capabilities
+  (`chunking`, `chunk-coverage`, `multibyte-anchoring`, `chunk-extraction`).
+  The README stays the human narrative; specs are the structured source of truth.
+- `openspec/changes/` — proposed work (proposal + design + spec deltas + tasks).
+- Drive future work from Claude Code with the `/opsx:*` slash commands
+  (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`); see docs/DEVELOPMENT.md.
+  Inspect/validate via the CLI: `openspec validate --all --strict`.
 
 ## Open work / future
 
-- [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md)
-  — single open item, internal codename **B7**. Captures the problem
-  (HuggingFace embedding models like `gte-small` whose tokenizer
-  pipelines normalize during decode), the real-world regression
-  fixtures (live in [test/split.test.js](test/split.test.js), gated by
-  `B7_TEST=1`), the failed Phase 2 hybrid-cursor attempt, and five
-  candidate fix directions with a refined proposal under "Implications
-  for Phase 2". Self-contained; can be lifted into a GitHub issue.
+- **B7 — tokenizer length inflation** is now the change
+  [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/)
+  (proposal, design, spec deltas on `multibyte-anchoring` + `chunking`, tasks).
+  The long-form analysis remains in
+  [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md): the problem
+  (HuggingFace embedding models like `gte-small` whose tokenizer pipelines normalize during
+  decode), the real-world regression fixtures (live in
+  [test/split.test.js](test/split.test.js), gated by `B7_TEST=1`), the failed Phase 2
+  hybrid-cursor attempt, and the five candidate directions with the refined "Implications
+  for Phase 2" proposal. When B7 ships, run `openspec archive tokenizer-length-inflation`
+  to merge its deltas into `openspec/specs/`.
