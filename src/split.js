@@ -154,14 +154,13 @@ const anchorParts = (input, splitter, baseOffset) => {
       continue;
     }
 
-    let start;
-    if (input.startsWith(splitPart, cursor)) {
-      // Tier 1: byte-preserving splitter, cursor at exact match.
-      start = cursor;
-    } else if ((start = input.indexOf(splitPart, cursor)) !== -1) {
-      // Tier 2: byte-preserving splitter with a gap before this part.
-      // `start` was assigned in the condition.
-    } else {
+    // Tier 1: byte-preserving splitter, cursor at exact match.
+    // Tier 2: byte-preserving splitter with a gap before this part.
+    let start = input.startsWith(splitPart, cursor)
+      ? cursor
+      : input.indexOf(splitPart, cursor);
+
+    if (start === -1) {
       // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
       const anchor = firstAnchorGrapheme(splitPart);
       // splitPart is entirely U+FFFD or combining marks (tokenizer's decode
