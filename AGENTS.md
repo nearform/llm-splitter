@@ -170,13 +170,14 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Quadratic tier-2 anchor scan (fixed, pending archive)** — `indexOf(splitPart, cursor)` used
-  to scan to end of input for every part that isn't verbatim in the source, making
-  `character`-strategy splits O(n²) on tokenizer output. Fixed by the tier 2 skip described in
-  the algorithm map; the code and tests have landed, so what remains is
-  `openspec archive anchor-scan-short-circuit`. See
-  [openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/) —
+- **Quadratic tier-2 anchor scan** — shipped and archived. `indexOf(splitPart, cursor)` used to
+  scan to end of input for every part that isn't verbatim in the source, making
+  `character`-strategy splits O(n²) on tokenizer output; fixed by the tier 2 skip described in
+  the algorithm map, and now part of the `multibyte-anchoring` contract. Background lives in
+  [openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/](openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/) —
   `design.md` carries the tier instrumentation, the measured tier-2 reach data, the rationale
-  for rejecting a distance bound, and the measurements behind the regression's constants.
-  `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and now
-  rebases on this.
+  for rejecting a distance bound, and the measurements behind the regression's constants
+  (including the conditional follow-up in `tasks.md` § 6 for revisiting a tier-2 distance bound
+  if a caller ever reports a splitter that legitimately drops long spans).
+  `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
+  this.
