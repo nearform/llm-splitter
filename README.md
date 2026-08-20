@@ -140,7 +140,7 @@ const chunks = split(texts, {
 
 **Paragraph chunking**
 
-By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk. When the current chunk already holds a complete paragraph and the next paragraph wouldn't fit in what's left, we emit the chunk early so that paragraph can start a fresh one. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another option is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk. When the current chunk already holds a complete paragraph and the next paragraph wouldn't fit in what's left, we emit the chunk early so that paragraph can start a fresh one. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
 
 Whole paragraphs are a _preference_, not a guarantee. A paragraph still gets split across as many chunks as it needs when:
 

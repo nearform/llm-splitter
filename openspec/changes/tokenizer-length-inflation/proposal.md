@@ -25,9 +25,14 @@ implementation.
 - Replace the Tier 3 anchor step so that, when `sourceNormalize` is supplied, anchoring walks
   the source applying that normalization and matches `normalize(source[i..])` against
   `normalize(splitPart)` — correctly locating case/accent-mutated and `##`-prefixed parts
-  instead of trusting the part's literal graphemes.
-- Detect zero-source-span control tokens (parts with no source-anchorable graphemes, e.g.
-  `[CLS]`) before anchoring and skip them rather than propagating a bogus cursor.
+  instead of trusting the part's literal graphemes. The scan derives a source **span**
+  `(start, end)` rather than a start alone, which is what corrects the cursor for a part whose
+  decoded length differs from the source it consumed.
+- Throw loudly, naming the part, when a part's normalized form cannot be found within a bounded
+  window from the cursor. Control tokens (`[CLS]`, `[SEP]`, `[UNK]`) land there, and splitters
+  are required to filter them: `[CLS]` is anchorable on its own `[`, so the library cannot tell
+  a control token from ordinary source text and will not guess. This replaces today's silent
+  mis-anchor with an actionable error.
 - Preserve today's exact behavior for length-preserving splitters (char, whitespace,
   sentence/line, tiktoken) — no regression, verified against the existing multibyte and
   Devanagari fixtures.
@@ -40,7 +45,7 @@ implementation.
 
 - `multibyte-anchoring`: the supported-tokenizer boundary moves normalizing tokenizers from
   "known limitation" toward supported; Tier 3 gains a normalized-comparison anchor and
-  zero-source-span token handling.
+  a loud failure for parts that cannot be located.
 - `chunking`: `split` gains the opt-in `sourceNormalize` option.
 
 ## Impact

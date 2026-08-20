@@ -341,11 +341,12 @@ a distance bound would work on these corpora and silently mis-anchor a splitter 
 drops a long span (stripped markup, removed stopwords). None of the three buys
 anything the U+FFFD test does not, and all three trade a proof for a constant.
 
-**Status: landed.** Every number above was measured against `src/` as it stands, not a
-prototype. The change record — instrumentation, the rejected alternatives, and the
-measurements behind the regression's constants — lives in
-[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/)
-until it is archived.
+**Status: landed and archived.** Every number above was measured against `src/` as it stands,
+not a prototype, and the behavior is now part of the `multibyte-anchoring` contract in
+[openspec/specs/](openspec/specs/multibyte-anchoring/spec.md). The change record —
+instrumentation, the rejected alternatives, and the measurements behind the regression's
+constants — lives in
+[openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/](openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/).
 
 ---
 

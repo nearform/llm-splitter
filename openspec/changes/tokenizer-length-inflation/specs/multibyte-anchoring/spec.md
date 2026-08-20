@@ -35,11 +35,22 @@ normalizing tokenizers (e.g. `gte-small`, `bge-small`, uncased WordPiece via
 
 ### Requirement: Normalized-comparison Tier 3 anchor
 
-When `sourceNormalize` is supplied, the system SHALL replace the Tier 3 grapheme lookup with
-a normalized forward scan: from the cursor, find the first source index `i` where
-`sourceNormalize(source[i..])` starts with `sourceNormalize(part)`, and anchor `start` there.
-This scan SHALL run only on the Tier 3 fallback path so Tiers 1–2 remain byte-identical to
-the default behavior.
+When `sourceNormalize` is supplied, the system SHALL replace the Tier 3 grapheme lookup with a
+normalized forward scan that derives a source **span**, not just a start: from the cursor, find
+the first source index `i` where `sourceNormalize(source[i..])` starts with
+`sourceNormalize(part)`, then the shortest `j > i` where
+`sourceNormalize(source[i..j]) === sourceNormalize(part)`. The system SHALL set `start = i` and
+`end = j` and advance the cursor to `j`, rather than assuming `end = start + part.length`.
+
+Deriving `end` is what makes the guarantee hold for a part whose decoded length differs from
+its source span; anchoring `start` alone leaves the cursor past the next real position. This
+scan SHALL run only on the Tier 3 fallback path, so Tiers 1–2 remain byte-identical to the
+default behavior, and the length-based advance SHALL remain in force whenever `sourceNormalize`
+is absent.
+
+The scan SHALL be bounded: the system SHALL search no more than a small multiple of the part's
+normalized length before treating the part as unlocatable, so that anchoring cost stays linear
+in input length (see "Anchoring cost is linear in input length").
 
 #### Scenario: Equal-length content mutation
 
@@ -49,15 +60,32 @@ the default behavior.
 #### Scenario: WordPiece continuation prefix
 
 - **WHEN** a part is a `##`-prefixed continuation (e.g. `"##ん"`) and `sourceNormalize` strips `##`
-- **THEN** the part anchors on the source `"ん"` rather than on the literal `#`
+- **THEN** the part anchors on the source `"ん"`, and `end` is the end of that `"ん"` rather than three code units past its start
 
-### Requirement: Zero-source-span token handling
+#### Scenario: Cursor advance follows the derived span
 
-The system SHALL detect parts that contain no source-anchorable graphemes (zero-span control
-tokens such as `[CLS]`, `[SEP]`, `[UNK]`) before anchoring and SHALL skip them without
-advancing the cursor onto unrelated source bytes.
+- **WHEN** a part's decoded length exceeds its source span and the next part is anchored after it
+- **THEN** the cursor sits at the end of the derived span, so the next part anchors at its own true position
+
+### Requirement: Unlocatable parts fail loudly
+
+A part is unlocatable when its normalized form does not occur in the source within the bounded
+window from the cursor. Control tokens (`[CLS]`, `[SEP]`, `[UNK]`) and genuinely mutating
+splitters both land here, and the system SHALL NOT attempt to tell them apart: nothing in a
+part distinguishes a tokenizer control token from ordinary source text of the same shape —
+`[CLS]` is itself anchorable on its literal `[`, and today anchors silently against any source
+containing one.
+
+The system SHALL therefore throw for an unlocatable part, with a message naming the part and
+the likely cause, rather than skipping it or anchoring it on a partial match. Splitters MUST
+drop tokenizer control tokens before returning parts.
 
 #### Scenario: Control token framing the input
 
-- **WHEN** a splitter emits `[CLS]` / `[SEP]` around the real tokens
-- **THEN** those parts consume no source span and do not corrupt the positions of neighboring parts
+- **WHEN** a splitter emits `[CLS]` / `[SEP]` around the real tokens and `sourceNormalize` is supplied
+- **THEN** `split` throws identifying the unlocatable part, instead of anchoring it on an unrelated `[` and corrupting the positions of neighboring parts
+
+#### Scenario: Splitter that drops control tokens
+
+- **WHEN** the splitter filters `[CLS]` / `[SEP]` / `[UNK]` before returning parts
+- **THEN** the remaining parts anchor at their true positions with full coverage

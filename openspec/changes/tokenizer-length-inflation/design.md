@@ -75,29 +75,71 @@ fix must _detect_ the splitter's mode, not impose one universal cursor.
 - **Punt and document** — lock in current behavior with a clear "unsupported" notice. The
   posture this change replaces.
 
-**Chosen: opt-in `sourceNormalize` + normalized Tier 3 + zero-span filtering.**
+**Chosen: opt-in `sourceNormalize` + a normalized Tier 3 that derives a source span + a loud,
+actionable failure for parts that cannot be located.**
 
 1. **`sourceNormalize` option** (default identity). Cheaper than a `splitterKind` enum and
    needs no classification heuristics. Callers declare intent explicitly:
    `sourceNormalize: (s) => s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")`.
-2. **Normalized-comparison Tier 3.** When `sourceNormalize` is set, replace
+2. **Normalized-comparison Tier 3, returning a span.** When `sourceNormalize` is set, replace
    `indexOf(firstAnchorGrapheme(part), cursor)` with: walk source from `cursor`, find the
-   first `i` where `normalize(source[i..])` starts with `normalize(part)`; set `start = i`.
-   This is the only approach that handles equal-length content mutation.
-3. **Pre-anchor zero-source-span detection.** Parts with no source-anchorable graphemes
-   (`[CLS]` etc.) emit no position / are skipped rather than propagating the cursor.
+   first `i` where `normalize(source[i..])` starts with `normalize(part)`, then take the
+   **shortest** `j > i` such that `normalize(source[i..j]) === normalize(part)`. Set
+   `start = i`, `end = j`, and advance the cursor to `j`. This is the only approach that
+   handles equal-length content mutation, and returning `j` rather than
+   `start + part.length` is what handles inflation — see "Settled: the scan returns a span"
+   below.
+3. **Control tokens are the caller's to remove; the library's job is to fail loudly.** An
+   earlier draft of this decision read "parts with no source-anchorable graphemes (`[CLS]`
+   etc.)", which is factually wrong and worth correcting explicitly: `[CLS]` _is_ anchorable.
+   `firstAnchorGrapheme("[CLS]")` returns `"["`, so against a source containing any literal
+   `[` it anchors there — verified, source `"a [b] ん"` with part `[CLS]` anchors at
+   `start = 2` with no error. Nothing in a part distinguishes a control token from ordinary
+   bracketed source text, so in-library detection would be a guess dressed as a check.
+
+   What the span scan in decision 2 _does_ give us is a sound signal: a part whose normalized
+   form does not occur at or after the cursor is unlocatable, full stop. Control tokens land
+   there, and so do genuinely mutating splitters — which the `multibyte-anchoring` contract
+   already says must fail loudly. So: throw, with a message that names the likely cause and
+   the fix ("looks like a special token — filter it in your splitter"). That turns today's
+   silent mis-anchor into a loud, actionable failure, which is the real improvement available
+   here.
+
+   Callers strip special tokens splitter-side, which is what `gteSmallSplitter` already does
+   in "Acceptance criteria" §2 and what the `nearform/joyce` workaround does in production.
+   `gteSmallSplitterNaive` therefore stays unsupported by design — it is a fixture that
+   documents the failure, not a target. If a caller later shows that is not enough, the only
+   sound form is an explicit declaration (`specialTokens: string[]`); note that
+   `sourceNormalize` + `specialTokens` is most of the API surface the `splitterKind` enum was
+   rejected for, so prefer the filter until then.
+
 4. **Coverage invariant preserved.** `end` still derives so adjacent chunks meet; the
    `chunk-coverage` contract is unchanged.
 
-**Open — is per-part inflation detection still needed?** An earlier draft of this section
-listed it as chosen alongside the three decisions above but never folded it into them. It
-matters because `sourceNormalize` is opt-in: with it absent the default path is unchanged,
-so the drift splitter in "Acceptance criteria" §1 — which supplies no `sourceNormalize` —
-still throws, even though task 4.1 expects it to assert. Three ways out: give that fixture a
-`sourceNormalize`, have the normalized scan return a source _span_ `(start, end)` rather
-than just `start` (which fixes `"##ん"` inflation without a separate detector), or add
-inflation detection back as a fourth decision. Settle this before task 3.2 — it also decides
-what the cursor advances by, which decisions 2 and 4 currently leave unstated.
+**Settled: the scan returns a span, and the identity path does not change.** This closes the
+question this section used to leave open ("is per-part inflation detection still needed?") and
+is a prerequisite for task 3.2 — it decides what the cursor advances by, which decisions 2 and
+4 previously left unstated.
+
+- **The span is derived, not assumed.** Locating `start` alone is not enough: `"##ん"` decodes
+  to length 3 over a source span of 1, so keeping `end = start + part.length` still overshoots
+  by 2 and the next part mis-anchors. Taking the shortest `j` with
+  `normalize(source[i..j]) === normalize(part)` yields the true span, and all three failure
+  modes — inflation, equal-length mutation, zero-span — fall out of that one derivation.
+  Per-part inflation detection is therefore **not** needed as a separate mechanism.
+- **The identity path stays byte-identical.** Deriving spans when no `sourceNormalize` is
+  supplied would mean imposing one universal cursor, which is exactly what broke tiktoken on
+  `"Hindi: नमस्ते दुनिया"` in the reverted hybrid-cursor attempt. Consequence for the fixtures:
+  the drift splitter in "Acceptance criteria" §1 must supply a `sourceNormalize` to be an
+  asserting test. Without one it documents the unsupported default, and task 4.1 asserts the
+  opt-in form.
+- **Bound the scan window.** This is a per-part forward scan over the source — structurally the
+  same shape as the Tier 2 scan that made `character`-strategy splits quadratic (100KB
+  Devanagari: 1976ms; see the archived `anchor-scan-short-circuit`). A handful of unlocatable
+  parts per document would reintroduce that curve, on a path that also allocates normalized
+  substrings. Cap the window at a small multiple of the part's normalized length, fail past it
+  per decision 3, and carry a scaling regression in the shape of the one that change left
+  behind. Do not ship this without measuring it.
 
 ## Risks / Trade-offs
 
