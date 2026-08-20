@@ -139,3 +139,12 @@ library guarantees today_ vs _what we're going to change next_. See
   spec deltas, and a phased `tasks.md`. Nothing for it lives in `test/split.test.js` — the
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
+
+- **Quadratic tier-2 anchor scan** — `indexOf(splitPart, cursor)` scans to end of input for
+  every part that isn't verbatim in the source, making `character`-strategy splits O(n²) on
+  tokenizer output (100KB Devanagari: 1976ms; 400KB: 30s). Diagnosed, prototyped and
+  validated as output-preserving; see
+  [openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
+  `design.md` carries the tier instrumentation, the measured tier-2 reach data, and the
+  rationale for rejecting a distance bound. Both changes edit `anchorParts` — whichever
+  lands second rebases on the other.

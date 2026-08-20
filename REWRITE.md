@@ -23,7 +23,9 @@ all 270 scenarios, so neither is internally inconsistent. Old simply drops input
 on the floor without reporting it.
 
 Perf is covered in the [Devanagari](#the-devanagari-case-why-this-copy-can-be-much-slower)
-section: this copy is faster in the median and has one severe, fixable pathology.
+section: this copy is faster in the median and has one severe pathology, now diagnosed
+with a validated fix proposed in
+[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
 
 ---
 
@@ -231,25 +233,41 @@ devanagari 100KB character cs=512 tiktoken    old=77ms   new=1976ms   25.6x
 
 ### Why
 
-Instrumenting a copy of `anchorParts` to count which tier each part resolves through:
+Instrumenting `anchorParts` to record which tier each part resolves through, and
+whether the parts that miss tier 2 contain U+FFFD at all (100KB per corpus,
+`character` strategy):
 
 ```
-latin      100KB    24ms  parts= 20558  tier1=20558  tier2MISS=    0  scanned=   0.0M
-cjk        100KB   379ms  parts=135426  tier1=46330  tier2MISS=69784  scanned=3572.8M
-devanagari 100KB  1954ms  parts=102073  tier1=25072  tier2MISS=64474  scanned=3292.4M
-                                                                       tier3=13915
+                                                        tier-2 misses
+corpus/splitter        parts     t1     t2    t3   drop   fffd / other
+────────────────────────────────────────────────────────────────────────
+latin      char       102209 102209     0     0      0      0 / 0
+latin      whitespace  15355      1  15354    0      0      0 / 0
+latin      sentence        1      1      0    0      0      0 / 0
+latin      tiktoken    20558  20558      0    0      0      0 / 0
+latin+emo  tiktoken    23404  18991   1139    0   3274   3274 / 0
+cjk        tiktoken   135426  46330  19312    0  69784  69784 / 0
+devanagari tiktoken   102073  25072  12527 13915  50559  64474 / 0
 ```
 
 The cost is **tier 2 failing**. When `startsWith` misses, the code runs
 `input.indexOf(splitPart, cursor)`; if the part is not verbatim in the source — the
 U+FFFD case above — that call scans all the way to the end of the string before
-returning `-1`. With O(n) such parts the whole split becomes O(n²). The scan volume
-confirms it exactly: 10x the input gives 100x the work (35.7M → 3572.8M).
+returning `-1`. With O(n) such parts the whole split becomes O(n²).
 
 Devanagari costs ~5x what CJK does at comparable scan volume because 13,915 of its
 misses go on to reach tier 3 with a real anchor grapheme, paying an `Intl.Segmenter`
 pass plus a second `indexOf`. CJK's misses are mostly pure U+FFFD, discarded after a
 cheap segmentation.
+
+Two structural notes the table makes visible:
+
+- The quadratic is **per `anchorParts` call**. `character` strategy makes one call
+  over the whole document; `paragraph` strategy makes one per paragraph, which bounds
+  every doomed scan to a few hundred code units. That is why only `character` rows
+  are affected and paragraph mode looked fine.
+- The `other` column is **zero everywhere**. All 137,532 tier-2 misses across the
+  matrix contain U+FFFD; not one does not.
 
 Two honest framings of the gap:
 
@@ -259,36 +277,57 @@ Two honest framings of the gap:
   O(n²) shape that `findGrapheme` had before `indexOf` replaced it. The quadratic
   moved to the failure branch rather than going away.
 
-### Options to explore (sketches, not a plan)
+### The fix
 
-Notes for a later design pass. None of these are costed or validated yet.
+That zero column turns the fix from a heuristic into a proof. **A part containing
+U+FFFD cannot be a substring of a source that contains none**, so `indexOf` can only
+report "not found" — the search is skippable outright. U+FFFD is the only character a
+supported splitter can manufacture, which is exactly the boundary the
+`multibyte-anchoring` spec already draws.
 
-1. **Short-circuit on U+FFFD.** Test `splitPart.includes("�")` before tier 2 and
-   go straight to tier 3 when true. An O(part length) check against an O(remaining
-   input) scan; would remove most misses outright. Does not help parts mutated
-   without producing U+FFFD.
+A second cost surfaces once the scanning stops: the ~50K Devanagari and ~70K CJK parts
+that are _nothing but_ U+FFFD each pay a full `Intl.Segmenter` pass to conclude they
+are unanchorable. Testing for a single non-replacement code unit first reaches the
+same answer by construction.
 
-2. **Bound the tier-2 search window.** A part belongs at or near the cursor, so
-   search `cursor … cursor + splitPart.length + slack` first and only widen on
-   failure — ideally by doubling, up to the full remaining string, which keeps the
-   current worst case as a fallback while making the common case constant-time.
-   Needs a defensible slack: splitters that legitimately drop long spans (whitespace
-   runs, stripped markup) must still resolve.
+Together, at 100KB `character` / `tiktoken`:
 
-3. **Classify the splitter once, up front.** Probe on first use — for example whether
-   the parts rejoin to the input — and pick a strategy per splitter instead of
-   re-discovering per part. Amortizes the decision across the whole document.
+| corpus     | before | after |      |
+| ---------- | -----: | ----: | ---: |
+| devanagari | 1976ms | 105ms |  19x |
+| cjk        |  338ms |  98ms | 3.4x |
 
-4. **Carry a resync hint across failures.** Today each failed part independently
-   rescans from the cursor. Remembering that the splitter is byte-mutating, or how
-   far the last successful anchor advanced, could avoid repeating the same doomed
-   scan thousands of times.
+And the growth curve changes shape, which matters more than any single row:
 
-Whatever is chosen has to hold two lines, both of which the benchmark already
-measures: the coverage invariant (`gap` column stays `0` on the new side) and
-anchoring exactness (residual count must not rise above the current baseline —
-`latin real=5`, all `anchor-drift`). Measure, don't reason: the `findGrapheme`
-slow path was assumed fine until it was benchmarked.
+| size  |  before | growth | after | growth |
+| ----- | ------: | -----: | ----: | -----: |
+| 25KB  |   144ms |      — |  36ms |      — |
+| 50KB  |   536ms |  3.72x |  70ms |  1.94x |
+| 100KB |  2025ms |  3.78x | 157ms |  2.23x |
+| 200KB |  7705ms |  3.80x | 332ms |  2.12x |
+| 400KB | 30244ms |  3.93x | 668ms |  2.01x |
+
+Quadratic to linear. (The `after` column here is the tier-2 skip alone; the segmenter
+fast path takes 100KB the rest of the way to ~105ms.) Against the published library
+the headline row moves from `25.6x slower` to roughly `1.4x slower` — which _is_ the
+price of not dropping input.
+
+Both edits are output-preserving by construction, and measured to be: bit-identical
+`start`/`end`/`text` across 594 scenarios, with `node test/benchmark.js --diff`
+unchanged in every aggregate (96 real differences, `latin real=5`, 0 uncovered code
+units, 0 contract violations).
+
+Three sketches that were considered and dropped — a bounded tier-2 window, up-front
+splitter classification, and a carried resync hint — are recorded with their
+rejection rationale in the change's `design.md`. The short version: the same
+instrumentation shows tier 2 never legitimately reaches more than **4 code units**, so
+a distance bound would work on these corpora and silently mis-anchor a splitter that
+drops a long span (stripped markup, removed stopwords). None of the three buys
+anything the U+FFFD test does not, and all three trade a proof for a constant.
+
+**Status: proposed, not landed.** `src/` still has the quadratic; the numbers above
+are from a validated prototype. Everything lives in
+[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
 
 ---
 
