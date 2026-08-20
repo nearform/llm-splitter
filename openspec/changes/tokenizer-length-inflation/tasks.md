@@ -3,7 +3,7 @@
 - [x] 1.1 Add `@huggingface/transformers` as a dev dependency
 - [x] 1.2 Lazy-load `Xenova/gte-small` in a `before()` hook gated by `B7_TEST=1`
 - [x] 1.3 Land `gteSmallSplitterNaive` / `gteSmallSplitter` helpers and the five fixtures in the `regressions` block of `test/split.test.js`
-- [x] 1.4 Capture the failure-mode analysis in `docs/tokenizer-length-inflation.md`
+- [x] 1.4 Capture the failure-mode analysis in this change's `research.md`
 
 ## 2. Phase 2 — `sourceNormalize` API
 
@@ -29,8 +29,7 @@
 
 - [ ] 5.1 Run `node tmp-benchmark-rewrite.js` and confirm no regression vs published `llm-splitter@0.2.0` (Tiers 1–2 untouched)
 - [ ] 5.2 Update the README "Supported tokenizers (and a known limitation)" section to document `sourceNormalize`
-- [ ] 5.3 Update `docs/tokenizer-length-inflation.md` status to reflect the shipped fix (or fold into this change's design record)
-- [ ] 5.4 Update the AGENTS.md "Open work / future" section once B7 is closed
+- [ ] 5.3 Update the AGENTS.md "Open work / future" section once B7 is closed
 
 ## 6. Follow-up (out of scope for this change)
 

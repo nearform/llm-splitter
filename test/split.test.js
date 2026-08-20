@@ -21,8 +21,8 @@ const tokenSplitter = (text) =>
 
 // gte-small (BERT WordPiece via @huggingface/transformers). Loaded lazily in
 // before() only when B7_TEST=1 to avoid a 23 MB model download on plain
-// `npm test`. See test/split.test.js B7-real regression group and
-// docs/tokenizer-length-inflation.md.
+// `npm test`. See the B7-real regression group below and
+// openspec/changes/tokenizer-length-inflation/research.md.
 /** @type {{ encode: (text: string) => number[], decode: (ids: number[]) => string } | undefined} */
 let gteTokenizer;
 /** @param {string} text */
@@ -1459,7 +1459,8 @@ describe("split", () => {
       // prefix break the splitter's anchoring assumptions in several distinct
       // ways. These tests are gated by B7_TEST=1 (registered only when set)
       // because they download a 23 MB model on first run and aren't a CI
-      // requirement until B7 is fixed. See docs/tokenizer-length-inflation.md.
+      // requirement until B7 is fixed. See
+      // openspec/changes/tokenizer-length-inflation/research.md.
       //
       // Two helpers are exercised per fixture:
       //   - gteSmallSplitterNaive: encode + decode-each-token, nothing

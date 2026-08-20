@@ -149,14 +149,11 @@ library guarantees today_ vs _what we're going to change next_. See
 
 ## Open work / future
 
-- **B7 — tokenizer length inflation** is now the change
-  [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/)
-  (proposal, design, spec deltas on `multibyte-anchoring` + `chunking`, tasks).
-  The long-form analysis remains in
-  [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md): the problem
-  (HuggingFace embedding models like `gte-small` whose tokenizer pipelines normalize during
-  decode), the real-world regression fixtures (live in
-  [test/split.test.js](test/split.test.js), gated by `B7_TEST=1`), the failed Phase 2
-  hybrid-cursor attempt, and the five candidate directions with the refined "Implications
-  for Phase 2" proposal. When B7 ships, run `openspec archive tokenizer-length-inflation`
-  to merge its deltas into `openspec/specs/`.
+- **Tokenizer length inflation (B7)** — normalizing embedding tokenizers (`gte-small` and
+  friends) mis-anchor or throw. Everything lives in
+  [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/):
+  `proposal.md`, `design.md` (decisions + the synthetic repro under "Acceptance criteria"),
+  `research.md` (the gte-small evidence and the reverted hybrid-cursor trace), spec deltas,
+  and a phased `tasks.md`. Regression fixtures are in
+  [test/split.test.js](test/split.test.js), gated by `B7_TEST=1`. When it ships, run
+  `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.

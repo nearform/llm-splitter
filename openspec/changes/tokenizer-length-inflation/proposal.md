@@ -13,9 +13,9 @@ mis-anchor `start`/`end`.
 Phase 1 (real `gte-small` regression fixtures, gated by `B7_TEST=1`) is complete and
 narrowed the problem: length inflation is only one of three failure modes, and the most
 common one for `gte-small` is **equal-length content mutation** (`"Hi"` → `"hi"`), which a
-pure inflation detector cannot locate. The full analysis lives in
-[docs/tokenizer-length-inflation.md](../../../docs/tokenizer-length-inflation.md) (codename
-B7); this change tracks turning that analysis into an implementation.
+pure inflation detector cannot locate. The evidence behind that finding lives in
+[research.md](./research.md) (codename B7); this change tracks turning it into an
+implementation.
 
 ## What Changes
 
@@ -50,9 +50,7 @@ B7); this change tracks turning that analysis into an implementation.
 - Tests: [test/split.test.js](../../../test/split.test.js) — wire the `it.todo` drift case
   and the `B7_TEST=1` `gte-small` fixtures into asserting tests; must keep tiktoken/Devanagari
   green.
-- Docs: README "Supported tokenizers" section and
-  [docs/tokenizer-length-inflation.md](../../../docs/tokenizer-length-inflation.md) updated
-  once implemented.
+- Docs: README "Supported tokenizers" section updated once implemented.
 - Performance: normalized comparison only runs on the Tier 3 fallback path; the char/tiktoken
   happy paths (Tiers 1–2) are untouched. Re-run [tmp-benchmark-rewrite.js](../../../tmp-benchmark-rewrite.js)
   to confirm no regression.

@@ -15,8 +15,12 @@ The system SHALL anchor each part against the source using three tiers, cheapest
 the part; (2) `indexOf(part, cursor)` for a byte-preserving splitter that drops bytes
 between parts; (3) `indexOf(firstAnchorGrapheme(part), cursor)` for a byte-mutating splitter
 that emits U+FFFD, walking the part's graphemes to the first anchorable one (not U+FFFD, not
-a combining mark or variation selector) and setting `end = start + part.length` clamped to
-input length.
+a combining mark or variation selector).
+
+Regardless of which tier located the part, the system SHALL set `end = start + part.length`
+clamped to input length, and SHALL advance the cursor to that `end`. This length-based
+advance is what assumes decoded length equals consumed source span (see "Supported
+tokenizer boundary").
 
 #### Scenario: Tier 1 — cursor on the part
 
@@ -31,7 +35,12 @@ input length.
 #### Scenario: Tier 3 — replacement characters present
 
 - **WHEN** a splitter emits U+FFFD for a token that straddles a multi-byte sequence (e.g. tiktoken on emoji)
-- **THEN** the part is anchored on its first anchorable grapheme and `end` is `start + part.length` clamped to input length
+- **THEN** the part is anchored on its first anchorable grapheme
+
+#### Scenario: Cursor advance is length-based in every tier
+
+- **WHEN** a part has been located by any of the three tiers
+- **THEN** `end` is `start + part.length` clamped to input length and the cursor advances to `end`
 
 ### Requirement: Unanchorable parts are dropped but bytes preserved
 
@@ -45,16 +54,24 @@ between parts are absorbed forward.
 - **WHEN** a part contains only replacement characters and/or combining marks
 - **THEN** the part is dropped from anchoring but the source code units it represented remain within the enclosing chunk's range
 
-### Requirement: Mutating splitters throw
+### Requirement: Mutating splitters are unsupported
 
-When a part has anchorable graphemes but none of them can be found in the source (e.g. a
-splitter that lowercases or strips accents), the system SHALL throw. Splitters MUST NOT
-transform tokens.
+Splitters MUST NOT transform token content. When a part's first anchorable grapheme cannot
+be found in the source from the cursor onward, the system SHALL throw. When that grapheme
+_is_ found but at a position unrelated to the part's true origin — the common case for a
+lowercasing or accent-stripping splitter, whose mutated parts often still match some later
+occurrence — the system SHALL anchor there, producing an incorrect position with no error.
+Callers MUST NOT rely on a mutating splitter failing loudly.
 
 #### Scenario: Anchorable but absent part
 
 - **WHEN** a part's anchorable graphemes do not occur in the source from the cursor onward
 - **THEN** `split` throws indicating the part could not be located in input
+
+#### Scenario: Mutated part matches a later occurrence
+
+- **WHEN** a lowercasing splitter emits `"hi"` for source `"Hi"` and a lowercase `h` occurs later in the input
+- **THEN** the part anchors on that later `h`, yielding an incorrect `start` and no error
 
 ### Requirement: Supported tokenizer boundary
 

@@ -52,18 +52,18 @@ defaulting to `0`. `chunkOverlap` counts parts and MUST be less than `chunkSize`
 
 The system SHALL accept a custom `splitter` function that maps a string to an array of
 parts. A splitter MAY drop source bytes between parts (e.g. whitespace) but MUST NOT mutate
-token content; a splitter that transforms tokens so they can no longer be located in the
-source SHALL cause `split` to throw.
+token content. Mutating splitters are unsupported and MAY fail either loudly or silently —
+see the `multibyte-anchoring` capability for the exact outcomes.
 
 #### Scenario: Byte-dropping splitter
 
 - **WHEN** a whitespace splitter such as `(t) => t.split(/\s+/)` is supplied
 - **THEN** chunks are formed from the non-whitespace parts and positions still anchor to the source
 
-#### Scenario: Mutating splitter is rejected
+#### Scenario: Mutating splitter is unsupported
 
-- **WHEN** a splitter transforms token content (e.g. lowercasing or accent-stripping) such that a part cannot be located in the source
-- **THEN** `split` throws an error indicating a part could not be located in input
+- **WHEN** a splitter transforms token content (e.g. lowercasing or accent-stripping)
+- **THEN** `split` throws if the part cannot be located at all, but MAY instead anchor at a wrong position if the mutated part matches elsewhere in the source
 
 ### Requirement: Chunk strategy selection
 
@@ -82,14 +82,30 @@ SHALL reject any other value.
 
 ### Requirement: Paragraph strategy boundaries
 
-In `"paragraph"` strategy the system SHALL split the input on the paragraph delimiter
-`"\n\n"`, chunk each paragraph independently, and trim leading and trailing whitespace of a
+In `"paragraph"` strategy the system SHALL treat the paragraph delimiter `"\n\n"` and array
+element boundaries as paragraph breaks, and SHALL trim leading and trailing whitespace of a
 paragraph before anchoring so that chunk starts land on real content.
 
-#### Scenario: Paragraph-separated input
+Paragraphs are _preferred_ to stay whole, not guaranteed to: the system SHALL emit the
+current chunk early when it already contains a paragraph boundary **and** appending the
+entire next paragraph would exceed `chunkSize`. Paragraphs that fit together SHALL be
+packed into the same chunk, and a paragraph with more parts than `chunkSize` SHALL be split
+across as many chunks as it needs.
 
-- **WHEN** `split(input, { chunkStrategy: "paragraph" })` is called on text containing `"\n\n"` breaks
-- **THEN** parts are grouped so that no chunk spans across a paragraph boundary
+#### Scenario: Small paragraphs share a chunk
+
+- **WHEN** two consecutive paragraphs together contain no more than `chunkSize` parts
+- **THEN** both are packed into the same chunk, which therefore spans the paragraph boundary
+
+#### Scenario: Next paragraph would overflow
+
+- **WHEN** the current chunk already contains a paragraph boundary and appending the whole next paragraph would exceed `chunkSize`
+- **THEN** the current chunk is emitted first so the next paragraph begins a new chunk
+
+#### Scenario: Paragraph larger than chunkSize
+
+- **WHEN** a single paragraph contains more parts than `chunkSize`
+- **THEN** it is split across consecutive chunks
 
 ### Requirement: Chunk result shape
 

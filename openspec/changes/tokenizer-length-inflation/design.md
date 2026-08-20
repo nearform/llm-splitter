@@ -8,8 +8,7 @@ one U+FFFD per undecodable byte, so length still equals source span).
 
 Phase 1 wired `@huggingface/transformers` v4 + `Xenova/gte-small` into the suite as
 regression fixtures (gated by `B7_TEST=1`) and produced concrete evidence (full writeup in
-[docs/tokenizer-length-inflation.md](../../../docs/tokenizer-length-inflation.md), "Phase 1
-findings"). Key facts that constrain the design:
+[research.md](./research.md)). Key facts that constrain the design:
 
 - For `"Hi there. I'm Evän."`, `gte-small` decodes to
   `["[CLS]","hi","there",".","i","'","m","evan",".","[SEP]"]`.

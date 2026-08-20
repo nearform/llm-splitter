@@ -37,12 +37,18 @@ they overlap.
 ### Requirement: Final chunk terminates at input length
 
 The system SHALL set the last chunk's `end` to the total input length so no trailing code
-units are dropped.
+units are dropped. For array input, total input length is the **sum of the element
+lengths**, not the array's `length` property.
 
-#### Scenario: Last chunk end
+#### Scenario: Last chunk end for string input
 
-- **WHEN** `split(input, options)` returns chunks
-- **THEN** `chunks[chunks.length - 1].end === input.length`
+- **WHEN** `split(str, options)` returns chunks for a string input
+- **THEN** `chunks[chunks.length - 1].end === str.length`
+
+#### Scenario: Last chunk end for array input
+
+- **WHEN** `split(arr, options)` returns chunks for an array input
+- **THEN** `chunks[chunks.length - 1].end === arr.reduce((sum, s) => sum + s.length, 0)`
 
 ### Requirement: UTF-16 code-unit offsets
 
