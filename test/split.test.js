@@ -1356,6 +1356,54 @@ describe("split", () => {
       });
     });
 
+    describe("non-ASCII anchoring", () => {
+      it("covers the whole input when a tokenizer fragments text with no ASCII", () => {
+        // A tokenizer that splits a multi-byte character emits U+FFFD parts
+        // matching nothing in the source. Resynchronizing after one must not
+        // depend on finding a single-byte character to anchor against: this
+        // input contains none, so a cursor stranded on the first fragment
+        // would discard every part after it.
+        const input = "这是一个测试文本用于检查分块边界的准确性。".repeat(10);
+        const chunks = split(input, { chunkSize: 64, splitter: tokenSplitter });
+
+        assert.strictEqual(chunks[0].start, 0);
+        assert.strictEqual(
+          chunks[chunks.length - 1].end,
+          input.length,
+          "must not stop at the first unanchorable fragment",
+        );
+        for (const chunk of chunks) {
+          assert.strictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
+
+      it("locates ordinary parts that follow an unanchorable fragment", () => {
+        // Same shape without the tokenizer: every fourth part is replaced by
+        // U+FFFD. The parts around it are ordinary characters sitting verbatim
+        // in the source and must still be found at their true offsets.
+        const input = "这是一个测试文本用于检查分块";
+        /** @param {string} text */
+        const fragmentingSplitter = (text) =>
+          [...text].map((ch, i) => (i % 4 === 3 ? "�" : ch));
+
+        const chunks = split(input, {
+          chunkSize: 2,
+          splitter: fragmentingSplitter,
+        });
+
+        for (let i = 0; i < chunks.length - 1; i++) {
+          assert.ok(
+            chunks[i].end >= chunks[i + 1].start,
+            `gap between chunk ${i} and ${i + 1}`,
+          );
+        }
+        assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+      });
+    });
+
     describe("negative inputs", () => {
       it("propagates errors thrown by the splitter", () => {
         const boomSplitter = () => {
@@ -1429,6 +1477,30 @@ describe("split", () => {
         assert.deepStrictEqual(result, [
           { text: ["ab", "b"], start: 0, end: 3 },
         ]);
+      });
+
+      it("anchors a string paragraph whose text repeats earlier in the input", () => {
+        // "three four" also occurs inside "two three four", ahead of the real
+        // third paragraph. Locating a group by searching forward from the
+        // previous group's offset finds that earlier occurrence, anchors the
+        // group behind its true position, and drops the final paragraph.
+        const input = "one\n\ntwo three four\n\nthree four";
+        const chunks = split(input, {
+          chunkSize: 3,
+          splitter: whitespaceSplitter,
+          chunkStrategy: "paragraph",
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.start, chunk.end]),
+          [
+            [0, 5],
+            [5, 21],
+            [21, 31],
+          ],
+        );
+        assert.strictEqual(chunks[chunks.length - 1].text, "three four");
+        assert.strictEqual(chunks[chunks.length - 1].end, input.length);
       });
 
       it("empty paragraphs do not poison subsequent group offset lookup", () => {

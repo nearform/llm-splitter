@@ -14,11 +14,12 @@ export default [
   },
   {
     // The benchmark is a standalone Node script, not library code.
-    files: ["benchmark.js"],
+    files: ["test/benchmark.js"],
     languageOptions: {
       globals: {
         console: "readonly",
         performance: "readonly",
+        process: "readonly",
       },
     },
   },
