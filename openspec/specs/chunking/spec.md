@@ -65,6 +65,90 @@ see the `multibyte-anchoring` capability for the exact outcomes.
 - **WHEN** a splitter transforms token content (e.g. lowercasing or accent-stripping)
 - **THEN** `split` throws if the part cannot be located at all, but MAY instead anchor at a wrong position if the mutated part matches elsewhere in the source
 
+### Requirement: Zero-length parts are skipped
+
+The system SHALL ignore zero-length strings returned by a splitter: they anchor to no source
+position and SHALL NOT count toward `chunkSize`. The source code units around them stay
+covered by the surrounding parts' chunk (see `chunk-coverage`).
+
+#### Scenario: Splitter emits empty strings
+
+- **WHEN** a splitter returns empty parts (e.g. `(t) => t.split(",")` on `"a,,b"`, yielding `["a", "", "b"]`)
+- **THEN** only the non-empty parts are counted and anchored, so `chunkSize: 2` packs `"a"` and `"b"` into one chunk spanning the whole source
+
+### Requirement: Array element boundaries are token boundaries
+
+The system SHALL tokenize each element of an array input independently, so that no token
+ever spans two array elements, regardless of `chunkStrategy`. Positions remain offsets into
+the elements' concatenation.
+
+#### Scenario: Token never spans two elements
+
+- **WHEN** `split(["ab", "cd"], options)` is called
+- **THEN** the splitter is applied to `"ab"` and `"cd"` separately and no emitted part covers code units from both
+
+### Requirement: Input with no anchorable content yields no chunks
+
+The system SHALL return an empty array when the input contains nothing to anchor: an empty
+string, an empty array, an array of empty strings, or — under `chunkStrategy: "paragraph"` —
+input consisting only of whitespace, which paragraph trimming removes before anchoring. In
+`"character"` strategy whitespace-only input still anchors and yields one chunk.
+
+#### Scenario: Empty string or empty array
+
+- **WHEN** `split("")` or `split([])` is called
+- **THEN** the result is `[]`
+
+#### Scenario: Whitespace-only input per strategy
+
+- **WHEN** `split("   ")` is called with `chunkStrategy: "paragraph"` and then with `chunkStrategy: "character"`
+- **THEN** paragraph strategy returns `[]` while character strategy returns a single chunk covering the whitespace
+
+### Requirement: Argument validation
+
+The system SHALL validate its arguments before doing any work and SHALL throw on invalid
+input. `chunkSize` MUST be an integer of at least `1`; `chunkOverlap` MUST be an integer of
+at least `0` and MUST be less than `chunkSize`; `splitter` MUST be a function that returns an
+array of strings; `input` MUST be a string or an array whose every element is a string.
+
+Option and splitter-contract violations SHALL throw `Error`, while type violations of `input`
+and of the splitter's return value SHALL throw `TypeError`.
+
+#### Scenario: Invalid chunkSize
+
+- **WHEN** `chunkSize` is not an integer (e.g. `1.5`, `"invalid"`) or is less than `1` (e.g. `0`, `-1`)
+- **THEN** `split` throws an `Error`
+
+#### Scenario: Invalid chunkOverlap
+
+- **WHEN** `chunkOverlap` is not an integer, is negative, or is greater than or equal to `chunkSize`
+- **THEN** `split` throws an `Error`
+
+#### Scenario: Splitter is not a function
+
+- **WHEN** `splitter` is supplied but is not a function
+- **THEN** `split` throws an `Error`
+
+#### Scenario: Input is not a string or array of strings
+
+- **WHEN** `input` is `null`, a number, or an array containing a non-string element
+- **THEN** `split` throws a `TypeError`
+
+#### Scenario: Splitter returns a non-array
+
+- **WHEN** a splitter returns something other than an array (e.g. a string)
+- **THEN** `split` throws a `TypeError`
+
+#### Scenario: Splitter returns a non-string part
+
+- **WHEN** a splitter returns an array containing a non-string part
+- **THEN** `split` throws an `Error`
+
+#### Scenario: Splitter errors propagate
+
+- **WHEN** the splitter itself throws
+- **THEN** `split` propagates that error unchanged
+
 ### Requirement: Chunk strategy selection
 
 The system SHALL support a `chunkStrategy` of `"character"` (default) or `"paragraph"`, and
@@ -92,6 +176,11 @@ entire next paragraph would exceed `chunkSize`. Paragraphs that fit together SHA
 packed into the same chunk, and a paragraph with more parts than `chunkSize` SHALL be split
 across as many chunks as it needs.
 
+Parts carried over by `chunkOverlap` SHALL NOT count as a paragraph boundary in the chunk
+they are carried into — the boundary belongs to the chunk that was just emitted. A paragraph
+that would fit in an empty chunk MAY therefore still be split when overlap parts occupy part
+of the chunk.
+
 #### Scenario: Small paragraphs share a chunk
 
 - **WHEN** two consecutive paragraphs together contain no more than `chunkSize` parts
@@ -106,6 +195,11 @@ across as many chunks as it needs.
 
 - **WHEN** a single paragraph contains more parts than `chunkSize`
 - **THEN** it is split across consecutive chunks
+
+#### Scenario: Overlap parts split an otherwise-whole paragraph
+
+- **WHEN** a paragraph with fewer parts than `chunkSize` follows a chunk that carried `chunkOverlap` parts forward, and overlap plus paragraph exceeds `chunkSize`
+- **THEN** the paragraph is split, whereas the same input with `chunkOverlap: 0` keeps it whole
 
 ### Requirement: Chunk result shape
 

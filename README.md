@@ -50,8 +50,11 @@ Notes:
 - `chunkSize` must be a positive integer ≥ 1
 - `chunkOverlap` must be a non-negative integer ≥ 0
 - `chunkOverlap` must be less than `chunkSize`
-- `splitter` must return an array of strings; returning a non-array throws `TypeError`.
-- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter will throw at runtime when a token can't be located in the source.
+- `splitter` must return an array of strings; returning a non-array throws `TypeError`, and returning an array with a non-string element throws `Error`.
+- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter throws at runtime when a token can't be located in the source — but it can also anchor at a wrong position with no error, so don't rely on it failing loudly (see "Multibyte / Unicode Strings" below).
+- Zero-length tokens returned by a `splitter` are skipped: they anchor nowhere and don't count toward `chunkSize`.
+- Array element boundaries are always token boundaries — each element is tokenized on its own, so a token never spans two array elements.
+- Input with no anchorable content yields no chunks: `split("")` and `split([])` both return `[]`, as does a whitespace-only input under `chunkStrategy: "paragraph"` (paragraph mode trims whitespace, leaving nothing to anchor).
 - Here are some sample `splitter` functions:
   - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`
@@ -137,7 +140,12 @@ const chunks = split(texts, {
 
 **Paragraph chunking**
 
-By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk, but not splitting up paragraphs unless the paragraph of tokens is at the start of the chunk, in which case we then split across as many subsequent chunks as we need to. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk. When the current chunk already holds a complete paragraph and the next paragraph wouldn't fit in what's left, we emit the chunk early so that paragraph can start a fresh one. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+
+Whole paragraphs are a _preference_, not a guarantee. A paragraph still gets split across as many chunks as it needs when:
+
+- it has more tokens than `chunkSize` on its own, or
+- `chunkOverlap > 0` and the tokens carried over from the previous chunk leave too little room. Carried-over overlap tokens don't count as a paragraph boundary, so a paragraph that would fit in an empty chunk can still be split. If keeping paragraphs whole matters more than overlap context, use `chunkOverlap: 0`.
 
 <details>
   <summary>See example...</summary>
@@ -152,7 +160,7 @@ const texts = [
   "But when the trees bow down their heads,",
   "The wind is passing by.",
 ];
-const chunks = split(text10, {
+const chunks = split(texts, {
   chunkSize: 20,
   chunkOverlap: 2,
   chunkStrategy: "paragraph",
@@ -205,6 +213,11 @@ Note that for arrays, the returned result will be an array and that the first an
 
 - `string` - For single string input
 - `string[]` - For array of strings input
+
+Notes:
+
+- Positions are clamped, not validated: a range that falls outside the input returns `""` (string input) or `[]` (array input) rather than throwing, and `start`/`end` below `0` are treated as `0`. A negative `end` therefore yields an empty result — this is _not_ `String.prototype.slice` semantics (`getChunk("hello", 0, -2)` is `""`, while `"hello".slice(0, -2)` is `"hel"`).
+- Every element of an array `input` must be a string, whether or not it falls inside `[start, end)`; a non-string element anywhere throws `TypeError`.
 
 #### Examples
 
@@ -380,18 +393,18 @@ console.log(JSON.stringify(chunks, null, 2));
 // =>
 [
   {
-    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on a",
+    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
     start: 1,
-    end: 55,
+    end: 53,
   },
   {
-    text: " on a little 🏔️ promontory it stood isolated,\nMark'd how to",
-    start: 50,
-    end: 110,
+    text: " where on a little 🏔️ promontory it stood isolated,\nMark'd",
+    start: 44,
+    end: 103,
   },
   {
-    text: " how to explore 🔍 the vacant vast 🌌 surrounding,\n",
-    start: 103,
+    text: "Mark'd how to explore 🔍 the vacant vast 🌌 surrounding,\n",
+    start: 97,
     end: 154,
   },
 ];

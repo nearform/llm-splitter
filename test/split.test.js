@@ -107,6 +107,17 @@ describe("split", () => {
         ]);
       });
 
+      it("skips zero-length parts and does not count them toward chunkSize", () => {
+        const input = "a,,b";
+        /** @param {string} text */
+        const splitter = (text) => text.split(",");
+        // Parts are ["a", "", "b"] — the empty part anchors nowhere, so both
+        // real parts land in one chunk that spans the dropped commas.
+        assert.deepStrictEqual(split(input, { chunkSize: 2, splitter }), [
+          { text: "a,,b", start: 0, end: 4 },
+        ]);
+      });
+
       it("should handle chunkSize larger than input", () => {
         const input = "hello";
         const result = split(input, { chunkSize: 10 });
@@ -903,6 +914,33 @@ describe("split", () => {
           assert.deepStrictEqual(result, [
             { text: "hello\n\nworld", start: 0, end: 12 },
             { text: "world\n\ntest", start: 7, end: 18 },
+          ]);
+        });
+
+        it("overlap parts do not count as a paragraph boundary, so they can split a fitting paragraph", () => {
+          // Second paragraph has 9 parts and would fit whole in an empty
+          // chunkSize=10 chunk, but the 2 carried-over overlap parts leave
+          // room for only 8 of them.
+          const first = Array.from({ length: 10 }, (_, i) => `a${i}`).join(" ");
+          const second = Array.from({ length: 9 }, (_, i) => `b${i}`).join(" ");
+          const input = `${first}\n\n${second}`;
+          /** @param {number} chunkOverlap */
+          const texts = (chunkOverlap) =>
+            split(input, {
+              chunkSize: 10,
+              chunkOverlap,
+              chunkStrategy: "paragraph",
+              splitter: whitespaceSplitter,
+            }).map((chunk) => chunk.text);
+
+          assert.deepStrictEqual(texts(2), [
+            "a0 a1 a2 a3 a4 a5 a6 a7 a8 a9",
+            "a8 a9\n\nb0 b1 b2 b3 b4 b5 b6 b7",
+            "b6 b7 b8",
+          ]);
+          assert.deepStrictEqual(texts(0), [
+            "a0 a1 a2 a3 a4 a5 a6 a7 a8 a9\n\n",
+            "b0 b1 b2 b3 b4 b5 b6 b7 b8",
           ]);
         });
 

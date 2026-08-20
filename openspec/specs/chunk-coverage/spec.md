@@ -38,7 +38,9 @@ they overlap.
 
 The system SHALL set the last chunk's `end` to the total input length so no trailing code
 units are dropped. For array input, total input length is the **sum of the element
-lengths**, not the array's `length` property.
+lengths**, not the array's `length` property. This and every other requirement here apply
+only when at least one chunk was emitted; input with nothing anchorable yields an empty
+chunk list and no coverage claim (see the `chunking` capability).
 
 #### Scenario: Last chunk end for string input
 
