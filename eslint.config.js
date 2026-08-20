@@ -10,8 +10,18 @@ export default [
       "**/build/**",
       "**/coverage/**",
       "**/node_modules/**",
-      "./tmp-*",
     ],
+  },
+  {
+    // The benchmark is a standalone Node script, not library code.
+    files: ["test/benchmark.js"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        performance: "readonly",
+        process: "readonly",
+      },
+    },
   },
   {
     languageOptions: {
@@ -19,7 +29,6 @@ export default [
       sourceType: "module",
       globals: {
         TextDecoder: "readonly",
-        process: "readonly",
       },
     },
     rules: {

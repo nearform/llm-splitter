@@ -50,8 +50,11 @@ Notes:
 - `chunkSize` must be a positive integer ≥ 1
 - `chunkOverlap` must be a non-negative integer ≥ 0
 - `chunkOverlap` must be less than `chunkSize`
-- `splitter` must return an array of strings; returning a non-array throws `TypeError`.
-- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter will throw at runtime when a token can't be located in the source.
+- `splitter` must return an array of strings; returning a non-array throws `TypeError`, and returning an array with a non-string element throws `Error`.
+- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter throws at runtime when a token can't be located in the source — but it can also anchor at a wrong position with no error, so don't rely on it failing loudly (see "Multibyte / Unicode Strings" below).
+- Zero-length tokens returned by a `splitter` are skipped: they anchor nowhere and don't count toward `chunkSize`.
+- Array element boundaries are always token boundaries — each element is tokenized on its own, so a token never spans two array elements.
+- Input with no anchorable content yields no chunks: `split("")` and `split([])` both return `[]`, as does a whitespace-only input under `chunkStrategy: "paragraph"` (paragraph mode trims whitespace, leaving nothing to anchor).
 - Here are some sample `splitter` functions:
   - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`
@@ -137,7 +140,12 @@ const chunks = split(texts, {
 
 **Paragraph chunking**
 
-By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another options is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk, but not splitting up paragraphs unless the paragraph of tokens is at the start of the chunk, in which case we then split across as many subsequent chunks as we need to. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another option is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk. When the current chunk already holds a complete paragraph and the next paragraph wouldn't fit in what's left, we emit the chunk early so that paragraph can start a fresh one. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+
+Whole paragraphs are a _preference_, not a guarantee. A paragraph still gets split across as many chunks as it needs when:
+
+- it has more tokens than `chunkSize` on its own, or
+- `chunkOverlap > 0` and the tokens carried over from the previous chunk leave too little room. Carried-over overlap tokens don't count as a paragraph boundary, so a paragraph that would fit in an empty chunk can still be split. If keeping paragraphs whole matters more than overlap context, use `chunkOverlap: 0`.
 
 <details>
   <summary>See example...</summary>
@@ -152,7 +160,7 @@ const texts = [
   "But when the trees bow down their heads,",
   "The wind is passing by.",
 ];
-const chunks = split(text10, {
+const chunks = split(texts, {
   chunkSize: 20,
   chunkOverlap: 2,
   chunkStrategy: "paragraph",
@@ -205,6 +213,11 @@ Note that for arrays, the returned result will be an array and that the first an
 
 - `string` - For single string input
 - `string[]` - For array of strings input
+
+Notes:
+
+- Positions are clamped, not validated: a range that falls outside the input returns `""` (string input) or `[]` (array input) rather than throwing, and `start`/`end` below `0` are treated as `0`. A negative `end` therefore yields an empty result — this is _not_ `String.prototype.slice` semantics (`getChunk("hello", 0, -2)` is `""`, while `"hello".slice(0, -2)` is `"hel"`).
+- Every element of an array `input` must be a string, whether or not it falls inside `[start, end)`; a non-string element anywhere throws `TypeError`.
 
 #### Examples
 
@@ -341,7 +354,7 @@ Processing text with multibyte Unicode characters (emoji, CJK, accented Latin, c
 Two failure modes worth knowing about:
 
 - **Unanchorable parts** — if the entire part consists of U+FFFD and/or combining marks (i.e. the tokenizer produced nothing positionable), the part is silently dropped. The source bytes it represented are still preserved in chunk text, because chunks span from their first part's `start` to their last part's `end` and gaps between parts are absorbed forward by `getChunk` (see "Chunk Coverage and Positions" above).
-- **Mutating splitters** — if a part has anchorable graphemes but none of them are found in the input (e.g. a splitter that lowercases or strips accents), the library throws. Splitters must not transform tokens.
+- **Mutating splitters** — splitters must not transform tokens. If a part has anchorable graphemes but none are found in the input (e.g. a splitter that lowercases or strips accents), the library throws. Note that it can only throw when the grapheme is genuinely absent: a lowercased `"hi"` will happily anchor on some later `h` in the source, yielding a wrong position with no error. Don't rely on a mutating splitter failing loudly.
 
 ### Supported tokenizers (and a known limitation)
 
@@ -356,7 +369,7 @@ If you're using one of the affected embedding-model tokenizers today, the safest
 1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
 2. Wrap your splitter to pad/trim decoded output to match source length before returning.
 
-Expanding tolerance for length-inflating tokenizers is tracked in [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md) — it's a planned future enhancement, not a permanent constraint. Real-world regression fixtures for this case live in [test/split.test.js](test/split.test.js) and can be exercised with `B7_TEST=1 npm test` (lazy-loads the `gte-small` model on demand; plain `npm test` doesn't touch it).
+Expanding tolerance for length-inflating tokenizers is tracked in [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/) — it's a planned future enhancement, not a permanent constraint. That change records the real-world `gte-small` failure modes and the regression fixtures that will gate the fix.
 
 When parts are gathered into chunks, this means that some chunks may _undercount_ the number of tokens the splitter produced — there can be more semantic tokens in a chunk than `chunkSize` specifies. In a simple test on 10MB of blog post content using the `tiktoken` tokenizer, 99.6% of parts matched the input on tier 1. If your downstream has a hard token limit (like an embedding API's max tokens), apply a small `chunkSize` discount to accommodate multibyte undercounting.
 
@@ -380,18 +393,18 @@ console.log(JSON.stringify(chunks, null, 2));
 // =>
 [
   {
-    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on a",
+    text: "A noiseless 🤫 patient spider, 🕷️\nI mark'd where on",
     start: 1,
-    end: 55,
+    end: 53,
   },
   {
-    text: " on a little 🏔️ promontory it stood isolated,\nMark'd how to",
-    start: 50,
-    end: 110,
+    text: " where on a little 🏔️ promontory it stood isolated,\nMark'd",
+    start: 44,
+    end: 103,
   },
   {
-    text: " how to explore 🔍 the vacant vast 🌌 surrounding,\n",
-    start: 103,
+    text: "Mark'd how to explore 🔍 the vacant vast 🌌 surrounding,\n",
+    start: 97,
     end: 154,
   },
 ];

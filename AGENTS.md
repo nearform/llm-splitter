@@ -20,16 +20,6 @@ npm test             # node --test
 npm run build        # tsc -p tsconfig.json  (emits dist/*.d.ts only)
 npm run check        # lint + check:types + test + format check
 npm run format       # prettier + eslint --fix
-
-B7_TEST=1 npm test   # also runs the gte-small regression fixtures (downloads
-                     # Xenova/gte-small, ~23MB, lazy-loaded inside before()).
-                     # Plain `npm test` shows them as skipped.
-
-node tmp-benchmark-rewrite.js
-                     # Perf comparison vs the published llm-splitter@0.2.0
-                     # at ../llm-splitter/dist/. 90-scenario matrix across
-                     # size × strategy × chunkSize × overlap × splitter.
-                     # Use this for any algorithm change in src/split.js.
 ```
 
 `check:types` and `build` use **two different tsconfigs**: `tsconfig.json` builds
@@ -54,9 +44,39 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   splitters; `indexOf` is safe in tier 3 because anchor graphemes
   (filtered by `firstAnchorGrapheme`) never start with a low surrogate
   or combining mark.
+- **Tier 2 is skipped when it provably cannot match**: a part containing
+  U+FFFD is not a substring of a source containing none, so the search
+  could only scan to end-of-input and return `-1`. `anchorParts` probes
+  the source for U+FFFD once per call; a source that _does_ contain one
+  disables the skip. `firstAnchorGrapheme` likewise returns `null`
+  immediately for a part with no non-replacement code unit instead of
+  segmenting it. **The quadratic has now moved twice** — out of
+  `findGrapheme`, then out of the tier 2 failure branch — so it is pinned
+  by a scaling regression ("anchoring cost" → "grows linearly with input
+  size" in [test/split.test.js](test/split.test.js)) rather than trusted
+  to stay gone. That test measures an 8x size span against a threshold of
+  16; a 2x span does not separate linear from quadratic at sizes the suite
+  can afford. Do not weaken it to "fix" a slow machine — raise the base
+  size instead.
 - After all chunks emit, a forward-extension pass sets
   `chunk[i].end = chunk[i+1].start` (and the last chunk to total input
   length). This enforces the **coverage invariant**.
+
+**`Intl.Segmenter` is not the architecture.** It appears in one function
+(`firstAnchorGrapheme`), reached only from tier 3. Everything else — tiers 1
+and 2, chunk assembly, coverage, `chunkSize` — counts UTF-16 code units, and
+chunk boundaries carry no grapheme or code-point integrity guarantee (the
+default `text.split('')` splitter emits lone surrogates for astral characters;
+see `multibyte-anchoring` → "Anchoring positions parts, it does not police
+boundaries"). Measured, cluster anchoring is inert on every splitter in the
+matrix: a one-line code-point regex is output-identical across 432 scenarios,
+and the segmenter returned a multi-code-point cluster 0 times in 31,935 tier 3
+anchorings, at ~31% of the hottest tier 3 row. Keep it as a correctness margin
+if you like, but don't treat it as load-bearing and **don't reintroduce it into
+tiers 1-2** — that is where both quadratics came from. The load-bearing
+assumption is `end = start + part.length` (decoded length equals source span),
+which is what `tokenizer-length-inflation` exists to address; evidence in that
+change's `research.md` → "What the anchoring machinery actually rests on".
 
 **Coverage contract** (also in the `split()` docstring and the README
 "Chunk Coverage and Positions" section): from `chunks[0].start` onward,
@@ -115,30 +135,49 @@ yourself wanting any of them back, ask first.
 [demo-page workflow](.github/workflows/demo-page.yml) copies `src/` (not `dist/`) into
 `demo-public/`. There is no build step for the demo.
 
-### Verify perf claims with the benchmark, not by reasoning alone
-
-The `findGrapheme` slow path was assumed "fine" until the benchmark
-([tmp-benchmark-rewrite.js](tmp-benchmark-rewrite.js)) surfaced a 659x
-worst-case slowdown vs. the published library on byte-dropping
-splitters. The fix (replace `Intl.Segmenter`-over-slice with `indexOf`)
-was obvious in hindsight, but the magnitude wasn't until measured. Run
-the bench after any algorithm change.
-
 ### Synthetic regression tests model shapes; real tokenizer fixtures catch the rest
 
-A first hybrid-cursor attempt for tokenizer length inflation (B7)
-passed the synthetic `it.todo` regression but broke `tiktoken` on a
-Devanagari fixture. Don't take "synthetic passes" as license to ship;
-also run any tokenizer-affecting change against the multibyte +
-`B7_TEST=1` fixtures.
+A first hybrid-cursor attempt for tokenizer length inflation satisfied the
+synthetic drift regression but broke `tiktoken` on a Devanagari fixture.
+Don't take "synthetic passes" as license to ship; run any
+tokenizer-affecting change against the multibyte fixtures **and** the real
+gte-small ones. Both the synthetic repro and the gte-small fixture code
+live in the change's `design.md` → "Acceptance criteria", not the test
+suite — see "Open work / future".
+
+## Spec-driven workflow (OpenSpec)
+
+This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) to track _what the
+library guarantees today_ vs _what we're going to change next_. See
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the full workflow.
+
+- `openspec/specs/` — the current behavioral contract as capabilities
+  (`chunking`, `chunk-coverage`, `multibyte-anchoring`, `chunk-extraction`).
+  The README stays the human narrative; specs are the structured source of truth.
+- `openspec/changes/` — proposed work (proposal + design + spec deltas + tasks).
+- Drive future work from Claude Code with the `/opsx:*` slash commands
+  (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`); see docs/CONTRIBUTING.md.
+  Inspect/validate via the CLI: `openspec validate --all --strict`.
 
 ## Open work / future
 
-- [docs/tokenizer-length-inflation.md](docs/tokenizer-length-inflation.md)
-  — single open item, internal codename **B7**. Captures the problem
-  (HuggingFace embedding models like `gte-small` whose tokenizer
-  pipelines normalize during decode), the real-world regression
-  fixtures (live in [test/split.test.js](test/split.test.js), gated by
-  `B7_TEST=1`), the failed Phase 2 hybrid-cursor attempt, and five
-  candidate fix directions with a refined proposal under "Implications
-  for Phase 2". Self-contained; can be lifted into a GitHub issue.
+- **Tokenizer length inflation** — normalizing embedding tokenizers (`gte-small` and
+  friends) mis-anchor or throw. Everything lives in
+  [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/):
+  `proposal.md`, `design.md` (decisions, plus both failing test suites under "Acceptance
+  criteria"), `research.md` (the gte-small evidence and the reverted hybrid-cursor trace),
+  spec deltas, and a phased `tasks.md`. Nothing for it lives in `test/split.test.js` — the
+  suite is unconditional and green. When it ships, run
+  `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
+
+- **Quadratic tier-2 anchor scan** — shipped and archived. `indexOf(splitPart, cursor)` used to
+  scan to end of input for every part that isn't verbatim in the source, making
+  `character`-strategy splits O(n²) on tokenizer output; fixed by the tier 2 skip described in
+  the algorithm map, and now part of the `multibyte-anchoring` contract. Background lives in
+  [openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/](openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/) —
+  `design.md` carries the tier instrumentation, the measured tier-2 reach data, the rationale
+  for rejecting a distance bound, and the measurements behind the regression's constants
+  (including the conditional follow-up in `tasks.md` § 6 for revisiting a tier-2 distance bound
+  if a caller ever reports a splitter that legitimately drops long spans).
+  `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
+  this.

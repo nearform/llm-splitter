@@ -16,7 +16,6 @@ export const getChunk = (input, start, end) => {
   const inputs = Array.isArray(input) ? input : [input];
 
   for (const item of inputs) {
-    // Error if not string.
     if (typeof item !== "string") {
       throw new TypeError(
         `Input must be a string or array of strings, got ${typeof item} for ${item}`,
@@ -27,20 +26,15 @@ export const getChunk = (input, start, end) => {
     const itemStart = offset;
     const itemEnd = offset + itemLength;
 
-    // Check if this item overlaps with the requested chunk
     if (start < itemEnd && itemStart < end) {
-      // Calculate the actual start and end positions within this item
+      // Clamp the requested range to this item's own bounds.
       const chunkStart = Math.max(0, start - itemStart);
       const chunkEnd = Math.min(itemLength, end - itemStart);
-
-      // Extract the substring from this item
-      const chunk = item.substring(chunkStart, chunkEnd);
-      matches.push(chunk);
+      matches.push(item.substring(chunkStart, chunkEnd));
     }
 
     offset += itemLength;
   }
 
-  // Return single string for single input, array for array input
   return Array.isArray(input) ? matches : matches[0] || "";
 };

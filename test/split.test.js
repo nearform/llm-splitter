@@ -1,5 +1,6 @@
 import { describe, it, after, before } from "node:test";
 import assert from "node:assert";
+import { performance } from "node:perf_hooks";
 import tiktoken from "tiktoken";
 import { split } from "../src/split.js";
 import { getChunk } from "../src/get-chunk.js";
@@ -19,49 +20,12 @@ const tokenSplitter = (text) =>
     td.decode(tokenizer.decode(new Uint32Array([token]))),
   );
 
-// gte-small (BERT WordPiece via @huggingface/transformers). Loaded lazily in
-// before() only when B7_TEST=1 to avoid a 23 MB model download on plain
-// `npm test`. See test/split.test.js B7-real regression group and
-// docs/tokenizer-length-inflation.md.
-/** @type {{ encode: (text: string) => number[], decode: (ids: number[]) => string } | undefined} */
-let gteTokenizer;
-/** @param {string} text */
-const gteSmallSplitterNaive = (text) => {
-  if (!gteTokenizer) {
-    throw new Error("gteTokenizer not initialized");
-  }
-  const tok = gteTokenizer;
-  return tok.encode(text).map((id) => tok.decode([id]));
-};
-/** @param {string} text */
-const gteSmallSplitter = (text) => {
-  if (!gteTokenizer) {
-    throw new Error("gteTokenizer not initialized");
-  }
-  const tok = gteTokenizer;
-  return tok
-    .encode(text)
-    .map((id) => tok.decode([id]))
-    .filter((t) => t !== "[CLS]" && t !== "[SEP]" && t !== "[UNK]");
-};
-
-const B7_TEST_ENABLED = !!process.env.B7_TEST;
-const B7_SKIP_REASON =
-  "Set B7_TEST=1 to enable gte-small regression tests (downloads Xenova/gte-small ~23MB)";
-
 // Tests
 /** @type {import('tiktoken').Tiktoken} */
 let tokenizer;
 describe("split", () => {
-  before(async () => {
+  before(() => {
     tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002");
-    if (B7_TEST_ENABLED) {
-      const { AutoTokenizer } = await import("@huggingface/transformers");
-      const loaded = await AutoTokenizer.from_pretrained("Xenova/gte-small");
-      gteTokenizer = /** @type {typeof gteTokenizer} */ (
-        /** @type {unknown} */ (loaded)
-      );
-    }
   });
 
   after(() => {
@@ -141,6 +105,17 @@ describe("split", () => {
           { text: "l", start: 2, end: 3 },
           { text: "l", start: 3, end: 4 },
           { text: "o", start: 4, end: 5 },
+        ]);
+      });
+
+      it("skips zero-length parts and does not count them toward chunkSize", () => {
+        const input = "a,,b";
+        /** @param {string} text */
+        const splitter = (text) => text.split(",");
+        // Parts are ["a", "", "b"] — the empty part anchors nowhere, so both
+        // real parts land in one chunk that spans the dropped commas.
+        assert.deepStrictEqual(split(input, { chunkSize: 2, splitter }), [
+          { text: "a,,b", start: 0, end: 4 },
         ]);
       });
 
@@ -943,6 +918,33 @@ describe("split", () => {
           ]);
         });
 
+        it("overlap parts do not count as a paragraph boundary, so they can split a fitting paragraph", () => {
+          // Second paragraph has 9 parts and would fit whole in an empty
+          // chunkSize=10 chunk, but the 2 carried-over overlap parts leave
+          // room for only 8 of them.
+          const first = Array.from({ length: 10 }, (_, i) => `a${i}`).join(" ");
+          const second = Array.from({ length: 9 }, (_, i) => `b${i}`).join(" ");
+          const input = `${first}\n\n${second}`;
+          /** @param {number} chunkOverlap */
+          const texts = (chunkOverlap) =>
+            split(input, {
+              chunkSize: 10,
+              chunkOverlap,
+              chunkStrategy: "paragraph",
+              splitter: whitespaceSplitter,
+            }).map((chunk) => chunk.text);
+
+          assert.deepStrictEqual(texts(2), [
+            "a0 a1 a2 a3 a4 a5 a6 a7 a8 a9",
+            "a8 a9\n\nb0 b1 b2 b3 b4 b5 b6 b7",
+            "b6 b7 b8",
+          ]);
+          assert.deepStrictEqual(texts(0), [
+            "a0 a1 a2 a3 a4 a5 a6 a7 a8 a9\n\n",
+            "b0 b1 b2 b3 b4 b5 b6 b7 b8",
+          ]);
+        });
+
         it("should handle paragraph strategy with mixed content in array", () => {
           const input = ["hello\n\nworld", "test", "string\n\nend"];
           const result = split(input, {
@@ -1225,10 +1227,10 @@ describe("split", () => {
       });
     });
 
-    // B6: paragraph mode trims leading/trailing whitespace from each paragraph
-    // before anchoring. Trimmed bytes are absorbed by B5 forward-extension or
-    // left uncovered if they precede chunks[0].start.
-    describe("paragraph trim (B6)", () => {
+    // Paragraph mode trims leading/trailing whitespace from each paragraph
+    // before anchoring. Trimmed bytes are absorbed by the forward-extension
+    // pass, or left uncovered if they precede chunks[0].start.
+    describe("paragraph trim", () => {
       it("leading whitespace in a paragraph is stripped from anchored parts (char splitter)", () => {
         const input = "  hello\n\nworld";
         const result = split(input, {
@@ -1236,25 +1238,25 @@ describe("split", () => {
           chunkStrategy: "paragraph",
           splitter: charSplitter,
         });
-        // Without B6, chunks[0] would have anchored the two leading spaces
-        // and started at position 0. With B6, chunks[0].start === 2 (where
-        // 'h' lives); the leading "  " is uncovered. The trailing "\n\n" is
-        // absorbed forward into chunks[0] via B5 extension.
+        // Untrimmed, chunks[0] would anchor the two leading spaces and start
+        // at position 0. Trimmed, chunks[0].start === 2 (where 'h' lives) and
+        // the leading "  " is uncovered. The trailing "\n\n" is absorbed
+        // forward into chunks[0] by the extension pass.
         assert.deepStrictEqual(result, [
           { text: "hello\n\n", start: 2, end: 9 },
           { text: "world", start: 9, end: 14 },
         ]);
       });
 
-      it("trailing whitespace in a paragraph is stripped but absorbed by B5 extension", () => {
+      it("trailing whitespace in a paragraph is stripped but absorbed by forward extension", () => {
         const input = "hello   \n\nworld";
         const result = split(input, {
           chunkSize: 5,
           chunkStrategy: "paragraph",
           splitter: charSplitter,
         });
-        // chunks[0] anchors only "hello"; trailing "   " is unanchored.
-        // B5 then extends chunks[0].end forward to chunks[1].start=10.
+        // chunks[0] anchors only "hello"; trailing "   " is unanchored. The
+        // extension pass then pushes chunks[0].end forward to chunks[1].start=10.
         assert.deepStrictEqual(result, [
           { text: "hello   \n\n", start: 0, end: 10 },
           { text: "world", start: 10, end: 15 },
@@ -1277,9 +1279,9 @@ describe("split", () => {
       });
     });
 
-    // B5 invariant: chunks fully cover input from chunks[0].start onward.
-    // (Leading bytes before chunks[0].start may be uncovered by design.)
-    describe("coverage invariant (B5)", () => {
+    // Chunks fully cover the input from chunks[0].start onward. (Leading
+    // bytes before chunks[0].start may be uncovered by design.)
+    describe("coverage invariant", () => {
       /**
        * @param {import("../src/split.js").Chunk[]} chunks
        * @param {number} totalLength
@@ -1355,6 +1357,152 @@ describe("split", () => {
       });
     });
 
+    describe("non-ASCII anchoring", () => {
+      it("covers the whole input when a tokenizer fragments text with no ASCII", () => {
+        // A tokenizer that splits a multi-byte character emits U+FFFD parts
+        // matching nothing in the source. Resynchronizing after one must not
+        // depend on finding a single-byte character to anchor against: this
+        // input contains none, so a cursor stranded on the first fragment
+        // would discard every part after it.
+        const input = "这是一个测试文本用于检查分块边界的准确性。".repeat(10);
+        const chunks = split(input, { chunkSize: 64, splitter: tokenSplitter });
+
+        assert.strictEqual(chunks[0].start, 0);
+        assert.strictEqual(
+          chunks[chunks.length - 1].end,
+          input.length,
+          "must not stop at the first unanchorable fragment",
+        );
+        for (const chunk of chunks) {
+          assert.strictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
+
+      it("locates ordinary parts that follow an unanchorable fragment", () => {
+        // Same shape without the tokenizer: every fourth part is replaced by
+        // U+FFFD. The parts around it are ordinary characters sitting verbatim
+        // in the source and must still be found at their true offsets.
+        const input = "这是一个测试文本用于检查分块";
+        /** @param {string} text */
+        const fragmentingSplitter = (text) =>
+          [...text].map((ch, i) => (i % 4 === 3 ? "�" : ch));
+
+        const chunks = split(input, {
+          chunkSize: 2,
+          splitter: fragmentingSplitter,
+        });
+
+        for (let i = 0; i < chunks.length - 1; i++) {
+          assert.ok(
+            chunks[i].end >= chunks[i + 1].start,
+            `gap between chunk ${i} and ${i + 1}`,
+          );
+        }
+        assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+      });
+
+      it("locates a replacement char that is genuinely in the source", () => {
+        // A part carrying U+FFFD is skipped past the verbatim search only
+        // because such a part cannot occur in a source without one. This
+        // source has one, so the part is findable and must be found at its
+        // true offset (2), not at the "b" one code unit later.
+        const input = "a �b";
+        const chunks = split(input, {
+          chunkSize: 1,
+          splitter: whitespaceSplitter,
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["a ", 0, 2],
+            ["�b", 2, 4],
+          ],
+        );
+        for (const chunk of chunks) {
+          assert.strictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
+
+      it("drops unanchorable parts without dropping mixed ones", () => {
+        // Three shapes that all reach the anchor walk differently: nothing
+        // but replacement chars (unanchorable outright), a combining mark
+        // whose only company is a replacement char (no standalone position,
+        // so also unanchorable), and a replacement char followed by real
+        // source text (anchorable on that text, and must not be discarded
+        // alongside the other two).
+        const input = "abcd";
+        const splitter = () => ["���", "́�", "�cd"];
+        const chunks = split(input, { chunkSize: 8, splitter });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [["cd", 2, 4]],
+        );
+      });
+    });
+
+    describe("anchoring cost", () => {
+      // Every fourth part becomes a replacement char, the shape a BPE
+      // tokenizer produces on dense multi-byte text. The source holds none,
+      // so those parts exist nowhere in it and the verbatim search for them
+      // can only fail — after scanning to the end of the input, which is
+      // what once made whole-document splits quadratic.
+      /** @param {string} text */
+      const fragmentingSplitter = (text) =>
+        [...text].map((ch, i) => (i % 4 === 3 ? "�" : ch));
+
+      /** @param {number} size */
+      const multibyteSource = (size) =>
+        "这是一个测试文本用于检查分块边界的准确性。"
+          .repeat(Math.ceil(size / 20))
+          .slice(0, size);
+
+      // Fastest of two runs: the minimum is the statistic that survives a
+      // GC pause or a noisy CI box.
+      /** @param {number} size */
+      const fastestSplitMs = (size) => {
+        const input = multibyteSource(size);
+        let best = Infinity;
+        for (let run = 0; run < 2; run++) {
+          const started = performance.now();
+          split(input, { chunkSize: 512, splitter: fragmentingSplitter });
+          best = Math.min(best, performance.now() - started);
+        }
+        return best;
+      };
+
+      it("grows linearly with input size", () => {
+        // An 8x span, not 2x: at 2x the quadratic term does not yet dominate
+        // the linear per-part work at a size this suite can afford, and a
+        // quadratic implementation measures only ~2.6x — inside any usable
+        // margin. Across 8x, linear anchoring measures ~6-9x and quadratic
+        // ~26-35x, so the threshold sits at twice the ideal factor with
+        // room on both sides. If the baseline ever gets too small to divide
+        // by, raise BASE rather than the threshold.
+        const SPAN = 8;
+        const BASE = 40_000;
+        const baseline = fastestSplitMs(BASE);
+        const scaled = fastestSplitMs(BASE * SPAN);
+
+        assert.ok(
+          baseline > 0,
+          "baseline measurement must be greater than zero to divide by",
+        );
+        const growth = scaled / baseline;
+        assert.ok(
+          growth < SPAN * 2,
+          `anchoring cost grew ${growth.toFixed(1)}x for a ${SPAN}x larger input (${baseline.toFixed(2)}ms -> ${scaled.toFixed(2)}ms); linear is ~${SPAN}x, quadratic ~${SPAN ** 2}x`,
+        );
+      });
+    });
+
     describe("negative inputs", () => {
       it("propagates errors thrown by the splitter", () => {
         const boomSplitter = () => {
@@ -1417,141 +1565,55 @@ describe("split", () => {
       });
     });
 
-    // Regression tests for bugs surfaced in the adversarial review.
-    // Active tests assert post-fix behavior. `it.todo` markers remain only
-    // for bugs whose fix hasn't shipped yet.
-    describe("regressions", () => {
-      it("B1: paragraph mode anchors next group at its real position, not first substring match", () => {
-        // Adversarial: second array element's content ("b") appears as a
-        // substring inside the first element ("ab"). Pre-fix the second
-        // paragraph anchored at offset 1 (inside "ab") instead of offset 2
-        // and the trailing "b" was silently dropped. Fix: boundaryGroups
-        // carries baseOffset explicitly.
+    describe("paragraph group offsets", () => {
+      it("paragraph mode anchors next group at its real position, not first substring match", () => {
+        // The second array element's content ("b") appears as a substring
+        // inside the first ("ab"). Anchoring the group by substring search
+        // landed it at offset 1 (inside "ab") instead of offset 2, silently
+        // dropping the trailing "b". boundaryGroups now carries baseOffset
+        // explicitly.
         const result = split(["ab", "b"], { chunkStrategy: "paragraph" });
         assert.deepStrictEqual(result, [
           { text: ["ab", "b"], start: 0, end: 3 },
         ]);
       });
 
-      it("B2: empty paragraphs do not poison subsequent group offset lookup", () => {
-        // Adversarial: an empty middle array element advanced baseOffset by
-        // one position pre-fix; the next paragraph's indexOf then started
-        // past its real location and returned -1, throwing "Could not find
-        // start of group". The empty middle element appears as "" in chunk
-        // text because getChunk includes zero-width items that sit between
-        // start and end positions.
+      it("anchors a string paragraph whose text repeats earlier in the input", () => {
+        // "three four" also occurs inside "two three four", ahead of the real
+        // third paragraph. Locating a group by searching forward from the
+        // previous group's offset finds that earlier occurrence, anchors the
+        // group behind its true position, and drops the final paragraph.
+        const input = "one\n\ntwo three four\n\nthree four";
+        const chunks = split(input, {
+          chunkSize: 3,
+          splitter: whitespaceSplitter,
+          chunkStrategy: "paragraph",
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.start, chunk.end]),
+          [
+            [0, 5],
+            [5, 21],
+            [21, 31],
+          ],
+        );
+        assert.strictEqual(chunks[chunks.length - 1].text, "three four");
+        assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+      });
+
+      it("empty paragraphs do not poison subsequent group offset lookup", () => {
+        // An empty middle array element used to advance baseOffset by one
+        // position; the next paragraph's indexOf then started past its real
+        // location and returned -1, throwing "Could not find start of group".
+        // The empty middle element appears as "" in chunk text because
+        // getChunk includes zero-width items that sit between start and end
+        // positions.
         const result = split(["b", "", "b"], { chunkStrategy: "paragraph" });
         assert.deepStrictEqual(result, [
           { text: ["b", "", "b"], start: 0, end: 2 },
         ]);
       });
-
-      it.todo(
-        "B7: cursor does not drift when splitter inflates a part's length",
-        () => {
-          // Synthetic splitter: appends a U+FFFD byte to each character so
-          // splitPart.length (2) exceeds source span (1). Current
-          // implementation uses splitPart.length to set `end` and then
-          // `cursor = end`, drifting one position per part; the second
-          // part's anchor 'b' (at source position 1) can't be found from
-          // cursor=2 and the call throws.
-          //
-          // Real-world relevance: tiktoken maintains 1:1 byte↔char (each
-          // un-decodable byte becomes exactly one U+FFFD) so the length-based
-          // cursor is exact for it. HuggingFace tokenizers like `gte-small`
-          // (via transformers.js) CAN inflate decoded length during
-          // normalization, so a real B7 fix is needed for them. A first
-          // attempt at anchor-based cursor walking undershot tiktoken's case
-          // and broke real Devanagari fixtures, so the fix needs to detect
-          // inflation rather than just switch cursor algorithms. Deferred to
-          // Phase 3.
-          const driftSplitter = (/** @type {string} */ text) =>
-            text.split("").map((ch) => ch + "�");
-          const result = split("abc", {
-            chunkSize: 3,
-            splitter: driftSplitter,
-          });
-          assert.deepStrictEqual(result, [{ text: "abc", start: 0, end: 3 }]);
-        },
-      );
-
-      // B7-real: real-world fixtures using `gte-small` (BERT WordPiece via
-      // @huggingface/transformers). The model's normalizer pipeline
-      // (NFD + lowercase + strip-accents) plus WordPiece's `##` continuation
-      // prefix break the splitter's anchoring assumptions in several distinct
-      // ways. These tests are gated by B7_TEST=1 because they download a
-      // 23 MB model on first run and aren't a CI requirement until B7 is
-      // fixed. See docs/tokenizer-length-inflation.md.
-      //
-      // Two helpers are exercised per fixture:
-      //   - gteSmallSplitterNaive: encode + decode-each-token, nothing
-      //     filtered. Includes [CLS]/[SEP] and (if any) [UNK].
-      //   - gteSmallSplitter: filters [CLS]/[SEP]/[UNK] but keeps `##`
-      //     prefixes and the lowercase/accent-stripped output.
-      // nearform/joyce's documented workaround additionally pre-lowercases
-      // input and strips `##`; we deliberately do NOT do that here, to
-      // expose what the library handles unaided.
-      /**
-       * @param {import("../src/split.js").Chunk[]} chunks
-       * @param {number} totalLength
-       */
-      const assertCovers = (chunks, totalLength) => {
-        if (chunks.length === 0) {
-          return;
-        }
-        for (let i = 0; i < chunks.length - 1; i++) {
-          assert.ok(
-            chunks[i].end >= chunks[i + 1].start,
-            `gap between chunk ${i} (end=${chunks[i].end}) and chunk ${i + 1} (start=${chunks[i + 1].start})`,
-          );
-        }
-        assert.strictEqual(
-          chunks[chunks.length - 1].end,
-          totalLength,
-          "last chunk must extend to end of input",
-        );
-      };
-
-      const b7Fixtures = [
-        {
-          label:
-            "headline real-world case (uppercase + apostrophe + accented letter)",
-          input: "Hi there. I'm Evän.",
-        },
-        { label: "CAFÉ (uppercase + accent)", input: "CAFÉ" },
-        { label: "naïve résumé (accent-only)", input: "naïve résumé" },
-        {
-          label: "こんにちは world (CJK + ASCII control)",
-          input: "こんにちは world",
-        },
-        { label: "hello world (pure-ASCII control)", input: "hello world" },
-      ];
-
-      const skipB7 = B7_TEST_ENABLED ? false : B7_SKIP_REASON;
-      for (const { label, input } of b7Fixtures) {
-        it(
-          `B7-real (truly naive gte-small): ${label}`,
-          { skip: skipB7 },
-          () => {
-            const chunks = split(input, {
-              chunkSize: 4,
-              splitter: gteSmallSplitterNaive,
-            });
-            assertCovers(chunks, input.length);
-          },
-        );
-        it(
-          `B7-real (almost-naive gte-small): ${label}`,
-          { skip: skipB7 },
-          () => {
-            const chunks = split(input, {
-              chunkSize: 4,
-              splitter: gteSmallSplitter,
-            });
-            assertCovers(chunks, input.length);
-          },
-        );
-      }
     });
   });
 });

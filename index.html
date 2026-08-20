@@ -459,32 +459,34 @@ $ npx serve
               </button>
             </div>
 
-            ${viewMode === "cards"
-              ? html`
-                  <div className="cards-output">
-                    ${results.map(
-                      (chunk, index) => html`
-                        <div key=${index} className="chunk-card">
-                          <div className="chunk-header">
-                            <span className="chunk-index"
-                              >Chunk ${index + 1}</span
-                            >
-                            <span className="chunk-range"
-                              >${chunk.start}-${chunk.end} (${chunk.text.length}
-                              chars)</span
-                            >
+            ${
+              viewMode === "cards"
+                ? html`
+                    <div className="cards-output">
+                      ${results.map(
+                        (chunk, index) => html`
+                          <div key=${index} className="chunk-card">
+                            <div className="chunk-header">
+                              <span className="chunk-index"
+                                >Chunk ${index + 1}</span
+                              >
+                              <span className="chunk-range"
+                                >${chunk.start}-${chunk.end}
+                                (${chunk.text.length} chars)</span
+                              >
+                            </div>
+                            <div className="chunk-text">${chunk.text}</div>
                           </div>
-                          <div className="chunk-text">${chunk.text}</div>
-                        </div>
-                      `,
-                    )}
-                  </div>
-                `
-              : html`
-                  <div className="json-output">
-                    ${JSON.stringify(results, null, 2)}
-                  </div>
-                `}
+                        `,
+                      )}
+                    </div>
+                  `
+                : html`
+                    <div className="json-output">
+                      ${JSON.stringify(results, null, 2)}
+                    </div>
+                  `
+            }
           </div>
         `;
       };
@@ -650,58 +652,62 @@ $ npx serve
                 </div>
               </div>
 
-              ${splitterType === "custom"
-                ? html`
-                    <div className="custom-splitter-section">
-                      <div
-                        className="custom-splitter-toggle"
-                        onClick=${() =>
-                          setShowCustomSplitter(!showCustomSplitter)}
-                      >
-                        <i
-                          className=${showCustomSplitter
-                            ? "ph ph-caret-down"
-                            : "ph ph-caret-right"}
-                        ></i>
-                        Custom Splitter Function
-                      </div>
-                      <div
-                        className=${`custom-splitter-content ${showCustomSplitter ? "open" : ""}`}
-                      >
-                        <p
-                          style=${{
-                            margin: "0 0 10px",
-                            fontSize: "14px",
-                            color: "#7f8c8d",
-                          }}
+              ${
+                splitterType === "custom"
+                  ? html`
+                      <div className="custom-splitter-section">
+                        <div
+                          className="custom-splitter-toggle"
+                          onClick=${() =>
+                            setShowCustomSplitter(!showCustomSplitter)}
                         >
-                          Enter a JavaScript function that takes a string and
-                          returns an array of strings:
-                        </p>
-                        <textarea
-                          value=${customSplitterCode}
-                          onChange=${(e) =>
-                            setCustomSplitterCode(e.target.value)}
-                          placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
-                          rows="3"
-                          style=${{
-                            width: "100%",
-                            boxSizing: "border-box",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: "8px",
-                            padding: "12px 16px",
-                            fontSize: "13px",
-                            fontFamily:
-                              "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-                            transition: "all 0.2s ease",
-                            background: "rgba(255, 255, 255, 0.8)",
-                            resize: "vertical",
-                          }}
-                        />
+                          <i
+                            className=${
+                              showCustomSplitter
+                                ? "ph ph-caret-down"
+                                : "ph ph-caret-right"
+                            }
+                          ></i>
+                          Custom Splitter Function
+                        </div>
+                        <div
+                          className=${`custom-splitter-content ${showCustomSplitter ? "open" : ""}`}
+                        >
+                          <p
+                            style=${{
+                              margin: "0 0 10px",
+                              fontSize: "14px",
+                              color: "#7f8c8d",
+                            }}
+                          >
+                            Enter a JavaScript function that takes a string and
+                            returns an array of strings:
+                          </p>
+                          <textarea
+                            value=${customSplitterCode}
+                            onChange=${(e) =>
+                              setCustomSplitterCode(e.target.value)}
+                            placeholder="(text) => text.split(/\\s+/).filter(Boolean)"
+                            rows="3"
+                            style=${{
+                              width: "100%",
+                              boxSizing: "border-box",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "8px",
+                              padding: "12px 16px",
+                              fontSize: "13px",
+                              fontFamily:
+                                "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                              transition: "all 0.2s ease",
+                              background: "rgba(255, 255, 255, 0.8)",
+                              resize: "vertical",
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  `
-                : null}
+                    `
+                  : null
+              }
             </div>
 
             <div className="demo-section">
@@ -722,24 +728,28 @@ $ npx serve
                 onClick=${handleSplit}
                 disabled=${isProcessing || !inputText.trim()}
               >
-                ${isProcessing
-                  ? html`<${Fragment}
-                      ><i className="ph ph-spinner"></i> Processing...<//
-                    >`
-                  : html`<${Fragment}
-                      ><i className="ph ph-scissors"></i> Split Text<//
-                    >`}
+                ${
+                  isProcessing
+                    ? html`<${Fragment}
+                        ><i className="ph ph-spinner"></i> Processing...<//
+                      >`
+                    : html`<${Fragment}
+                        ><i className="ph ph-scissors"></i> Split Text<//
+                      >`
+                }
               </button>
             </div>
 
-            ${error &&
-            html`
-              <div className="demo-section">
-                <div className="error-message">
-                  <strong>Error:</strong> ${error}
+            ${
+              error &&
+              html`
+                <div className="demo-section">
+                  <div className="error-message">
+                    <strong>Error:</strong> ${error}
+                  </div>
                 </div>
-              </div>
-            `}
+              `
+            }
             <${ResultsDisplay}
               results=${results}
               viewMode=${viewMode}

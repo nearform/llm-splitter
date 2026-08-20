@@ -27,4 +27,14 @@ dist-ssr
 coverage
 demo-public
 tmp-*
-.claude
+
+# Claude Code: ignore personal/local files but track the shared OpenSpec
+# workflow (regenerable via `openspec update`, but committed so contributors
+# get the /opsx: commands without re-running init).
+.claude/*
+!.claude/commands/
+!.claude/skills/
+.claude/commands/*
+.claude/skills/*
+!.claude/commands/opsx/
+!.claude/skills/openspec-*/
