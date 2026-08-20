@@ -102,8 +102,9 @@ returns `null` regardless. Parts mixing U+FFFD with combining marks still fall t
 loop, which is the only path that can reject them.
 
 This is a second, independent win and is worth landing with the first: once Decision 1 stops
-the scanning, segmentation becomes the next visible cost (Devanagari 156ms → 105ms, CJK 202ms
-→ 98ms at 100KB).
+the scanning, segmentation becomes the next visible cost. The prototype measured Devanagari
+156ms → 105ms and CJK 202ms → 98ms at 100KB; the landed code lands at 113ms and 127ms
+respectively (see "Acceptance criteria" 3).
 
 ### 3. Probe the source eagerly, not lazily
 
@@ -116,29 +117,42 @@ simplicity grounds — it adds a mutable maybe-initialized flag to buy nothing m
 ### 4. Pin complexity by growth ratio, not wall-clock
 
 An absolute-time assertion is a flaky test on shared CI. The regression instead splits the
-same U+FFFD-heavy input at size n and 2n and asserts the ratio stays under a generous
-threshold. Today's ratio is ~2.0 fixed and ~3.9 broken, so a threshold of **3** separates them
-with a wide margin while tolerating a slow machine.
+same U+FFFD-heavy input at two sizes and asserts the growth between them stays under a
+generous multiple of the size span. Which span and which threshold could not be settled from
+the prototype's corpus numbers and had to be measured against the test as written — see the
+bullets below.
 
 Timing is the only lever available. The splitter is a caller-supplied function that receives
 text and returns parts; it cannot observe which tier anchored it, and `split()` exposes no
 counter, so there is no deterministic proxy for "Tier 2 was attempted" to assert on instead.
 That makes noise control part of the test design rather than an afterthought:
 
-- **Sizes: n = 40,000 code units, 2n = 80,000.** One part per code unit with every fourth
-  replaced by U+FFFD (the shape already used by the synthetic splitter cases in
-  [test/split.test.js](../../../test/split.test.js)), over a source containing no U+FFFD, in
-  `character` strategy. Broken, that is ~n²/8 code-unit comparisons — hundreds of ms at 2n,
-  clearly quadratic and nowhere near hanging the suite. Fixed, both sizes are a few ms.
-- **Best-of-3 per size**, minimum not mean, so one GC pause cannot fail the build.
-- **If the n measurement lands under ~1ms** on fast hardware the ratio is measuring timer
-  granularity, not growth. The fix is to raise n, never to loosen the threshold.
-- **Budget: the whole regression stays under ~150ms** when the implementation is correct,
-  against a suite that runs in ~175ms today. Confirm this during apply — if it exceeds the
-  budget, lower n and re-check the floor rule above rather than deleting the test.
+- **Span: 8x, not 2x — 40,000 code units against 320,000.** A 2x span does not work, and this
+  is the one constant that had to move once measured. At suite-affordable sizes the quadratic
+  term does not yet dominate the linear per-part work, so the quadratic implementation measures
+  only **2.62x** from 40KB to 80KB (2.94x at 80→160KB) — under a threshold of 3, a silent
+  pass. Across an 8x span the two shapes separate cleanly.
+- **Threshold: 16**, i.e. twice the ideal linear factor of 8. Measured over 5 trials each:
+  correct **6.25x – 8.81x**, quadratic **26.0x – 35.0x**. That leaves ~1.8x headroom below the
+  threshold and ~1.6x above it, in both directions.
+- **Best-of-2 per size**, minimum not mean, so one GC pause cannot fail the build. Runs must
+  be equal at both sizes — more runs at the small size alone biases the ratio upward toward a
+  false failure.
+- **Input shape:** one part per code unit with every fourth replaced by U+FFFD (the shape
+  already used by the synthetic splitter cases in
+  [test/split.test.js](../../../test/split.test.js)), over CJK source containing no U+FFFD, in
+  `character` strategy, `chunkSize: 512`.
+- **If the baseline gets too small to divide by** on faster hardware, raise the base size —
+  never loosen the threshold. Observed baseline is 2.3–5.9ms, so there is a wide margin before
+  that matters.
+- **Cost: 116ms in-suite**, taking the suite from 162ms to 295ms, inside the ~150ms budget for
+  the regression. A quadratic implementation makes the same test take ~1.5s — visibly slow,
+  nowhere near hanging.
 
-These numbers are starting points validated by the prototype's growth table, not measurements
-from the test as written; task 3.1 confirms them on the real thing.
+Each of the three new tests was confirmed to fail against the code it guards: the growth test
+against the pre-fix quadratic (30.4x), the dirty-source test against a variant with the
+per-call source probe removed, and the mixed-parts test against a fast path that returns early
+whenever a part merely _contains_ U+FFFD (which drops anchorable parts and emits nothing).
 
 ## Risks / Trade-offs
 
@@ -176,7 +190,8 @@ corpus x size x strategy x chunkSize x chunkOverlap x splitter, every chunk's `s
 and `text` must match the pre-change implementation exactly. Baseline observed: **0
 mismatches in 594 scenarios.**
 
-`node test/benchmark.js --diff` must be unchanged in every aggregate:
+`node test/benchmark.js --diff` must be unchanged in every aggregate. **Confirmed on the
+landed code** — every figure below is what the run printed:
 
 ```
   REAL differences remaining   96
@@ -189,32 +204,48 @@ mismatches in 594 scenarios.**
 
 ### 2. Growth is linear
 
-`devanagari`, `character` strategy, `tiktoken` splitter, `chunkSize: 512`, best-of-3:
+`devanagari`, `character` strategy, `tiktoken` splitter, `chunkSize: 512`, best-of-3.
+**Confirmed on the landed code**, both decisions applied:
 
 | size  |  before | after | growth before | growth after |
 | ----- | ------: | ----: | ------------: | -----------: |
-| 25KB  |   144ms |  36ms |             — |            — |
-| 50KB  |   536ms |  70ms |         3.72x |        1.94x |
-| 100KB |  2025ms | 157ms |         3.78x |        2.23x |
-| 200KB |  7705ms | 332ms |         3.80x |        2.12x |
-| 400KB | 30244ms | 668ms |         3.93x |        2.01x |
+| 25KB  |   154ms |  29ms |             — |            — |
+| 50KB  |   531ms |  55ms |         3.45x |        1.87x |
+| 100KB |  2013ms | 113ms |         3.79x |        2.08x |
+| 200KB |  7625ms | 233ms |         3.79x |        2.05x |
+| 400KB | 30440ms | 444ms |         3.99x |        1.91x |
 
-(The `after` column above is Decision 1 alone; Decision 2 takes 100KB to ~105ms.) Growth per
-doubling must stay near 2x, not near 4x.
+Growth per doubling must stay near 2x, not near 4x. (The prototype's table, taken with
+Decision 1 alone, read 36 / 70 / 157 / 332 / 668ms; Decision 2 accounts for the rest.)
 
 ### 3. Absolute cost on the reported pathology
 
 `devanagari 100KB character cs=512 tiktoken` must drop from ~1976ms to ~105ms with both
 decisions applied, and `cjk 100KB character cs=512 tiktoken` from ~338ms to ~98ms.
 
+**Measured on the landed code, interleaved best-of-6:** devanagari **2013ms → 113ms**
+(17.8x) and cjk **342-358ms → 126-127ms** (2.7x). Devanagari matches the prototype;
+cjk lands ~28ms above the predicted 98ms, so the cjk claim is 2.7x rather than 3.4x. The
+`before` figures reproduce, so this is the prototype's `after` having been optimistic on
+that row, not a regression — tiktoken's own encode dominates cjk and this change cannot
+touch it.
+
 ### 4. No regression on splitters that never emit U+FFFD
 
 100KB, best-of-20 interleaved: `latin char`, `latin whitespace`, `latin tiktoken`,
 `devanagari char`, `devanagari whitespace`. Ratio ≤ ~1.3x, with the absolute delta under
 0.5ms on every row — the whitespace rows are ~1ms total, so the ratio is the wrong lens and
-the absolute number is the one to check.
+the absolute number is the one to check. **Confirmed on the landed code:**
 
-Plus the standing gate from `openspec/config.yaml`: `npm run check` green (160/160 tests
-observed on the prototype), and the gte-small fixtures in
+| row                   |  before |   after | ratio |   delta |
+| --------------------- | ------: | ------: | ----: | ------: |
+| latin char            |  2.92ms |  3.20ms | 1.10x | +0.28ms |
+| latin whitespace      |  1.09ms |  1.37ms | 1.26x | +0.28ms |
+| latin tiktoken        | 17.90ms | 18.08ms | 1.01x | +0.18ms |
+| devanagari char       |  4.38ms |  4.84ms | 1.10x | +0.45ms |
+| devanagari whitespace |  1.80ms |  1.83ms | 1.02x | +0.03ms |
+
+Plus the standing gate from `openspec/config.yaml`: `npm run check` green (**163/163 on the
+landed code**, up from 160 by the three tests in Decision 4), and the gte-small fixtures in
 [tokenizer-length-inflation/design.md](../tokenizer-length-inflation/design.md) —
 "Acceptance criteria" unaffected, since this change does not touch the Tier 3 anchor step.

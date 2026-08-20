@@ -1,5 +1,6 @@
 import { describe, it, after, before } from "node:test";
 import assert from "node:assert";
+import { performance } from "node:perf_hooks";
 import tiktoken from "tiktoken";
 import { split } from "../src/split.js";
 import { getChunk } from "../src/get-chunk.js";
@@ -1401,6 +1402,104 @@ describe("split", () => {
           );
         }
         assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+      });
+
+      it("locates a replacement char that is genuinely in the source", () => {
+        // A part carrying U+FFFD is skipped past the verbatim search only
+        // because such a part cannot occur in a source without one. This
+        // source has one, so the part is findable and must be found at its
+        // true offset (2), not at the "b" one code unit later.
+        const input = "a �b";
+        const chunks = split(input, {
+          chunkSize: 1,
+          splitter: whitespaceSplitter,
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["a ", 0, 2],
+            ["�b", 2, 4],
+          ],
+        );
+        for (const chunk of chunks) {
+          assert.strictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
+
+      it("drops unanchorable parts without dropping mixed ones", () => {
+        // Three shapes that all reach the anchor walk differently: nothing
+        // but replacement chars (unanchorable outright), a combining mark
+        // whose only company is a replacement char (no standalone position,
+        // so also unanchorable), and a replacement char followed by real
+        // source text (anchorable on that text, and must not be discarded
+        // alongside the other two).
+        const input = "abcd";
+        const splitter = () => ["���", "́�", "�cd"];
+        const chunks = split(input, { chunkSize: 8, splitter });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [["cd", 2, 4]],
+        );
+      });
+    });
+
+    describe("anchoring cost", () => {
+      // Every fourth part becomes a replacement char, the shape a BPE
+      // tokenizer produces on dense multi-byte text. The source holds none,
+      // so those parts exist nowhere in it and the verbatim search for them
+      // can only fail — after scanning to the end of the input, which is
+      // what once made whole-document splits quadratic.
+      /** @param {string} text */
+      const fragmentingSplitter = (text) =>
+        [...text].map((ch, i) => (i % 4 === 3 ? "�" : ch));
+
+      /** @param {number} size */
+      const multibyteSource = (size) =>
+        "这是一个测试文本用于检查分块边界的准确性。"
+          .repeat(Math.ceil(size / 20))
+          .slice(0, size);
+
+      // Fastest of two runs: the minimum is the statistic that survives a
+      // GC pause or a noisy CI box.
+      /** @param {number} size */
+      const fastestSplitMs = (size) => {
+        const input = multibyteSource(size);
+        let best = Infinity;
+        for (let run = 0; run < 2; run++) {
+          const started = performance.now();
+          split(input, { chunkSize: 512, splitter: fragmentingSplitter });
+          best = Math.min(best, performance.now() - started);
+        }
+        return best;
+      };
+
+      it("grows linearly with input size", () => {
+        // An 8x span, not 2x: at 2x the quadratic term does not yet dominate
+        // the linear per-part work at a size this suite can afford, and a
+        // quadratic implementation measures only ~2.6x — inside any usable
+        // margin. Across 8x, linear anchoring measures ~6-9x and quadratic
+        // ~26-35x, so the threshold sits at twice the ideal factor with
+        // room on both sides. If the baseline ever gets too small to divide
+        // by, raise BASE rather than the threshold.
+        const SPAN = 8;
+        const BASE = 40_000;
+        const baseline = fastestSplitMs(BASE);
+        const scaled = fastestSplitMs(BASE * SPAN);
+
+        assert.ok(
+          baseline > 0,
+          "baseline measurement must be greater than zero to divide by",
+        );
+        const growth = scaled / baseline;
+        assert.ok(
+          growth < SPAN * 2,
+          `anchoring cost grew ${growth.toFixed(1)}x for a ${SPAN}x larger input (${baseline.toFixed(2)}ms -> ${scaled.toFixed(2)}ms); linear is ~${SPAN}x, quadratic ~${SPAN ** 2}x`,
+        );
       });
     });
 

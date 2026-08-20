@@ -44,6 +44,20 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   splitters; `indexOf` is safe in tier 3 because anchor graphemes
   (filtered by `firstAnchorGrapheme`) never start with a low surrogate
   or combining mark.
+- **Tier 2 is skipped when it provably cannot match**: a part containing
+  U+FFFD is not a substring of a source containing none, so the search
+  could only scan to end-of-input and return `-1`. `anchorParts` probes
+  the source for U+FFFD once per call; a source that _does_ contain one
+  disables the skip. `firstAnchorGrapheme` likewise returns `null`
+  immediately for a part with no non-replacement code unit instead of
+  segmenting it. **The quadratic has now moved twice** — out of
+  `findGrapheme`, then out of the tier 2 failure branch — so it is pinned
+  by a scaling regression ("anchoring cost" → "grows linearly with input
+  size" in [test/split.test.js](test/split.test.js)) rather than trusted
+  to stay gone. That test measures an 8x size span against a threshold of
+  16; a 2x span does not separate linear from quadratic at sizes the suite
+  can afford. Do not weaken it to "fix" a slow machine — raise the base
+  size instead.
 - After all chunks emit, a forward-extension pass sets
   `chunk[i].end = chunk[i+1].start` (and the last chunk to total input
   length). This enforces the **coverage invariant**.
@@ -140,11 +154,13 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Quadratic tier-2 anchor scan** — `indexOf(splitPart, cursor)` scans to end of input for
-  every part that isn't verbatim in the source, making `character`-strategy splits O(n²) on
-  tokenizer output (100KB Devanagari: 1976ms; 400KB: 30s). Diagnosed, prototyped and
-  validated as output-preserving; see
-  [openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
-  `design.md` carries the tier instrumentation, the measured tier-2 reach data, and the
-  rationale for rejecting a distance bound. Both changes edit `anchorParts` — whichever
-  lands second rebases on the other.
+- **Quadratic tier-2 anchor scan (fixed, pending archive)** — `indexOf(splitPart, cursor)` used
+  to scan to end of input for every part that isn't verbatim in the source, making
+  `character`-strategy splits O(n²) on tokenizer output. Fixed by the tier 2 skip described in
+  the algorithm map; the code and tests have landed, so what remains is
+  `openspec archive anchor-scan-short-circuit`. See
+  [openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/) —
+  `design.md` carries the tier instrumentation, the measured tier-2 reach data, the rationale
+  for rejecting a distance bound, and the measurements behind the regression's constants.
+  `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and now
+  rebases on this.

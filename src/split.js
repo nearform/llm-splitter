@@ -17,14 +17,13 @@ import { getChunk } from "./get-chunk.js";
 
 const CHUNK_STRATEGIES = new Set(["character", "paragraph"]);
 const REPLACEMENT_CHAR = "�";
-// Single source of truth for what counts as a paragraph break in
-// `chunkStrategy: "paragraph"`. Currently a literal "\n\n"; in the future
-// this may expand to an array of delimiters or accept user input.
+// Fails only for a string of nothing but replacement characters.
+const NON_REPLACEMENT_CHAR = /[^�]/;
+// The only paragraph break `chunkStrategy: "paragraph"` recognizes — used for
+// both the split and the per-paragraph cursor advance.
 const PARAGRAPH_DELIMITER = "\n\n";
-// Locale `undefined` resolves to the host default, but grapheme segmentation
-// per UAX #29 is locale-independent in practice — verified against en, th,
-// ja, ar, hi, und and the host default on every multilingual fixture in the
-// test suite; outputs were identical for all.
+// Host default locale: grapheme segmentation per UAX #29 is locale-independent,
+// verified identical across en, th, ja, ar, hi and und.
 const SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
@@ -77,15 +76,22 @@ const splitValidate = ({
 };
 
 // First grapheme of `splitPart` that can plausibly stand alone in `input`.
-// Used when fast-path `startsWith` fails because the splitter mutated bytes
-// (typically: tiktoken decoded a token straddling a multi-byte char and
-// emitted U+FFFD, or emitted an isolated combining mark like a variation
-// selector that only ever appears merged into a preceding base grapheme).
+// Needed when the splitter mutated bytes: tiktoken decoding a token that
+// straddles a multi-byte char emits U+FFFD, or emits an isolated combining
+// mark that only ever appears merged into a preceding base grapheme.
 /**
  * @param {string} splitPart
  * @returns {string|null}
  */
 const firstAnchorGrapheme = (splitPart) => {
+  // Nothing but replacement characters, so the loop can only return null —
+  // and segmenting these dominates on dense multi-byte text. Keyed on having
+  // no other code unit, not on containing U+FFFD: a part mixing U+FFFD with
+  // real text is still anchorable.
+  if (!NON_REPLACEMENT_CHAR.test(splitPart)) {
+    return null;
+  }
+
   for (const { segment } of SEGMENTER.segment(splitPart)) {
     if (segment === REPLACEMENT_CHAR) {
       continue;
@@ -112,19 +118,19 @@ const firstAnchorGrapheme = (splitPart) => {
  *     cursor sitting exactly on the next part (char/tiktoken happy path).
  *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops
  *     bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so
- *     the cursor lands in the gap and `startsWith` fails). The whole part
- *     still exists verbatim in source, so a substring search finds it in
- *     native code without allocating.
+ *     the cursor lands in the gap and `startsWith` fails). Skipped when the
+ *     part contains U+FFFD and the source does not: the part cannot be a
+ *     substring, so the search could only fail after scanning to end of
+ *     input, and with O(n) such parts that is quadratic. U+FFFD is the only
+ *     character a splitter may introduce, so nothing else admits the same
+ *     inference; a source that does contain one disables the skip.
  *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter
  *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find
  *     the first positionable grapheme inside splitPart and anchor there.
  *
- * indexOf is safe for the anchor case because `firstAnchorGrapheme` returns
- * a full Intl.Segmenter grapheme cluster that (by construction) never starts
- * with a low surrogate or combining mark — so a code-unit match cannot land
- * mid-surrogate or mid-cluster. Replacing an earlier `Intl.Segmenter` walk
- * over `input.slice(cursor)` per call (O(n) allocation each) with a native
- * `indexOf` is the main perf win for byte-dropping splitters.
+ * `indexOf` is safe in tier 3 because `firstAnchorGrapheme` returns a whole
+ * grapheme cluster, which never starts with a low surrogate or combining
+ * mark — a code-unit match cannot land mid-surrogate or mid-cluster.
  *
  * @param {string} input
  * @param {(input: string) => string[]} splitter
@@ -142,6 +148,8 @@ const anchorParts = (input, splitter, baseOffset) => {
   /** @type {Chunk[]} */
   const parts = [];
   let cursor = 0;
+  // Precondition for the tier 2 skip; constant while we walk `input`.
+  const sourceHasReplacement = input.includes(REPLACEMENT_CHAR);
 
   for (const splitPart of splits) {
     if (typeof splitPart !== "string") {
@@ -154,18 +162,20 @@ const anchorParts = (input, splitter, baseOffset) => {
       continue;
     }
 
-    // Tier 1: byte-preserving splitter, cursor at exact match.
-    // Tier 2: byte-preserving splitter with a gap before this part.
-    let start = input.startsWith(splitPart, cursor)
-      ? cursor
-      : input.indexOf(splitPart, cursor);
+    // Tier 1: cursor already at the part. Tier 2: search forward, unless the
+    // part carries a U+FFFD the source cannot contain (see docstring).
+    let start = -1;
+    if (input.startsWith(splitPart, cursor)) {
+      start = cursor;
+    } else if (sourceHasReplacement || !splitPart.includes(REPLACEMENT_CHAR)) {
+      start = input.indexOf(splitPart, cursor);
+    }
 
     if (start === -1) {
       // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
       const anchor = firstAnchorGrapheme(splitPart);
-      // splitPart is entirely U+FFFD or combining marks (tokenizer's decode
-      // emitted nothing positionable). It claims no source bytes — silently
-      // drop it.
+      // Entirely U+FFFD or combining marks: nothing positionable, so the part
+      // claims no source bytes and is dropped.
       if (anchor === null) {
         continue;
       }
@@ -219,11 +229,9 @@ const boundaryGroups = (strategy, inputs) => {
     for (const input of inputs) {
       let cursor = 0;
       for (const paragraph of input.split(PARAGRAPH_DELIMITER)) {
-        // Trim leading/trailing whitespace from the paragraph and shift
-        // baseOffset to match the trimmed content. The trimmed bytes still
-        // exist in the input string — they end up in adjacent chunks via the
-        // forward-extension pass below (or remain uncovered if they precede
-        // chunks[0].start).
+        // Trim to real content and shift baseOffset to match, so chunk starts
+        // don't land on whitespace. The trimmed code units are absorbed by the
+        // forward-extension pass below.
         const leadingMatch = paragraph.match(/^\s+/);
         const leadLen = leadingMatch ? leadingMatch[0].length : 0;
         const trailingMatch = paragraph.match(/\s+$/);
@@ -234,10 +242,8 @@ const boundaryGroups = (strategy, inputs) => {
           parts: [trimmed],
         });
 
-        // `PARAGRAPH_DELIMITER` is the only delimiter `split()` consumes, so
-        // adjacent paragraphs are separated by exactly its length in source.
-        // Use the pre-trim paragraph length to advance — we're tracking
-        // positions in the original input.
+        // Pre-trim length, because these are positions in the original input,
+        // and `PARAGRAPH_DELIMITER` is the only thing the split consumed.
         cursor += paragraph.length + PARAGRAPH_DELIMITER.length;
       }
 
@@ -392,25 +398,10 @@ export const split = (
     emit();
   }
 
-  // Extend each chunk's `end` forward to absorb gaps to the next chunk;
-  // the final chunk extends to end of input. Leading code units before
-  // chunks[0] are intentionally left uncovered (no "previous" chunk to
-  // extend).
-  //
-  // Why we preserve gap content rather than dropping it: chunks return
-  // {start,end} positions (UTF-16 code-unit offsets) so callers can locate
-  // them in the source. Coverage means `chunks[i].end >= chunks[i+1].start`
-  // (modulo overlap) and `chunks[last].end === input.length` — a downstream
-  // consumer can attribute every source code unit to a chunk for RAG
-  // citations, highlighting, re-chunking, etc. Dropping content would make
-  // positions ambiguous and citation ranges disjoint. Callers who want
-  // trimmed text can always do `chunk.text.trim()`; the reverse (we trim,
-  // they want it back) is impossible without re-reading source. Lossless
-  // library, lossy caller.
-  //
-  // Consequence: chunks have clean starts (paragraph-leading whitespace is
-  // stripped before anchoring) but may carry trailing whitespace and `\n\n`
-  // delimiters absorbed forward from the gap.
+  // Extend each chunk's `end` to the next chunk's `start`, and the last to end
+  // of input, so every code unit from chunks[0].start on is attributable — see
+  // "Coverage / position semantics" above. Code units before chunks[0].start
+  // have no previous chunk and stay uncovered.
   const totalLength = inputAsArray.reduce((sum, s) => sum + s.length, 0);
   for (let i = 0; i < chunks.length; i++) {
     const nextStart = i < chunks.length - 1 ? chunks[i + 1].start : totalLength;

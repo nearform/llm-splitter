@@ -33,6 +33,15 @@ the runtime — `@huggingface/transformers` executes whatever ships in `tokenize
 Each surfaces as either a hard throw (loud, easy to spot) or silent mis-anchoring —
 usually masked by a later cascading throw that then names the wrong token.
 
+A fourth instance of the same root cause, from a different direction: a **source that itself
+contains a literal U+FFFD**. Tier 2 then matches a decode-produced U+FFFD against an unrelated
+literal one further along, the length-based advance carries the cursor past real source, and
+the next part throws or mis-anchors. It is the same length-vs-span mismatch as mode 1, reached
+without any normalization. Confirmed identical before and after `anchor-scan-short-circuit`
+(that change's tier 2 skip switches itself off precisely when the source contains U+FFFD, so
+it neither helps nor hurts here) — recorded so the fix designed for modes 1-3 is checked
+against this shape too.
+
 ## Phase 1 evidence (gte-small, 2026-05-25)
 
 `Xenova/gte-small` on `"Hi there. I'm Evän."` decodes per-token to:

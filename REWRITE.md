@@ -23,9 +23,9 @@ all 270 scenarios, so neither is internally inconsistent. Old simply drops input
 on the floor without reporting it.
 
 Perf is covered in the [Devanagari](#the-devanagari-case-why-this-copy-can-be-much-slower)
-section: this copy is faster in the median and has one severe pathology, now diagnosed
-with a validated fix proposed in
-[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
+section: this copy is faster in the median, and the one severe pathology it had — a
+quadratic anchor scan on tokenizer output — has been fixed. No scenario in the matrix
+is now 2x slower than the published library; the worst is 1.68x.
 
 ---
 
@@ -215,20 +215,26 @@ the corpus is in the matrix: Latin text cannot exercise this path at all.
 
 ### The measurements
 
-This copy is **faster overall** — median ratio ~0.6–0.7x, i.e. roughly 1.5x faster.
-Only 74 of 270 scenarios are slower at all, and they are almost entirely tokenizer
-scenarios:
+This copy is **faster overall** — median ratio 0.77x. 48 of 270 scenarios are slower
+at all, and **none is 2x or worse** (worst: 1.68x):
 
 | splitter     | median ratio (new / old) |
 | ------------ | -----------------------: |
-| whitespace   |                    0.46x |
-| char         |                    0.66x |
-| **tiktoken** |                **1.70x** |
+| whitespace   |                    0.56x |
+| char         |                    0.76x |
+| **tiktoken** |                **0.98x** |
 
-But 21 scenarios are 2x or worse, and the tail is bad:
+The tokenizer column is what moved. Before the tier 2 fix below it read **1.70x**
+median with 21 scenarios at 2x or worse, and the tail was this:
 
 ```
 devanagari 100KB character cs=512 tiktoken    old=77ms   new=1976ms   25.6x
+```
+
+That same row now reads:
+
+```
+devanagari 100KB character cs=512 tiktoken    old=79ms   new=109ms    1.39x
 ```
 
 ### Why
@@ -292,30 +298,40 @@ same answer by construction.
 
 Together, at 100KB `character` / `tiktoken`:
 
-| corpus     | before | after |      |
-| ---------- | -----: | ----: | ---: |
-| devanagari | 1976ms | 105ms |  19x |
-| cjk        |  338ms |  98ms | 3.4x |
+| corpus     | before | after |       |
+| ---------- | -----: | ----: | ----: |
+| devanagari | 2013ms | 113ms | 17.8x |
+| cjk        |  342ms | 127ms |  2.7x |
 
 And the growth curve changes shape, which matters more than any single row:
 
 | size  |  before | growth | after | growth |
 | ----- | ------: | -----: | ----: | -----: |
-| 25KB  |   144ms |      — |  36ms |      — |
-| 50KB  |   536ms |  3.72x |  70ms |  1.94x |
-| 100KB |  2025ms |  3.78x | 157ms |  2.23x |
-| 200KB |  7705ms |  3.80x | 332ms |  2.12x |
-| 400KB | 30244ms |  3.93x | 668ms |  2.01x |
+| 25KB  |   154ms |      — |  29ms |      — |
+| 50KB  |   531ms |  3.45x |  55ms |  1.87x |
+| 100KB |  2013ms |  3.79x | 113ms |  2.08x |
+| 200KB |  7625ms |  3.79x | 233ms |  2.05x |
+| 400KB | 30440ms |  3.99x | 444ms |  1.91x |
 
-Quadratic to linear. (The `after` column here is the tier-2 skip alone; the segmenter
-fast path takes 100KB the rest of the way to ~105ms.) Against the published library
-the headline row moves from `25.6x slower` to roughly `1.4x slower` — which _is_ the
-price of not dropping input.
+Quadratic to linear. Against the published library the headline row moves from
+`25.6x slower` to `1.39x slower` — which _is_ the price of not dropping input. On
+`cjk`, tiktoken's own encode dominates what is left, and no anchoring change can
+touch it.
 
 Both edits are output-preserving by construction, and measured to be: bit-identical
 `start`/`end`/`text` across 594 scenarios, with `node test/benchmark.js --diff`
 unchanged in every aggregate (96 real differences, `latin real=5`, 0 uncovered code
-units, 0 contract violations).
+units, 0 contract violations). Splitters that never emit U+FFFD pay one short
+`includes` per part that misses tier 1 — measured at +0.03ms to +0.45ms per 100KB,
+worst case `whitespace`.
+
+The quadratic has now moved twice — out of `findGrapheme`, then out of the tier 2
+failure branch — so it is pinned rather than trusted: `test/split.test.js` →
+"anchoring cost" splits the same U+FFFD-heavy input across an 8x size span and fails
+if growth exceeds 16x. A 2x span, the obvious choice, does not work: at sizes a test
+suite can afford, the quadratic implementation grows only 2.6x, because the linear
+per-part work still dominates. Across 8x the shapes separate cleanly — 6-9x linear
+against 26-35x quadratic.
 
 Three sketches that were considered and dropped — a bounded tier-2 window, up-front
 splitter classification, and a carried resync hint — are recorded with their
@@ -325,9 +341,11 @@ a distance bound would work on these corpora and silently mis-anchor a splitter 
 drops a long span (stripped markup, removed stopwords). None of the three buys
 anything the U+FFFD test does not, and all three trade a proof for a constant.
 
-**Status: proposed, not landed.** `src/` still has the quadratic; the numbers above
-are from a validated prototype. Everything lives in
-[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/).
+**Status: landed.** Every number above was measured against `src/` as it stands, not a
+prototype. The change record — instrumentation, the rejected alternatives, and the
+measurements behind the regression's constants — lives in
+[openspec/changes/anchor-scan-short-circuit/](openspec/changes/anchor-scan-short-circuit/)
+until it is archived.
 
 ---
 
@@ -346,6 +364,15 @@ The first uses the real tokenizer, the second a synthetic splitter that emits
 U+FFFD at a fixed interval — the same shape without the tokenizer version as a
 variable. All three were confirmed to fail against the published library and pass
 here, so they capture the fixes rather than merely describing current behavior.
+
+The tier 2 skip adds three more, each confirmed to fail against the code it guards
+rather than only to pass against the code as written:
+
+| test                                                         | describe block        | fails against                          |
+| ------------------------------------------------------------ | --------------------- | -------------------------------------- |
+| `grows linearly with input size`                             | `anchoring cost`      | the pre-fix quadratic (30.4x)          |
+| `locates a replacement char that is genuinely in the source` | `non-ASCII anchoring` | dropping the per-call source probe     |
+| `drops unanchorable parts without dropping mixed ones`       | `non-ASCII anchoring` | a fast path keyed on "contains U+FFFD" |
 
 ## Reproducing this
 

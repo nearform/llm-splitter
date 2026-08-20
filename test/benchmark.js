@@ -76,6 +76,13 @@
  * deliberately anchors better than the published one — read the diff report,
  * don't assume they are regressions.
  *
+ * The closing summary splits those two concerns apart — PERFORMANCE (how the
+ * ratios distribute, and which scenarios this copy is *slower* on, named with
+ * their absolute millisecond cost) then CORRECTNESS (what still disagrees with
+ * the baseline, and whether any of it is text lost or a broken contract). The
+ * VERDICT block is the short answer: one line per thing that is fine and one
+ * per thing that is not, with anything past the red thresholds named outright.
+ *
  * ## Normalization: separating intended changes from real ones
  *
  * Most raw differences are changes we chose to make, so comparing verbatim
@@ -225,6 +232,11 @@ const paint = (code, text) =>
 const RATIO_NOISE_BAND = 1.05;
 const RATIO_MUCH_SLOWER = 2.0;
 const RATIO_FASTER = 0.9;
+
+/** Two decimals and an "x", so thresholds and measurements read alike. */
+/** @param {number} value */
+const fmtRatio = (value) =>
+  Number.isFinite(value) ? `${value.toFixed(2)}x` : "n/a";
 
 /** @param {number} ratio */
 const ratioColor = (ratio) => {
@@ -1080,9 +1092,9 @@ if (args.color) {
   console.log("");
   console.log(
     `${paint(ANSI.dim, "perf ")}` +
-      `${paint(ANSI.green, `faster (<=${RATIO_FASTER}x)`)}  ` +
-      `${paint(ANSI.orange, `slower (>${RATIO_NOISE_BAND}x)`)}  ` +
-      `${paint(ANSI.red, `much slower (>=${RATIO_MUCH_SLOWER}x)`)}`,
+      `${paint(ANSI.green, `faster (<=${fmtRatio(RATIO_FASTER)})`)}  ` +
+      `${paint(ANSI.orange, `slower (>${fmtRatio(RATIO_NOISE_BAND)})`)}  ` +
+      `${paint(ANSI.red, `much slower (>=${fmtRatio(RATIO_MUCH_SLOWER)})`)}`,
   );
   console.log(
     `${paint(ANSI.dim, "diff ")}` +
@@ -1094,44 +1106,388 @@ if (args.color) {
 
 // ----- summary ------------------------------------------------------------
 
+/**
+ * @param {ScenarioRecord[]} list
+ * @param {(r: ScenarioRecord) => number} pick
+ */
+const sum = (list, pick) => list.reduce((acc, r) => acc + pick(r), 0);
+
+/**
+ * Count scenarios by some attribute, most frequent first. Says *where* a set
+ * of scenarios lives, not just how many there are — a regression confined to
+ * one splitter reads very differently from one spread across the matrix.
+ *
+ * @param {ScenarioRecord[]} list
+ * @param {(r: ScenarioRecord) => string} key
+ */
+const tally = (list, key) => {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const r of list) {
+    const k = key(r);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${k} (${n})`)
+    .join(", ");
+};
+
+/** The same ratio, said the way a person would say it. @param {number} ratio */
+const speedPhrase = (ratio) => {
+  if (!Number.isFinite(ratio)) {
+    return "no timings";
+  }
+  if (ratio <= RATIO_FASTER) {
+    return `${(1 / ratio).toFixed(2)}x faster`;
+  }
+  if (ratio > RATIO_NOISE_BAND) {
+    return `${ratio.toFixed(2)}x slower`;
+  }
+  return "about the same";
+};
+
+const LABEL_WIDTH = 24;
+/** @param {string} label @param {string} value */
+const stat = (label, value) =>
+  console.log(`  ${label.padEnd(LABEL_WIDTH)} ${value}`);
+
 // Read ratios off the records, not the table rows — the rendered cells may
-// carry color escapes.
-const validRatios = records
-  .filter((r) => !r.error)
-  .map((r) => r.ratio)
-  .sort((a, b) => a - b);
+// carry color escapes. A scenario fast enough to measure 0ms yields a
+// non-finite ratio, so bucket only the ones that produced a real number.
+const ok = records.filter((r) => !r.error);
+const timed = ok.filter((r) => Number.isFinite(r.ratio));
+const validRatios = timed.map((r) => r.ratio).sort((a, b) => a - b);
 const medianRatio = validRatios.length ? median(validRatios) : NaN;
 const worstRatio = validRatios.length
   ? validRatios[validRatios.length - 1]
   : NaN;
 const bestRatio = validRatios.length ? validRatios[0] : NaN;
 
+// Same thresholds the table colors by, so a count here always matches the
+// number of cells of that color above.
+const faster = timed.filter((r) => r.ratio <= RATIO_FASTER);
+const evenlyMatched = timed.filter(
+  (r) => r.ratio > RATIO_FASTER && r.ratio <= RATIO_NOISE_BAND,
+);
+const slower = timed.filter(
+  (r) => r.ratio > RATIO_NOISE_BAND && r.ratio < RATIO_MUCH_SLOWER,
+);
+const muchSlower = timed.filter((r) => r.ratio >= RATIO_MUCH_SLOWER);
+const regressions = [...timed]
+  .filter((r) => r.ratio > RATIO_NOISE_BAND)
+  .sort((a, b) => b.ratio - a.ratio);
+
 const differing = records.filter(
   (r) => !r.error && (r.raw.countDiff || r.raw.posDiff || r.raw.endOnlyDiff),
 );
 const unexplained = records.filter((r) => !r.error && r.residual);
+const identical = ok.filter(
+  (r) =>
+    !r.raw.countDiff && !r.raw.posDiff && !r.raw.endOnlyDiff && !r.raw.textDiff,
+);
+
+const oldUncovered = sum(
+  ok,
+  (r) => r.oldCoverage.internal + r.oldCoverage.tail,
+);
+const newUncovered = sum(
+  ok,
+  (r) => r.newCoverage.internal + r.newCoverage.tail,
+);
+const oldUncoveredIn = ok.filter(
+  (r) => r.oldCoverage.internal || r.oldCoverage.tail,
+).length;
+const newUncoveredIn = ok.filter(
+  (r) => r.newCoverage.internal || r.newCoverage.tail,
+).length;
+const oldBroken = sum(ok, (r) => r.oldContractViolations);
+const newBroken = sum(ok, (r) => r.newContractViolations);
+
+// chunk-end and text-only mean a chunk this copy emits disagrees with the
+// baseline in a way no documented decision covers — the red residuals.
+const brokenResiduals = ok.filter(
+  (r) => r.residual === "chunk-end" || r.residual === "text-only",
+);
+
+console.log("");
+console.log("=".repeat(78));
+console.log(
+  `${paint(ANSI.bold, "SUMMARY")}  ${scenarios.length} scenarios  ·  ` +
+    `median ${paintByRatio(medianRatio, fmtRatio(medianRatio))}  ·  ` +
+    (unexplained.length
+      ? paint(ANSI.orange, `${unexplained.length} real differences`)
+      : paint(ANSI.green, "no real differences")) +
+    "  ·  " +
+    (totalErrors ? paint(ANSI.red, `${totalErrors} errors`) : "0 errors"),
+);
+console.log("=".repeat(78));
+
+// ----- summary: performance -----------------------------------------------
 
 console.log("");
 console.log(
-  `Summary: scenarios=${scenarios.length}  median ratio=${medianRatio.toFixed(2)}x  ` +
-    `best=${bestRatio.toFixed(2)}x  worst=${worstRatio.toFixed(2)}x  ` +
-    `differing=${differing.length}  unexplained=${unexplained.length}  ` +
-    `errors=${totalErrors}`,
+  paint(ANSI.bold, "PERFORMANCE") +
+    paint(
+      ANSI.dim,
+      "   ratio = newMs / oldMs; under 1.00x is this copy winning",
+    ),
 );
-console.log("(ratio = newMs / oldMs; >1 means rewrite is slower)");
+stat(
+  "typical scenario",
+  `${fmtRatio(medianRatio)}  ${paintByRatio(medianRatio, speedPhrase(medianRatio))}`,
+);
+stat(
+  "range",
+  `best ${paintByRatio(bestRatio, fmtRatio(bestRatio))}  ·  ` +
+    `worst ${paintByRatio(worstRatio, fmtRatio(worstRatio))}`,
+);
+stat(
+  "faster",
+  `${faster.length ? paint(ANSI.green, faster.length) : faster.length} ` +
+    paint(ANSI.dim, `(<= ${fmtRatio(RATIO_FASTER)})`),
+);
+stat(
+  "no real change",
+  `${evenlyMatched.length} ` +
+    paint(
+      ANSI.dim,
+      `(inside the ${fmtRatio(RATIO_NOISE_BAND)} noise band — call it a tie)`,
+    ),
+);
+stat(
+  "slower",
+  `${paintSeverity(slower.length, { warn: slower.length > 0 })} ` +
+    paint(ANSI.dim, `(> ${fmtRatio(RATIO_NOISE_BAND)})`),
+);
+stat(
+  "much slower",
+  `${paintSeverity(muchSlower.length, { bad: muchSlower.length > 0 })} ` +
+    paint(ANSI.dim, `(>= ${fmtRatio(RATIO_MUCH_SLOWER)} — the red threshold)`),
+);
+
+if (regressions.length) {
+  // Every red scenario gets named, however many there are; the merely-slower
+  // ones are truncated because the ratio column already lists them.
+  const SLOWEST_SHOWN = 5;
+  const shown = regressions.slice(
+    0,
+    Math.max(SLOWEST_SHOWN, muchSlower.length),
+  );
+  const width = Math.max(...shown.map((r) => r.label.length));
+
+  console.log("");
+  console.log(`  ${paint(ANSI.bold, "where this copy is slower")}`);
+  for (const r of shown) {
+    const delta = r.newMs - r.oldMs;
+    console.log(
+      `    ${paintByRatio(r.ratio, fmtRatio(r.ratio).padStart(6))}  ` +
+        `${r.label.padEnd(width)}  ` +
+        paint(
+          ANSI.dim,
+          `${r.oldMs.toFixed(2)} -> ${r.newMs.toFixed(2)}ms ` +
+            `(${delta >= 0 ? "+" : ""}${delta.toFixed(2)}ms)`,
+        ),
+    );
+  }
+  if (regressions.length > shown.length) {
+    console.log(
+      paint(
+        ANSI.dim,
+        `    ... and ${regressions.length - shown.length} more above ${fmtRatio(RATIO_NOISE_BAND)}`,
+      ),
+    );
+  }
+
+  console.log("");
+  stat(
+    "slower cases cluster in",
+    tally(regressions, (r) => r.corpus),
+  );
+  stat(
+    "",
+    tally(regressions, (r) => r.size),
+  );
+  stat(
+    "",
+    tally(regressions, (r) => r.splitter),
+  );
+  stat(
+    "",
+    tally(regressions, (r) => r.strategy),
+  );
+
+  // A 2x on a scenario that takes 40 microseconds is not the same finding as a
+  // 2x on one that takes a second, and the ratio alone cannot tell them apart.
+  const trivial = regressions.filter((r) => r.newMs - r.oldMs < 0.5);
+  if (trivial.length) {
+    console.log("");
+    console.log(
+      paint(
+        ANSI.dim,
+        `  ${trivial.length} of those ${regressions.length} cost under +0.5ms in absolute terms.`,
+      ),
+    );
+    console.log(
+      paint(
+        ANSI.dim,
+        "  Read the delta alongside the ratio before calling one a regression.",
+      ),
+    );
+  }
+}
+
+// ----- summary: correctness ----------------------------------------------
+
+console.log("");
 console.log(
-  activeNormalizers.length
-    ? `(normalizers: ${activeNormalizers.join(", ")} — see --explain)`
-    : "(no normalizers: raw comparison)",
+  paint(ANSI.bold, "CORRECTNESS") +
+    paint(ANSI.dim, "   chunk-for-chunk against the published library"),
+);
+stat("identical", `${identical.length} / ${ok.length} scenarios`);
+stat(
+  "differing (raw)",
+  `${differing.length} / ${ok.length}  →  ` +
+    `${differing.length - unexplained.length} explained by normalizers, ` +
+    (unexplained.length
+      ? paint(ANSI.orange, `${unexplained.length} real`)
+      : paint(ANSI.green, "0 real")),
+);
+if (unexplained.length) {
+  const byReason = ["chunk-count", "anchor-drift", "chunk-end", "text-only"]
+    .map((reason) => ({
+      reason,
+      n: ok.filter((r) => r.residual === reason).length,
+    }))
+    .filter((x) => x.n)
+    .map((x) =>
+      paintSeverity(`${x.reason} ${x.n}`, {
+        bad: x.reason === "chunk-end" || x.reason === "text-only",
+        warn: x.reason === "chunk-count" || x.reason === "anchor-drift",
+      }),
+    );
+  stat("real differences are", byReason.join(", "));
+  stat(
+    "",
+    tally(unexplained, (r) => r.corpus),
+  );
+}
+stat(
+  "text lost by this copy",
+  `${paintSeverity(newUncovered, { bad: newUncovered > 0 })} code units ` +
+    `in ${newUncoveredIn} scenarios`,
+);
+stat(
+  "text lost by baseline",
+  paint(
+    oldUncovered ? ANSI.orange : ANSI.dim,
+    `${oldUncovered} code units in ${oldUncoveredIn} scenarios`,
+  ) + paint(ANSI.dim, "   (what coverage-extension fixes)"),
+);
+stat(
+  "text != getChunk()",
+  `old=${paintSeverity(oldBroken, { bad: oldBroken > 0 })} ` +
+    `new=${paintSeverity(newBroken, { bad: newBroken > 0 })} chunks`,
+);
+
+// ----- summary: verdict ---------------------------------------------------
+
+/** @type {string[]} */
+const verdict = [];
+
+if (totalErrors) {
+  verdict.push(
+    paint(
+      ANSI.red,
+      `✗ ${totalErrors} scenario(s) threw — see the ERR rows and the ERROR lines above`,
+    ),
+  );
+}
+if (muchSlower.length) {
+  // Name the red ones outright — this is the finding a reader must not miss,
+  // and a bare count sends them hunting through 270 rows for it.
+  const NAMED = 2;
+  const named = [...muchSlower]
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, NAMED)
+    .map((r) => `      ${fmtRatio(r.ratio)}  ${r.label}`)
+    .join("\n");
+  verdict.push(
+    paint(
+      ANSI.red,
+      `✗ ${muchSlower.length} scenario(s) at or past ${fmtRatio(RATIO_MUCH_SLOWER)} slower — over the red threshold\n` +
+        named +
+        (muchSlower.length > NAMED
+          ? `\n      ... and ${muchSlower.length - NAMED} more`
+          : ""),
+    ),
+  );
+}
+if (slower.length) {
+  verdict.push(
+    paint(
+      ANSI.orange,
+      `! ${slower.length} scenario(s) slower than ${fmtRatio(RATIO_NOISE_BAND)} but under the red threshold`,
+    ),
+  );
+}
+if (!slower.length && !muchSlower.length) {
+  verdict.push(
+    paint(ANSI.green, `✓ nothing measurably slower than the baseline`),
+  );
+}
+verdict.push(
+  newUncovered
+    ? paint(
+        ANSI.red,
+        `✗ this copy leaves ${newUncovered} code unit(s) attributed to no chunk — the coverage invariant is broken`,
+      )
+    : paint(ANSI.green, "✓ no source text lost: the coverage invariant holds"),
+);
+verdict.push(
+  newBroken || oldBroken
+    ? paint(
+        ANSI.red,
+        `✗ chunk text disagrees with its own start/end (old=${oldBroken} new=${newBroken})`,
+      )
+    : paint(ANSI.green, "✓ every chunk's text matches its own start/end"),
+);
+if (brokenResiduals.length) {
+  verdict.push(
+    paint(
+      ANSI.red,
+      `✗ ${brokenResiduals.length} scenario(s) differ in a way no decision explains (chunk-end / text-only)`,
+    ),
+  );
+}
+verdict.push(
+  unexplained.length
+    ? paint(
+        ANSI.orange,
+        `! ${unexplained.length} scenario(s) still differ after normalization — run --diff to read them`,
+      )
+    : paint(
+        ANSI.green,
+        "✓ every difference is accounted for by a documented normalizer",
+      ),
+);
+
+console.log("");
+console.log(paint(ANSI.bold, "VERDICT"));
+for (const v of verdict) {
+  console.log(`  ${v}`);
+}
+console.log("");
+console.log(
+  paint(
+    ANSI.dim,
+    activeNormalizers.length
+      ? `(normalizers: ${activeNormalizers.join(", ")} — see --explain)`
+      : "(no normalizers: raw comparison)",
+  ),
 );
 
 // ----- diff report --------------------------------------------------------
-
-/**
- * @param {ScenarioRecord[]} list
- * @param {(r: ScenarioRecord) => number} pick
- */
-const sum = (list, pick) => list.reduce((acc, r) => acc + pick(r), 0);
 
 /**
  * @param {ScenarioRecord} r
@@ -1173,8 +1529,6 @@ const printScenario = (r, c) => {
 };
 
 const printDiffReport = () => {
-  const ok = records.filter((r) => !r.error);
-
   console.log("");
   console.log("=".repeat(78));
   console.log("DIFF REPORT (raw, before normalization)");

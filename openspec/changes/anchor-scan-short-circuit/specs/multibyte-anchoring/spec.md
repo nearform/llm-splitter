@@ -72,10 +72,10 @@ Within its scope this is a behavioral guarantee, not an implementation note: cal
 whole documents, and a quadratic term makes large multi-byte inputs unusable rather than
 merely slow.
 
-#### Scenario: Doubling input size roughly doubles anchoring time
+#### Scenario: Growing the input grows anchoring time proportionally
 
-- **WHEN** the same U+FFFD-emitting tokenizer splitter is run in `character` strategy over inputs of size n and 2n that contain no U+FFFD
-- **THEN** the time taken for 2n is a small constant multiple of the time for n, not a quadratic multiple
+- **WHEN** the same U+FFFD-emitting tokenizer splitter is run in `character` strategy over inputs of size n and k·n that contain no U+FFFD
+- **THEN** the time taken for k·n is roughly k times the time for n, not k² times
 
 #### Scenario: An input whose parts are almost all unanchorable stays linear
 
