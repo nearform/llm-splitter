@@ -97,6 +97,37 @@ from decoded output, neutralizing modes 2 and 3 from the splitter side. It costs
 caller a separate position lookup against un-lowercased text. Acceptable for a one-off
 integration; not a posture for a RAG-first library.
 
+## What the anchoring machinery actually rests on
+
+A review of the whole anchoring design (2026-08-20), to keep this change aimed at the right
+component:
+
+- **The anchor _unit_ is not where the risk is.** `Intl.Segmenter` is reached only from Tier 3.
+  Swapping `firstAnchorGrapheme` for a one-line code-point regex (`/[^�\p{M}]/u`) produced
+  **identical output across 432 scenarios** — 4 corpora including an emoji/ZWJ/skin-tone/
+  Devanagari-cluster corpus, x 3 sizes x 2 strategies x 3 chunk sizes x 2 overlaps x 3
+  splitters — and passed all 111 `split.test.js` tests. Instrumented over 31,935 Tier 3
+  anchorings (emoji + Devanagari, 100KB, tiktoken), the segmenter returned a multi-code-point
+  cluster **zero times**. Cluster anchoring is strictly more precise in principle (a part whose
+  anchorable content starts with `क्ष` will skip a decoy bare `क` that a code-point anchor
+  latches onto), but nothing in the matrix exercises it, and it costs ~31% of the hottest Tier
+  3 row (108ms vs 75ms per 100KB Devanagari). Implication for this change: do not assume
+  cluster anchoring is protecting correctness today, and do watch per-part cost — Tier 3 is hot
+  enough that a normalized-comparison anchor can regress it measurably.
+- **The risk is the length-based advance.** `end = start + part.length` is the single assumption
+  that produces all three failure modes above. Notably the published library did _not_ make it:
+  its `findMatches` derived each span by matching the part's characters into the source
+  (`end = lastValidPos + 1`), so it was structurally immune to length ≠ span — while being
+  catastrophically lossy in every other respect (1,179,904 code units unattributable across 186
+  of 270 benchmark scenarios). The lesson is not to go back, but that a fix here should attack
+  the span derivation, which is what `sourceNormalize` plus a normalized-comparison Tier 3
+  does.
+- **Closed: letting callers supply offsets.** A splitter contract carrying positions
+  (`{text, start, end}` parts, as the benchmark's own tiktoken byte-prefix reference computes)
+  would dissolve the anchoring problem for callers who have offsets. Ruled out — the callers
+  this library serves cannot supply them. Recorded so it is not re-proposed; anchoring stays a
+  reconstruction problem.
+
 ## Follow-up model coverage
 
 Once a fix lands, broaden fixtures to `Xenova/bge-small-en-v1.5` (similar normalizer),

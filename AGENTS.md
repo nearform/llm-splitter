@@ -62,6 +62,22 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   `chunk[i].end = chunk[i+1].start` (and the last chunk to total input
   length). This enforces the **coverage invariant**.
 
+**`Intl.Segmenter` is not the architecture.** It appears in one function
+(`firstAnchorGrapheme`), reached only from tier 3. Everything else — tiers 1
+and 2, chunk assembly, coverage, `chunkSize` — counts UTF-16 code units, and
+chunk boundaries carry no grapheme or code-point integrity guarantee (the
+default `text.split('')` splitter emits lone surrogates for astral characters;
+see `multibyte-anchoring` → "Anchoring positions parts, it does not police
+boundaries"). Measured, cluster anchoring is inert on every splitter in the
+matrix: a one-line code-point regex is output-identical across 432 scenarios,
+and the segmenter returned a multi-code-point cluster 0 times in 31,935 tier 3
+anchorings, at ~31% of the hottest tier 3 row. Keep it as a correctness margin
+if you like, but don't treat it as load-bearing and **don't reintroduce it into
+tiers 1-2** — that is where both quadratics came from. The load-bearing
+assumption is `end = start + part.length` (decoded length equals source span),
+which is what `tokenizer-length-inflation` exists to address; evidence in that
+change's `research.md` → "What the anchoring machinery actually rests on".
+
 **Coverage contract** (also in the `split()` docstring and the README
 "Chunk Coverage and Positions" section): from `chunks[0].start` onward,
 every UTF-16 code unit of source appears in exactly one chunk (modulo

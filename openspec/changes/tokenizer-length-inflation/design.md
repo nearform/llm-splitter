@@ -39,6 +39,14 @@ regression fixtures and produced concrete evidence (full writeup in
   part to a source window, throwing loudly remains correct.
 - Broadening fixtures to other models (`bge-small`, `all-MiniLM-L6-v2`,
   `multilingual-e5-small`) — tracked as follow-up once the core fix lands.
+- Changing the anchor _unit_. Grapheme-cluster anchoring is measured inert on every splitter in
+  the matrix (0 multi-code-point anchors in 31,935 Tier 3 anchorings; a code-point regex is
+  output-identical across 432 scenarios) — see `research.md`, "What the anchoring machinery
+  actually rests on". It is neither the cause of these failures nor part of the fix. Leave it
+  alone here; it is a separable simplification worth ~31% of the hottest Tier 3 row if it is
+  ever wanted.
+- Accepting positions from the splitter. Ruled out — these callers cannot supply offsets, so
+  anchoring stays a reconstruction problem (`research.md`, same section).
 
 ## Decisions
 

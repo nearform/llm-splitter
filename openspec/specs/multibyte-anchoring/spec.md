@@ -73,6 +73,24 @@ Callers MUST NOT rely on a mutating splitter failing loudly.
 - **WHEN** a lowercasing splitter emits `"hi"` for source `"Hi"` and a lowercase `h` occurs later in the input
 - **THEN** the part anchors on that later `h`, yielding an incorrect `start` and no error
 
+### Requirement: Anchoring positions parts, it does not police boundaries
+
+Grapheme segmentation is used only to choose an anchor _inside a part_ during Tier 3. It
+carries no guarantee about chunk boundaries. The system SHALL faithfully reproduce whatever
+units the splitter returns, so when a splitter emits parts that are fragments of a grapheme
+cluster — which the default `text.split('')` does for any astral character, one UTF-16 code
+unit at a time — chunk boundaries MAY fall inside a grapheme cluster or between the halves of
+a surrogate pair. Choosing units that are meaningful for the caller's model is the splitter's
+responsibility, not the library's.
+
+The positional contract still holds in that case: `chunk.text === getChunk(input, start, end)`
+for every chunk, and coverage is unbroken.
+
+#### Scenario: Default splitter over an astral character
+
+- **WHEN** `split("👋🏻 hi", { chunkSize: 1 })` runs with the default character splitter
+- **THEN** chunks carry individual UTF-16 code units, including lone surrogates, each with correct `start`/`end` and full coverage
+
 ### Requirement: Supported tokenizer boundary
 
 The system SHALL correctly position any splitter whose decoded part length equals the source
