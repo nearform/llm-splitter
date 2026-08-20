@@ -8,9 +8,10 @@ becomes O(n²) in `character` strategy.
 
 The cost is not theoretical. On a 100KB Devanagari document with a `tiktoken` splitter,
 `split()` takes **1976ms**; at 400KB it takes **30.2 seconds**, growing 3.9x per doubling.
-[REWRITE.md](../../../REWRITE.md) records this as the one severe, unresolved regression
-against the published library (25.6x slower on that row) and parks four candidate fixes
-without costing any of them.
+[REWRITE.md](../../../REWRITE.md) — "The Devanagari case" records this as the one severe
+outstanding regression against the published library (25.6x slower on that row), carries the
+instrumentation and the prototype measurements below, and marks the fix "proposed, not
+landed". What is missing is the code.
 
 Instrumenting the tier decision across 4 corpora x 4 splitters at 100KB settles which one
 is right: **every Tier 2 miss — 137,532 of them — contains U+FFFD, and none of them do not.**
@@ -29,13 +30,14 @@ precisely the boundary `multibyte-anchoring` already draws.
 - Pin the resulting complexity with a scaling regression test, so the quadratic cannot
   return unnoticed — it has already moved once, from `findGrapheme` to the Tier 2 failure
   branch.
-- Resolve the "Options to explore" section of REWRITE.md and update its Devanagari
-  measurements.
+- Re-measure REWRITE.md's Devanagari numbers against the landed implementation. Its narrative
+  already describes this fix and delegates the rejected alternatives to `design.md`, so the
+  work there is confirming the figures, not rewriting the section.
 
-Not in scope: bounding the Tier 2 search window (REWRITE option 2), classifying the splitter
-up front (option 3), or carrying a resync hint (option 4). See `design.md` — the U+FFFD test
-subsumes all three at zero heuristic cost, and the measured evidence argues against a
-distance bound.
+Not in scope: bounding the Tier 2 search window, classifying the splitter up front, or
+carrying a resync hint. See `design.md` — Decision 1, alternatives, which is where REWRITE.md
+now points for all three: the U+FFFD test subsumes them at zero heuristic cost, and the
+measured evidence argues against a distance bound.
 
 No public API change. No observable output change.
 
@@ -45,16 +47,18 @@ No public API change. No observable output change.
 
 - `multibyte-anchoring`: the three-tier locate strategy gains an explicit statement that
   Tier 2 is skipped when it provably cannot succeed, and a new requirement that anchoring
-  cost is linear in input length.
+  cost is linear in input length — scoped to a supported splitter over a source containing
+  no U+FFFD, which is exactly the precondition the skip needs, and stating the two cases
+  that stay unbounded.
 
 ## Impact
 
 - Source: [src/split.js](../../../src/split.js) — `anchorParts` (Tier 2 guard) and
   `firstAnchorGrapheme` (all-replacement fast path). ~9 lines added, 1 changed.
 - Tests: [test/split.test.js](../../../test/split.test.js) — a scaling regression asserting
-  sub-quadratic growth on a U+FFFD-heavy tokenizer input.
-- Docs: [REWRITE.md](../../../REWRITE.md) Devanagari section; [AGENTS.md](../../../AGENTS.md)
-  algorithm map.
+  sub-quadratic growth on a U+FFFD-heavy synthetic splitter, plus equivalence cases.
+- Docs: [REWRITE.md](../../../REWRITE.md) Devanagari section (measurement refresh and status
+  flip); [AGENTS.md](../../../AGENTS.md) algorithm map.
 - Performance: 19x on the pathological row, 3.4x on CJK, and the growth curve goes from
   quadratic to linear. Cost on splitters that never emit U+FFFD is ≤0.3ms per 100KB
   (`whitespace` worst case) and unmeasurable elsewhere.

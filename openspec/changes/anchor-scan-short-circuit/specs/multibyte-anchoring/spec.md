@@ -56,20 +56,33 @@ tokenizer boundary").
 
 ### Requirement: Anchoring cost is linear in input length
 
-For a supported splitter, the system SHALL anchor parts in time linear in the length of the
-input, for every chunk strategy. No part SHALL trigger a search whose outcome is already
-determined, because a per-part search proportional to the remaining input makes the whole
-split quadratic — a document that is 10x larger must not cost ~100x more to chunk.
+For a supported splitter running against a source that contains no U+FFFD, the system SHALL
+anchor parts in time linear in the length of the input, for every chunk strategy. No part
+SHALL trigger a search whose outcome is already determined, because a per-part search
+proportional to the remaining input makes the whole split quadratic — a document that is 10x
+larger must not cost ~100x more to chunk.
 
-This is a behavioral guarantee, not an implementation note: callers chunk whole documents,
-and a quadratic term makes large multi-byte inputs unusable rather than merely slow.
+That precondition is the exact scope of the guarantee, and two cases fall outside it by
+design. A source that itself contains U+FFFD makes a U+FFFD-bearing part genuinely findable,
+so Tier 2 cannot be skipped and the per-part search stays unbounded. A splitter that mutates
+bytes without emitting U+FFFD likewise keeps the unbounded search, and is already unsupported
+for correctness reasons (see "Mutating splitters are unsupported").
+
+Within its scope this is a behavioral guarantee, not an implementation note: callers chunk
+whole documents, and a quadratic term makes large multi-byte inputs unusable rather than
+merely slow.
 
 #### Scenario: Doubling input size roughly doubles anchoring time
 
-- **WHEN** the same U+FFFD-emitting tokenizer splitter is run over inputs of size n and 2n in `character` strategy
+- **WHEN** the same U+FFFD-emitting tokenizer splitter is run in `character` strategy over inputs of size n and 2n that contain no U+FFFD
 - **THEN** the time taken for 2n is a small constant multiple of the time for n, not a quadratic multiple
 
-#### Scenario: Fully unanchorable parts do not pay for grapheme segmentation
+#### Scenario: An input whose parts are almost all unanchorable stays linear
 
-- **WHEN** a part consists entirely of U+FFFD
-- **THEN** it is recognized as unanchorable without segmenting it into graphemes
+- **WHEN** a splitter returns parts that are overwhelmingly nothing but U+FFFD
+- **THEN** anchoring time still grows linearly with input length, rather than paying a per-part cost proportional to part length
+
+#### Scenario: Source containing U+FFFD keeps the unbounded search (known limitation)
+
+- **WHEN** the source string itself contains U+FFFD
+- **THEN** Tier 2 is attempted for every part as normal and no linearity guarantee applies

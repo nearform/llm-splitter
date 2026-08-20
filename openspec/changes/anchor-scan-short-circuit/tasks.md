@@ -22,15 +22,20 @@
 
 ## 3. Tests
 
-- [ ] 3.1 Add a scaling regression to [test/split.test.js](../../../test/split.test.js):
-      same U+FFFD-emitting splitter at n and 2n in `character` strategy, asserting the time
-      ratio stays under ~3x (design.md, Decision 4). Use a synthetic splitter, not
-      `tiktoken` — the test suite has no tokenizer dependency and should not gain one
-- [ ] 3.2 Add a case pinning the equivalence: a source that itself contains U+FFFD produces
+- [ ] 3.1 Add a scaling regression to [test/split.test.js](../../../test/split.test.js) per
+      design.md, Decision 4: a synthetic splitter (not `tiktoken` — the suite has no
+      tokenizer dependency and should not gain one) emitting U+FFFD for every fourth part,
+      over a U+FFFD-free source, `character` strategy, at **n = 40,000 and 2n = 80,000 code
+      units**, best-of-3 per size taking the **minimum**, asserting `time(2n) / time(n) < 3`
+- [ ] 3.2 Check the regression's own cost and floor: the whole test stays under **~150ms**
+      on a correct implementation, and the min-of-3 at n stays above **~1ms** so the ratio
+      measures growth rather than timer granularity. If either bound is missed, adjust n —
+      not the threshold — and record the sizes actually used back into design.md, Decision 4
+- [ ] 3.3 Add a case pinning the equivalence: a source that itself contains U+FFFD produces
       the same chunks as the same source without the skip being applicable
-- [ ] 3.3 Add a case for an all-U+FFFD part alongside a U+FFFD-plus-combining-mark part, so
+- [ ] 3.4 Add a case for an all-U+FFFD part alongside a U+FFFD-plus-combining-mark part, so
       the `firstAnchorGrapheme` fast path cannot swallow the second
-- [ ] 3.4 Confirm `npm run check` is green (160 tests before this change's additions)
+- [ ] 3.5 Confirm `npm run check` is green (160 tests before this change's additions)
 
 ## 4. Verification
 
@@ -44,9 +49,11 @@
 
 ## 5. Docs
 
-- [ ] 5.1 Update [REWRITE.md](../../../REWRITE.md) — Devanagari section: replace the
-      "Options to explore" sketches with the resolved fix, refresh the measurements and the
-      splitter median-ratio table
+- [ ] 5.1 Refresh [REWRITE.md](../../../REWRITE.md) — "The Devanagari case". Its narrative
+      already describes this fix and delegates the rejected alternatives to design.md, so the
+      work is: confirm the before/after and growth tables against the landed code (they came
+      from the prototype), update the splitter median-ratio table, and flip the
+      "**Status: proposed, not landed**" line
 - [ ] 5.2 Update the `anchorParts` bullet in [AGENTS.md](../../../AGENTS.md) — Algorithm map
       to describe the Tier 2 skip, and note the scaling regression alongside the existing
       warning that the quadratic has moved once already

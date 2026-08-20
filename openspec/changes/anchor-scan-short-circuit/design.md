@@ -71,10 +71,11 @@ devanagari tiktoken   102073  25072  12527 13915  50559  64474 / 0
 `other` column being uniformly zero is what makes this a complete fix rather than a partial
 one on these corpora.
 
-**Alternatives considered** — the other three sketches in
-[REWRITE.md](../../../REWRITE.md) — Options to explore:
+**Alternatives considered** — the three other sketches. [REWRITE.md](../../../REWRITE.md) —
+"The Devanagari case" summarizes them in a sentence and points here for the rationale, so this
+section is their record:
 
-- _Bound the Tier 2 search window (option 2)._ The same instrumentation records how far Tier
+- _Bound the Tier 2 search window._ The same instrumentation records how far Tier
   2 legitimately has to reach: **never more than 4 code units**, with the entire histogram in
   the `1-4` bucket (Tier 3's max reach is 2). So a bound would work on these corpora — and
   that is exactly the problem. None of the corpora contain a splitter that legitimately drops
@@ -83,11 +84,11 @@ one on these corpora.
   test suite would not notice. Rejected: it trades a proof for a constant nobody can defend,
   and buys nothing the U+FFFD test does not already buy. The reach data is recorded here so a
   future change that _does_ want a bound starts from measurement.
-- _Classify the splitter up front (option 3)._ The U+FFFD test already is the classification,
+- _Classify the splitter up front._ The U+FFFD test already is the classification,
   evaluated per part at negligible cost and with no probe, no first-use special case, and no
   wrong-guess path. A separate up-front probe would need its own correctness story for
   splitters that are byte-preserving on the first paragraph and not on the tenth.
-- _Carry a resync hint across failures (option 4)._ Addresses the symptom (repeating doomed
+- _Carry a resync hint across failures._ Addresses the symptom (repeating doomed
   scans) rather than the cause (running a search whose answer is known). Strictly more state
   for strictly less certainty.
 
@@ -116,9 +117,28 @@ simplicity grounds — it adds a mutable maybe-initialized flag to buy nothing m
 
 An absolute-time assertion is a flaky test on shared CI. The regression instead splits the
 same U+FFFD-heavy input at size n and 2n and asserts the ratio stays under a generous
-threshold. Today's ratio is ~2.0 fixed and ~3.9 broken, so a threshold around 3 separates
-them with a wide margin while tolerating a slow machine. Sizes stay small enough that the
-broken case does not hang the suite.
+threshold. Today's ratio is ~2.0 fixed and ~3.9 broken, so a threshold of **3** separates them
+with a wide margin while tolerating a slow machine.
+
+Timing is the only lever available. The splitter is a caller-supplied function that receives
+text and returns parts; it cannot observe which tier anchored it, and `split()` exposes no
+counter, so there is no deterministic proxy for "Tier 2 was attempted" to assert on instead.
+That makes noise control part of the test design rather than an afterthought:
+
+- **Sizes: n = 40,000 code units, 2n = 80,000.** One part per code unit with every fourth
+  replaced by U+FFFD (the shape already used by the synthetic splitter cases in
+  [test/split.test.js](../../../test/split.test.js)), over a source containing no U+FFFD, in
+  `character` strategy. Broken, that is ~n²/8 code-unit comparisons — hundreds of ms at 2n,
+  clearly quadratic and nowhere near hanging the suite. Fixed, both sizes are a few ms.
+- **Best-of-3 per size**, minimum not mean, so one GC pause cannot fail the build.
+- **If the n measurement lands under ~1ms** on fast hardware the ratio is measuring timer
+  granularity, not growth. The fix is to raise n, never to loosen the threshold.
+- **Budget: the whole regression stays under ~150ms** when the implementation is correct,
+  against a suite that runs in ~175ms today. Confirm this during apply — if it exceeds the
+  budget, lower n and re-check the floor rule above rather than deleting the test.
+
+These numbers are starting points validated by the prototype's growth table, not measurements
+from the test as written; task 3.1 confirms them on the real thing.
 
 ## Risks / Trade-offs
 
@@ -128,14 +148,18 @@ broken case does not hang the suite.
   recorded here so it is not rediscovered as a mystery.
 - **[Source containing literal U+FFFD]** The skip switches off and behavior is exactly
   today's, including today's problems: such a source can already make Tier 2 match a
-  decode-produced U+FFFD at the wrong place, over-advance the cursor, and throw. Confirmed
-  identical on both sides of the change. → Not introduced here; belongs to
-  `tokenizer-length-inflation`, and is recorded in that change's `research.md`.
+  decode-produced U+FFFD at the wrong place, over-advance the cursor, and throw, and the split
+  stays quadratic. Confirmed identical on both sides of the change. → Not introduced here; the
+  correctness half belongs to `tokenizer-length-inflation` and is recorded in that change's
+  `research.md`. The perf half is stated as an explicit carve-out in the spec delta, so the
+  linearity requirement is not falsified by it.
 - **[A future splitter that mutates without emitting U+FFFD]** Would fail Tier 2 with a full
   scan and reach Tier 3 with a wrong anchor — the quadratic returns and the answer is wrong.
-  That splitter is already unsupported and already wrong today. → The scaling regression will
-  catch the perf half if such a path is ever added; `tokenizer-length-inflation` owns the
-  correctness half.
+  That splitter is already unsupported and already wrong today. → Also carved out of the
+  linearity requirement, for the same reason. Note the scaling regression will _not_ catch it:
+  the regression drives a U+FFFD-emitting splitter, which is the only shape the skip applies
+  to. `tokenizer-length-inflation` owns the correctness half; nothing here covers the perf
+  half, and that is a deliberate gap rather than an oversight.
 - **[Overlap with `tokenizer-length-inflation`]** Both edit `anchorParts`. This change touches
   the Tier 2 guard and the `firstAnchorGrapheme` entry; that one rewrites the Tier 3 anchor
   step. → Small and disjoint enough to rebase by hand; whichever lands second does so.
