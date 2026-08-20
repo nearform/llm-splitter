@@ -7,7 +7,7 @@ byte-preserving splitters; Tier 3 is the safety net for byte-mutating ones (tikt
 one U+FFFD per undecodable byte, so length still equals source span).
 
 Phase 1 wired `@huggingface/transformers` v4 + `Xenova/gte-small` into the suite as
-regression fixtures (gated by `B7_TEST=1`) and produced concrete evidence (full writeup in
+regression fixtures and produced concrete evidence (full writeup in
 [research.md](./research.md)). Key facts that constrain the design:
 
 - For `"Hi there. I'm Evän."`, `gte-small` decodes to
@@ -29,8 +29,8 @@ regression fixtures (gated by `B7_TEST=1`) and produced concrete evidence (full 
   normalization via an opt-in `sourceNormalize`.
 - Zero behavior change and zero perf regression for length-preserving splitters (char,
   whitespace, sentence/line, tiktoken).
-- Turn the synthetic drift regression (now in "Acceptance criteria") and the `B7_TEST=1`
-  `gte-small` fixtures into asserting tests.
+- Turn both suites parked in "Acceptance criteria" — the synthetic drift regression and the
+  gte-small fixtures — into asserting tests in `test/split.test.js`.
 
 **Non-Goals:**
 
@@ -48,18 +48,29 @@ tiktoken emits `" �"` (source span 2), the anchor walk found only the space an
 1, under-advancing the cursor so the next precomposed grapheme mis-anchored. Conclusion: the
 fix must _detect_ the splitter's mode, not impose one universal cursor.
 
-**Directions considered** (from the B7 doc, cheapest first): A. per-part inflation detection
-(compare code points until divergence, U+FFFD as wildcard) — necessary but insufficient: it
-locates inflation and zero-span tokens but _not_ equal-length mutation. B. `splitterKind`
-enum — explicit but adds API surface and pushes classification onto users. C. two-pass
-fallback on throw — misses silent mis-anchoring, doubles work, retries genuine bugs. D.
-per-call classifier — awkward in the streaming loop, strictly worse than A. E. punt/document —
-the current posture.
+**Directions considered**, cheapest first:
 
-**Chosen: A + opt-in normalized Tier 3 + zero-span filtering.**
+- **Per-part inflation detection** — after locating `start`, compare the part's code points
+  against source until they diverge, treating U+FFFD as a wildcard, and take the divergence
+  point as the next cursor. Local and needs no global classification, but insufficient on
+  its own: it locates length inflation and zero-span tokens, not equal-length mutation,
+  which [research.md](./research.md) shows is the most common gte-small failure.
+- **A `splitterKind` enum** (`"exact" | "tiktoken" | "normalizing"`) — explicit and
+  heuristic-free, but adds API surface and pushes classification onto users who often don't
+  know what their model's tokenizer does at decode time.
+- **Two-pass fallback on throw** — catch the anchoring failure and retry that group with
+  different cursor logic. Handles the loud case only: it misses silent mis-anchoring
+  entirely, doubles the work on failure, and retries genuine splitter bugs that should fail.
+- **Per-call classifier** — infer the splitter's mode from the first few parts, then pick a
+  cursor strategy. Awkward in the streaming loop and strictly worse than per-part inflation
+  detection, which decides the same thing locally.
+- **Punt and document** — lock in current behavior with a clear "unsupported" notice. The
+  posture this change replaces.
 
-1. **`sourceNormalize` option** (default identity). Cheaper than the `splitterKind` enum
-   (B) and needs no classification heuristics (D). Callers declare intent explicitly:
+**Chosen: opt-in `sourceNormalize` + normalized Tier 3 + zero-span filtering.**
+
+1. **`sourceNormalize` option** (default identity). Cheaper than a `splitterKind` enum and
+   needs no classification heuristics. Callers declare intent explicitly:
    `sourceNormalize: (s) => s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")`.
 2. **Normalized-comparison Tier 3.** When `sourceNormalize` is set, replace
    `indexOf(firstAnchorGrapheme(part), cursor)` with: walk source from `cursor`, find the
@@ -70,11 +81,21 @@ the current posture.
 4. **Coverage invariant preserved.** `end` still derives so adjacent chunks meet; the
    `chunk-coverage` contract is unchanged.
 
+**Open — is per-part inflation detection still needed?** An earlier draft of this section
+listed it as chosen alongside the three decisions above but never folded it into them. It
+matters because `sourceNormalize` is opt-in: with it absent the default path is unchanged,
+so the drift splitter in "Acceptance criteria" §1 — which supplies no `sourceNormalize` —
+still throws, even though task 4.1 expects it to assert. Three ways out: give that fixture a
+`sourceNormalize`, have the normalized scan return a source _span_ `(start, end)` rather
+than just `start` (which fixes `"##ん"` inflation without a separate detector), or add
+inflation detection back as a fourth decision. Settle this before task 3.2 — it also decides
+what the cursor advances by, which decisions 2 and 4 currently leave unstated.
+
 ## Risks / Trade-offs
 
 - **Correctness vs tiktoken.** The normalized path must not perturb tiktoken/Devanagari.
   Mitigation: normalized Tier 3 only engages when `sourceNormalize` is non-identity; default
-  path is byte-identical to today. Re-run the multibyte + `B7_TEST=1` fixtures and the
+  path is byte-identical to today. Re-run the multibyte and gte-small fixtures and the
   Devanagari case explicitly.
 - **Cost.** Normalized comparison is O(window) and allocates per Tier 3 fallback. Mitigation:
   Tiers 1–2 (99.6% of parts on real corpora) are untouched; bound the forward search window.
@@ -83,19 +104,23 @@ the current posture.
 - **User burden.** Callers must supply a `sourceNormalize` matching their tokenizer. Accepted:
   explicit and debuggable beats a hidden auto-classifier that silently guesses wrong.
 - **Synthetic vs real divergence.** A synthetic drift test once passed while tiktoken broke;
-  gate the change on the real `B7_TEST=1` fixtures, not just the synthetic case below.
+  gate the change on the real gte-small fixtures, not just the synthetic case below.
 
 ## Acceptance criteria
 
-This section holds the synthetic cursor-drift regression that used to live as an `it.todo` in
-`test/split.test.js`. It was extracted here (Aug 2026) so `npm test` stays clean — its body
-throws today, which node echoes under a "failing tests" banner even for todo tests. Task 4.1
-re-adds it as a real asserting test when B7 is implemented.
+Both suites below are parked here rather than in `test/split.test.js`: they fail today, and
+neither a permanently-failing case nor an env-gated one belongs in a suite that should be
+green and unconditional. Tasks 4.1 and 4.2 move them back in as asserting tests when the fix
+lands. A complete fix satisfies **both**, and regresses neither tiktoken nor the multibyte
+fixtures — especially the Devanagari case `"Hindi: नमस्ते दुनिया"` that broke the hybrid-cursor
+attempt.
 
-**Synthetic drift splitter.** A splitter that appends a U+FFFD byte to every character, so
-each part's decoded length (2) exceeds its source span (1). Today this throws at the second
-part: `end`/`cursor` advance by `part.length`, so after `"a�"` the cursor sits at 2, and
-the anchor `b` (at source position 1) can't be found from cursor 2.
+### 1. Synthetic drift splitter
+
+A splitter that appends a U+FFFD byte to every character, so each part's decoded length (2)
+exceeds its source span (1). Today this throws at the second part: `end`/`cursor` advance by
+`part.length`, so after `"a�"` the cursor sits at 2, while the anchor `b` lives at source
+position 1 — behind the cursor, so it can't be found.
 
 ```js
 const driftSplitter = (text) => text.split("").map((ch) => ch + "�");
@@ -105,7 +130,58 @@ assert.deepStrictEqual(result, [{ text: "abc", start: 0, end: 3 }]);
 ```
 
 Why it matters: tiktoken keeps 1:1 byte↔char (one U+FFFD per undecodable byte), so the
-length-based cursor is exact for it; a fix must therefore _detect_ inflation rather than
-switch cursor algorithms wholesale (the reverted hybrid-cursor attempt undershot tiktoken and
-broke the Devanagari fixture). The fix must satisfy both this synthetic case **and** the real
-`B7_TEST=1` `gte-small` fixtures, and must not regress tiktoken.
+length-based cursor is exact for it. A fix must therefore _detect_ inflation rather than
+switch cursor algorithms wholesale — the reverted hybrid-cursor attempt undershot tiktoken
+and broke the Devanagari fixture.
+
+### 2. Real gte-small fixtures
+
+Needs `@huggingface/transformers` as a dev dependency and downloads `Xenova/gte-small`
+(~23 MB) on first run. These previously lived in `test/split.test.js` behind a `B7_TEST=1`
+env gate; the gate and the fixtures were removed so the suite has no conditional paths.
+[research.md](./research.md) records which failure mode each fixture exercises and what each
+throws today.
+
+```js
+import { AutoTokenizer } from "@huggingface/transformers";
+
+const tok = await AutoTokenizer.from_pretrained("Xenova/gte-small");
+
+// Encode + decode-each-token, nothing filtered — includes [CLS]/[SEP]/[UNK].
+const gteSmallSplitterNaive = (text) =>
+  tok.encode(text).map((id) => tok.decode([id]));
+
+// Same, but drops control tokens. Keeps `##` prefixes and the lowercase /
+// accent-stripped output: nearform/joyce's workaround also pre-lowercases the
+// input and strips `##`, deliberately not done here so the fixtures expose
+// what the library handles unaided.
+const gteSmallSplitter = (text) =>
+  tok
+    .encode(text)
+    .map((id) => tok.decode([id]))
+    .filter((t) => t !== "[CLS]" && t !== "[SEP]" && t !== "[UNK]");
+
+const fixtures = [
+  { label: "uppercase + apostrophe + accent", input: "Hi there. I'm Evän." },
+  { label: "uppercase + accent", input: "CAFÉ" },
+  { label: "accent-only", input: "naïve résumé" },
+  { label: "CJK + ASCII", input: "こんにちは world" },
+  { label: "pure-ASCII control", input: "hello world" },
+];
+
+for (const { label, input } of fixtures) {
+  for (const [kind, splitter] of [
+    ["naive", gteSmallSplitterNaive],
+    ["filtered", gteSmallSplitter],
+  ]) {
+    it(`gte-small (${kind}): ${label}`, () => {
+      const chunks = split(input, { chunkSize: 4, splitter });
+      // Coverage-only for now; task 4.2 upgrades these to exact positions.
+      for (let i = 0; i < chunks.length - 1; i++) {
+        assert.ok(chunks[i].end >= chunks[i + 1].start);
+      }
+      assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+    });
+  }
+}
+```

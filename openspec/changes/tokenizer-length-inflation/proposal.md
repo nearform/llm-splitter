@@ -10,7 +10,7 @@ authors — the library's primary audience — reach for, yet today they either 
 `"Splitter returned a part that could not be located in input"` or, worse, silently
 mis-anchor `start`/`end`.
 
-Phase 1 (real `gte-small` regression fixtures, gated by `B7_TEST=1`) is complete and
+Phase 1 (real `gte-small` regression fixtures) is complete and
 narrowed the problem: length inflation is only one of three failure modes, and the most
 common one for `gte-small` is **equal-length content mutation** (`"Hi"` → `"hi"`), which a
 pure inflation detector cannot locate. The evidence behind that finding lives in
@@ -31,8 +31,8 @@ implementation.
 - Preserve today's exact behavior for length-preserving splitters (char, whitespace,
   sentence/line, tiktoken) — no regression, verified against the existing multibyte and
   Devanagari fixtures.
-- Promote the synthetic `it.todo` drift regression and the `B7_TEST=1` `gte-small` fixtures
-  from "documents the bug" to "asserts the fix".
+- Promote both suites parked in `design.md` → "Acceptance criteria" — the synthetic drift
+  regression and the gte-small fixtures — from "documents the bug" to "asserts the fix".
 
 ## Capabilities
 
@@ -47,11 +47,10 @@ implementation.
 
 - Source: [src/split.js](../../../src/split.js) — `anchorParts` (Tier 3 + pre-anchor
   filtering), `splitValidate` (accept/validate `sourceNormalize`), `SplitOptions` typedef.
-- Tests: [test/split.test.js](../../../test/split.test.js) — wire the `it.todo` drift case
-  and the `B7_TEST=1` `gte-small` fixtures into asserting tests; must keep tiktoken/Devanagari
+- Tests: [test/split.test.js](../../../test/split.test.js) — wire the drift case and the
+  gte-small fixtures from `design.md` into asserting tests; must keep tiktoken/Devanagari
   green.
 - Docs: README "Supported tokenizers" section updated once implemented.
 - Performance: normalized comparison only runs on the Tier 3 fallback path; the char/tiktoken
-  happy paths (Tiers 1–2) are untouched. Re-run [tmp-benchmark-rewrite.js](../../../tmp-benchmark-rewrite.js)
-  to confirm no regression.
+  happy paths (Tiers 1–2) are untouched.
 - API: additive and backward compatible — `sourceNormalize` defaults to identity.

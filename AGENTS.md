@@ -20,16 +20,6 @@ npm test             # node --test
 npm run build        # tsc -p tsconfig.json  (emits dist/*.d.ts only)
 npm run check        # lint + check:types + test + format check
 npm run format       # prettier + eslint --fix
-
-B7_TEST=1 npm test   # also runs the gte-small regression fixtures (downloads
-                     # Xenova/gte-small, ~23MB, lazy-loaded inside before()).
-                     # Plain `npm test` shows them as skipped.
-
-node tmp-benchmark-rewrite.js
-                     # Perf comparison vs the published llm-splitter@0.2.0
-                     # at ../llm-splitter/dist/. 90-scenario matrix across
-                     # size × strategy × chunkSize × overlap × splitter.
-                     # Use this for any algorithm change in src/split.js.
 ```
 
 `check:types` and `build` use **two different tsconfigs**: `tsconfig.json` builds
@@ -115,45 +105,37 @@ yourself wanting any of them back, ask first.
 [demo-page workflow](.github/workflows/demo-page.yml) copies `src/` (not `dist/`) into
 `demo-public/`. There is no build step for the demo.
 
-### Verify perf claims with the benchmark, not by reasoning alone
-
-The `findGrapheme` slow path was assumed "fine" until the benchmark
-([tmp-benchmark-rewrite.js](tmp-benchmark-rewrite.js)) surfaced a 659x
-worst-case slowdown vs. the published library on byte-dropping
-splitters. The fix (replace `Intl.Segmenter`-over-slice with `indexOf`)
-was obvious in hindsight, but the magnitude wasn't until measured. Run
-the bench after any algorithm change.
-
 ### Synthetic regression tests model shapes; real tokenizer fixtures catch the rest
 
-A first hybrid-cursor attempt for tokenizer length inflation (B7)
-satisfied the synthetic drift regression but broke `tiktoken` on a
-Devanagari fixture. Don't take "synthetic passes" as license to ship;
-also run any tokenizer-affecting change against the multibyte +
-`B7_TEST=1` fixtures. (The synthetic repro now lives in the B7 change's
-`design.md`, not the test suite — see "Open work / future".)
+A first hybrid-cursor attempt for tokenizer length inflation satisfied the
+synthetic drift regression but broke `tiktoken` on a Devanagari fixture.
+Don't take "synthetic passes" as license to ship; run any
+tokenizer-affecting change against the multibyte fixtures **and** the real
+gte-small ones. Both the synthetic repro and the gte-small fixture code
+live in the change's `design.md` → "Acceptance criteria", not the test
+suite — see "Open work / future".
 
 ## Spec-driven workflow (OpenSpec)
 
 This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) to track _what the
 library guarantees today_ vs _what we're going to change next_. See
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full workflow.
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the full workflow.
 
 - `openspec/specs/` — the current behavioral contract as capabilities
   (`chunking`, `chunk-coverage`, `multibyte-anchoring`, `chunk-extraction`).
   The README stays the human narrative; specs are the structured source of truth.
 - `openspec/changes/` — proposed work (proposal + design + spec deltas + tasks).
 - Drive future work from Claude Code with the `/opsx:*` slash commands
-  (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`); see docs/DEVELOPMENT.md.
+  (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`); see docs/CONTRIBUTING.md.
   Inspect/validate via the CLI: `openspec validate --all --strict`.
 
 ## Open work / future
 
-- **Tokenizer length inflation (B7)** — normalizing embedding tokenizers (`gte-small` and
+- **Tokenizer length inflation** — normalizing embedding tokenizers (`gte-small` and
   friends) mis-anchor or throw. Everything lives in
   [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/):
-  `proposal.md`, `design.md` (decisions + the synthetic repro under "Acceptance criteria"),
-  `research.md` (the gte-small evidence and the reverted hybrid-cursor trace), spec deltas,
-  and a phased `tasks.md`. Regression fixtures are in
-  [test/split.test.js](test/split.test.js), gated by `B7_TEST=1`. When it ships, run
+  `proposal.md`, `design.md` (decisions, plus both failing test suites under "Acceptance
+  criteria"), `research.md` (the gte-small evidence and the reverted hybrid-cursor trace),
+  spec deltas, and a phased `tasks.md`. Nothing for it lives in `test/split.test.js` — the
+  suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.

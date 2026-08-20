@@ -20,8 +20,8 @@ context: |
 
   Required checks before considering work done:
   - `npm run check` (lint + check:types + test + check:format).
-  - `B7_TEST=1 npm test` for any tokenizer-affecting change (loads Xenova/gte-small).
-  - `node tmp-benchmark-rewrite.js` after any src/split.js algorithm change.
+  - Tokenizer-affecting changes must also clear the gte-small fixtures parked in
+    openspec/changes/tokenizer-length-inflation/design.md ("Acceptance criteria").
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

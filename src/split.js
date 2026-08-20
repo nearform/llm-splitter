@@ -205,7 +205,7 @@ const anchorParts = (input, splitter, baseOffset) => {
  * callers don't need to recover it by searching. This is what makes paragraph
  * mode robust against adversarial inputs where a paragraph's content appears
  * as a substring inside an earlier paragraph or where empty elements shift
- * what `indexOf` would have returned (B1, B2).
+ * what `indexOf` would have returned.
  *
  * @param {string} strategy
  * @param {string[]} inputs
@@ -219,10 +219,10 @@ const boundaryGroups = (strategy, inputs) => {
     for (const input of inputs) {
       let cursor = 0;
       for (const paragraph of input.split(PARAGRAPH_DELIMITER)) {
-        // B6: trim leading/trailing whitespace from the paragraph and shift
+        // Trim leading/trailing whitespace from the paragraph and shift
         // baseOffset to match the trimmed content. The trimmed bytes still
         // exist in the input string — they end up in adjacent chunks via the
-        // B5 forward-extension pass (or remain uncovered if they precede
+        // forward-extension pass below (or remain uncovered if they precede
         // chunks[0].start).
         const leadingMatch = paragraph.match(/^\s+/);
         const leadLen = leadingMatch ? leadingMatch[0].length : 0;
@@ -392,7 +392,7 @@ export const split = (
     emit();
   }
 
-  // B5: extend each chunk's `end` forward to absorb gaps to the next chunk;
+  // Extend each chunk's `end` forward to absorb gaps to the next chunk;
   // the final chunk extends to end of input. Leading code units before
   // chunks[0] are intentionally left uncovered (no "previous" chunk to
   // extend).
@@ -408,9 +408,9 @@ export const split = (
   // they want it back) is impossible without re-reading source. Lossless
   // library, lossy caller.
   //
-  // Consequence: chunks have clean starts (B6 strips paragraph-leading
-  // whitespace before anchoring) but may carry trailing whitespace and
-  // `\n\n` delimiters that B5 absorbs forward from the gap.
+  // Consequence: chunks have clean starts (paragraph-leading whitespace is
+  // stripped before anchoring) but may carry trailing whitespace and `\n\n`
+  // delimiters absorbed forward from the gap.
   const totalLength = inputAsArray.reduce((sum, s) => sum + s.length, 0);
   for (let i = 0; i < chunks.length; i++) {
     const nextStart = i < chunks.length - 1 ? chunks[i + 1].start : totalLength;

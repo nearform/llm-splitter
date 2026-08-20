@@ -19,47 +19,12 @@ const tokenSplitter = (text) =>
     td.decode(tokenizer.decode(new Uint32Array([token]))),
   );
 
-// gte-small (BERT WordPiece via @huggingface/transformers). Loaded lazily in
-// before() only when B7_TEST=1 to avoid a 23 MB model download on plain
-// `npm test`. See the B7-real regression group below and
-// openspec/changes/tokenizer-length-inflation/research.md.
-/** @type {{ encode: (text: string) => number[], decode: (ids: number[]) => string } | undefined} */
-let gteTokenizer;
-/** @param {string} text */
-const gteSmallSplitterNaive = (text) => {
-  if (!gteTokenizer) {
-    throw new Error("gteTokenizer not initialized");
-  }
-  const tok = gteTokenizer;
-  return tok.encode(text).map((id) => tok.decode([id]));
-};
-/** @param {string} text */
-const gteSmallSplitter = (text) => {
-  if (!gteTokenizer) {
-    throw new Error("gteTokenizer not initialized");
-  }
-  const tok = gteTokenizer;
-  return tok
-    .encode(text)
-    .map((id) => tok.decode([id]))
-    .filter((t) => t !== "[CLS]" && t !== "[SEP]" && t !== "[UNK]");
-};
-
-const B7_TEST_ENABLED = !!process.env.B7_TEST;
-
 // Tests
 /** @type {import('tiktoken').Tiktoken} */
 let tokenizer;
 describe("split", () => {
-  before(async () => {
+  before(() => {
     tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002");
-    if (B7_TEST_ENABLED) {
-      const { AutoTokenizer } = await import("@huggingface/transformers");
-      const loaded = await AutoTokenizer.from_pretrained("Xenova/gte-small");
-      gteTokenizer = /** @type {typeof gteTokenizer} */ (
-        /** @type {unknown} */ (loaded)
-      );
-    }
   });
 
   after(() => {
@@ -1223,10 +1188,10 @@ describe("split", () => {
       });
     });
 
-    // B6: paragraph mode trims leading/trailing whitespace from each paragraph
-    // before anchoring. Trimmed bytes are absorbed by B5 forward-extension or
-    // left uncovered if they precede chunks[0].start.
-    describe("paragraph trim (B6)", () => {
+    // Paragraph mode trims leading/trailing whitespace from each paragraph
+    // before anchoring. Trimmed bytes are absorbed by the forward-extension
+    // pass, or left uncovered if they precede chunks[0].start.
+    describe("paragraph trim", () => {
       it("leading whitespace in a paragraph is stripped from anchored parts (char splitter)", () => {
         const input = "  hello\n\nworld";
         const result = split(input, {
@@ -1234,25 +1199,25 @@ describe("split", () => {
           chunkStrategy: "paragraph",
           splitter: charSplitter,
         });
-        // Without B6, chunks[0] would have anchored the two leading spaces
-        // and started at position 0. With B6, chunks[0].start === 2 (where
-        // 'h' lives); the leading "  " is uncovered. The trailing "\n\n" is
-        // absorbed forward into chunks[0] via B5 extension.
+        // Untrimmed, chunks[0] would anchor the two leading spaces and start
+        // at position 0. Trimmed, chunks[0].start === 2 (where 'h' lives) and
+        // the leading "  " is uncovered. The trailing "\n\n" is absorbed
+        // forward into chunks[0] by the extension pass.
         assert.deepStrictEqual(result, [
           { text: "hello\n\n", start: 2, end: 9 },
           { text: "world", start: 9, end: 14 },
         ]);
       });
 
-      it("trailing whitespace in a paragraph is stripped but absorbed by B5 extension", () => {
+      it("trailing whitespace in a paragraph is stripped but absorbed by forward extension", () => {
         const input = "hello   \n\nworld";
         const result = split(input, {
           chunkSize: 5,
           chunkStrategy: "paragraph",
           splitter: charSplitter,
         });
-        // chunks[0] anchors only "hello"; trailing "   " is unanchored.
-        // B5 then extends chunks[0].end forward to chunks[1].start=10.
+        // chunks[0] anchors only "hello"; trailing "   " is unanchored. The
+        // extension pass then pushes chunks[0].end forward to chunks[1].start=10.
         assert.deepStrictEqual(result, [
           { text: "hello   \n\n", start: 0, end: 10 },
           { text: "world", start: 10, end: 15 },
@@ -1275,9 +1240,9 @@ describe("split", () => {
       });
     });
 
-    // B5 invariant: chunks fully cover input from chunks[0].start onward.
-    // (Leading bytes before chunks[0].start may be uncovered by design.)
-    describe("coverage invariant (B5)", () => {
+    // Chunks fully cover the input from chunks[0].start onward. (Leading
+    // bytes before chunks[0].start may be uncovered by design.)
+    describe("coverage invariant", () => {
       /**
        * @param {import("../src/split.js").Chunk[]} chunks
        * @param {number} totalLength
@@ -1415,118 +1380,31 @@ describe("split", () => {
       });
     });
 
-    // Regression tests for bugs surfaced in the adversarial review.
-    // Active tests assert post-fix behavior. `it.todo` markers remain only
-    // for bugs whose fix hasn't shipped yet.
-    describe("regressions", () => {
-      it("B1: paragraph mode anchors next group at its real position, not first substring match", () => {
-        // Adversarial: second array element's content ("b") appears as a
-        // substring inside the first element ("ab"). Pre-fix the second
-        // paragraph anchored at offset 1 (inside "ab") instead of offset 2
-        // and the trailing "b" was silently dropped. Fix: boundaryGroups
-        // carries baseOffset explicitly.
+    describe("paragraph group offsets", () => {
+      it("paragraph mode anchors next group at its real position, not first substring match", () => {
+        // The second array element's content ("b") appears as a substring
+        // inside the first ("ab"). Anchoring the group by substring search
+        // landed it at offset 1 (inside "ab") instead of offset 2, silently
+        // dropping the trailing "b". boundaryGroups now carries baseOffset
+        // explicitly.
         const result = split(["ab", "b"], { chunkStrategy: "paragraph" });
         assert.deepStrictEqual(result, [
           { text: ["ab", "b"], start: 0, end: 3 },
         ]);
       });
 
-      it("B2: empty paragraphs do not poison subsequent group offset lookup", () => {
-        // Adversarial: an empty middle array element advanced baseOffset by
-        // one position pre-fix; the next paragraph's indexOf then started
-        // past its real location and returned -1, throwing "Could not find
-        // start of group". The empty middle element appears as "" in chunk
-        // text because getChunk includes zero-width items that sit between
-        // start and end positions.
+      it("empty paragraphs do not poison subsequent group offset lookup", () => {
+        // An empty middle array element used to advance baseOffset by one
+        // position; the next paragraph's indexOf then started past its real
+        // location and returned -1, throwing "Could not find start of group".
+        // The empty middle element appears as "" in chunk text because
+        // getChunk includes zero-width items that sit between start and end
+        // positions.
         const result = split(["b", "", "b"], { chunkStrategy: "paragraph" });
         assert.deepStrictEqual(result, [
           { text: ["b", "", "b"], start: 0, end: 2 },
         ]);
       });
-
-      // B7 (synthetic cursor-drift regression) was extracted out of the suite
-      // into the OpenSpec change that tracks the fix, so `npm test` stays clean
-      // (its body throws today, which node echoes under a "failing tests"
-      // banner even for todo tests). The repro + expected assertion now live in
-      // openspec/changes/tokenizer-length-inflation/design.md ("Acceptance
-      // criteria"); task 4.1 there re-adds it as an asserting test when B7 is
-      // fixed. The real-world gte-small fixtures below are registered only when
-      // B7_TEST=1, so plain `npm test` shows nothing for them (no skip noise).
-
-      // B7-real: real-world fixtures using `gte-small` (BERT WordPiece via
-      // @huggingface/transformers). The model's normalizer pipeline
-      // (NFD + lowercase + strip-accents) plus WordPiece's `##` continuation
-      // prefix break the splitter's anchoring assumptions in several distinct
-      // ways. These tests are gated by B7_TEST=1 (registered only when set)
-      // because they download a 23 MB model on first run and aren't a CI
-      // requirement until B7 is fixed. See
-      // openspec/changes/tokenizer-length-inflation/research.md.
-      //
-      // Two helpers are exercised per fixture:
-      //   - gteSmallSplitterNaive: encode + decode-each-token, nothing
-      //     filtered. Includes [CLS]/[SEP] and (if any) [UNK].
-      //   - gteSmallSplitter: filters [CLS]/[SEP]/[UNK] but keeps `##`
-      //     prefixes and the lowercase/accent-stripped output.
-      // nearform/joyce's documented workaround additionally pre-lowercases
-      // input and strips `##`; we deliberately do NOT do that here, to
-      // expose what the library handles unaided.
-      /**
-       * @param {import("../src/split.js").Chunk[]} chunks
-       * @param {number} totalLength
-       */
-      const assertCovers = (chunks, totalLength) => {
-        if (chunks.length === 0) {
-          return;
-        }
-        for (let i = 0; i < chunks.length - 1; i++) {
-          assert.ok(
-            chunks[i].end >= chunks[i + 1].start,
-            `gap between chunk ${i} (end=${chunks[i].end}) and chunk ${i + 1} (start=${chunks[i + 1].start})`,
-          );
-        }
-        assert.strictEqual(
-          chunks[chunks.length - 1].end,
-          totalLength,
-          "last chunk must extend to end of input",
-        );
-      };
-
-      const b7Fixtures = [
-        {
-          label:
-            "headline real-world case (uppercase + apostrophe + accented letter)",
-          input: "Hi there. I'm Evän.",
-        },
-        { label: "CAFÉ (uppercase + accent)", input: "CAFÉ" },
-        { label: "naïve résumé (accent-only)", input: "naïve résumé" },
-        {
-          label: "こんにちは world (CJK + ASCII control)",
-          input: "こんにちは world",
-        },
-        { label: "hello world (pure-ASCII control)", input: "hello world" },
-      ];
-
-      // Register these only when B7_TEST=1. When disabled we intentionally
-      // define nothing (rather than `{ skip }`), so plain `npm test` prints no
-      // lines for them at all — the skip markers were pure noise.
-      if (B7_TEST_ENABLED) {
-        for (const { label, input } of b7Fixtures) {
-          it(`B7-real (truly naive gte-small): ${label}`, () => {
-            const chunks = split(input, {
-              chunkSize: 4,
-              splitter: gteSmallSplitterNaive,
-            });
-            assertCovers(chunks, input.length);
-          });
-          it(`B7-real (almost-naive gte-small): ${label}`, () => {
-            const chunks = split(input, {
-              chunkSize: 4,
-              splitter: gteSmallSplitter,
-            });
-            assertCovers(chunks, input.length);
-          });
-        }
-      }
     });
   });
 });

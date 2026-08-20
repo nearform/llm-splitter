@@ -38,6 +38,6 @@ direct CLI use.
 
 ## Gates
 
-A change is not done until `npm run check` passes, plus `B7_TEST=1 npm test` for
-tokenizer-affecting work and the benchmark for `src/split.js` algorithm changes. See
+A change is not done until `npm run check` passes. Tokenizer-affecting work additionally
+has to clear the gte-small fixtures parked in the tokenizer change's `design.md`. See
 AGENTS.md for the rationale behind each.

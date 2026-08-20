@@ -79,7 +79,7 @@ the part's graphemes. It broke `tiktoken` on `"Hindi: नमस्ते दु�
 The walk **undershoots** whenever the source span equals the decoded length but only some
 of those code units are anchorable. Conclusion: detect the splitter's mode rather than
 impose one universal cursor. Any replacement must pass both this fixture and the
-`B7_TEST=1` gte-small set.
+gte-small set.
 
 ## Known production workaround
 
