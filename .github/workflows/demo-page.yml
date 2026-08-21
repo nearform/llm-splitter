@@ -31,9 +31,6 @@ jobs:
         uses: actions/checkout@v7
 
       # Prep artifacts
-      # TODO(REWRITE): Not needed anymore? Check and remove.
-      # - name: Install dependencies
-      #   run: npm ci
       - name: Copy sources to demo-public
         run: |
           mkdir -p demo-public
