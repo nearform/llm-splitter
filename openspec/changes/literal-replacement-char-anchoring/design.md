@@ -400,13 +400,23 @@ Every gate in `tasks.md` § 3 is checked by one script. It is recorded here rath
 to `test/split.js` because it needs **two trees** — an unpatched and a patched copy of `src/`
 — which the suite cannot express. Set up and run:
 
+Save the script below as `verify.mjs` **in the repo root**. It has to live inside the repo:
+it imports `tiktoken` by bare specifier, and Node resolves that from the script's own
+directory, not from the working directory. The two trees it compares can be anywhere, since
+they are imported by absolute path.
+
 ```sh
-mkdir -p /tmp/verify/base /tmp/verify/patched
-git -C . show HEAD:src/split.js > /dev/null   # sanity: run from the repo root
-cp -R src /tmp/verify/base/src                # baseline: src/ before the fix
-cp -R src /tmp/verify/patched/src             # then apply the fix to this copy
-node verify.mjs /tmp/verify/base /tmp/verify/patched
+V=$(mktemp -d)
+mkdir -p "$V/base/src" "$V/patched/src"
+# Baseline: src/ as committed, before the fix.
+for f in $(git ls-tree --name-only HEAD src/); do
+  git show "HEAD:$f" > "$V/base/src/$(basename "$f")"
+done
+cp src/*.js "$V/patched/src/"   # patched: the working tree
+node verify.mjs "$V/base" "$V/patched"
 ```
+
+If the baseline is already committed, point it at the pre-fix commit instead of `HEAD`.
 
 It exits non-zero when any gate fails, so it can be dropped into CI as-is. The gates are
 adversarially checked: run it against the fix's own rejected alternatives and it fails —
@@ -736,10 +746,19 @@ process.exitCode = failures === 0 ? 0 : 1;
   The shape needs a splitter that **drops multi-character content**, plus a repeated anchor
   grapheme in the dropped gap, plus a U+FFFD-bearing part. None of the documented splitters
   qualify: `char` and `tiktoken` drop nothing (tier 1 covers them), and `text.split(/\s+/)`
-  drops only whitespace while its parts contain none, so no decoy is reachable. Zero
-  occurrences in 15,000 fuzz cases and 2,000 array cases. It is a silent position error, not
-  a throw, which is the failure mode README:372 warns is worse — so it gets stated in the
-  spec, not left implicit.
+  drops only whitespace while its parts contain none, so no decoy is reachable.
+
+  Measured two independent ways, both clean. Against `tiktoken`'s byte-derived truth the
+  oracle shows **0 `ok→off`** transitions — no case that was correctly positioned becomes
+  incorrectly positioned. And for the `space` splitter, whose parts are verbatim substrings
+  so exact-offset arithmetic gives ground truth directly, all **220** cases whose positions
+  moved under `character` strategy have _both_ sides fully on truth: the two runs differ over
+  which parts are dropped, never over where a surviving part lands. Note that truth function
+  is only valid for `character` strategy — in `paragraph` mode positions are group-relative,
+  and applying whole-text arithmetic there manufactures phantom failures.
+
+  It is a silent position error, not a throw, which is the failure mode README:372 warns is
+  worse — so it gets stated in the spec, not left implicit.
 
 - **[The Tier 1 residual]** → Decision 4. Benign (one extra chunk boundary, no drift, no
   throw, coverage intact), unavoidable locally, and present in the superseded approach at

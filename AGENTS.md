@@ -38,27 +38,52 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   offset 0.
 - `anchorParts` runs a three-tier locate per splitter part:
   `startsWith(splitPart, cursor)` → `indexOf(splitPart, cursor)` →
-  `indexOf(firstAnchorGrapheme(splitPart), cursor)`. Tier 3 is the
-  safety net for byte-mutating splitters; tiers 1 and 2 are the
-  perf-critical happy paths. The old `findGrapheme` helper (`slice` +
-  `Intl.Segmenter`) was replaced because it was O(n²) on byte-dropping
-  splitters; `indexOf` is safe in tier 3 because anchor graphemes
-  (filtered by `firstAnchorGrapheme`) never start with a low surrogate
-  or combining mark.
-- **Tier 2 is skipped when it provably cannot match**: a part containing
-  U+FFFD is not a substring of a source containing none, so the search
-  could only scan to end-of-input and return `-1`. `anchorParts` probes
-  the source for U+FFFD once per call; a source that _does_ contain one
-  disables the skip. `firstAnchorGrapheme` likewise returns `null`
-  immediately for a part with no non-replacement code unit instead of
-  segmenting it. **The quadratic has now moved twice** — out of
-  `findGrapheme`, then out of the tier 2 failure branch — so it is pinned
-  by a scaling regression ("anchoring cost" → "grows linearly with input
-  size" in [test/split.test.js](test/split.test.js)) rather than trusted
-  to stay gone. That test measures an 8x size span against a threshold of
-  16; a 2x span does not separate linear from quadratic at sizes the suite
-  can afford. Do not weaken it to "fix" a slow machine — raise the base
-  size instead.
+  the anchor-grapheme search. Tier 3 is the safety net for byte-mutating
+  splitters; tiers 1 and 2 are the perf-critical happy paths. The old
+  `findGrapheme` helper (`slice` + `Intl.Segmenter`) was replaced because
+  it was O(n²) on byte-dropping splitters; `indexOf` is safe in tier 3
+  because anchor graphemes (filtered by `firstAnchorGrapheme`) never
+  start with a low surrogate or combining mark.
+- **Tier 3 anchors the part's left edge, not its anchor grapheme.**
+  `firstAnchorGrapheme` returns `{ segment, offset }`, and tier 3 computes
+  `indexOf(segment, cursor + offset) - offset`. The subtraction is
+  load-bearing and easy to mistake for noise: without it a part 3 code
+  units wide whose anchor sits 1 unit in gets `start` at the match and
+  `end` at `start + 3`, so the span is shifted right by one and the cursor
+  overshoots by one. Searching from `cursor + offset` is what keeps the
+  corrected `start` at or after the cursor. It is pinned by "anchors a
+  mixed part at its left edge" (two leading U+FFFD, so `cursor + 1` fails
+  too) and by "drops unanchorable parts without dropping mixed ones",
+  whose `[1,4)` expectation looks wrong until you read this.
+- **Tier 2 is skipped for every part containing U+FFFD**, regardless of
+  the source. For a source with no U+FFFD this is a provable equivalence:
+  the part is not a substring, so the search could only scan to
+  end-of-input and return `-1`. For a source that _does_ contain one it is
+  a deliberate correctness choice, not an optimization — U+FFFD is a
+  character the splitter invented, so a verbatim hit on it carries no
+  information about where the part came from, and acting on such a hit
+  strands the cursor past real source. The earlier version gated the skip
+  on `input.includes(REPLACEMENT_CHAR)`, which re-enabled tier 2 exactly
+  when it was least trustworthy; that probe is gone. `firstAnchorGrapheme`
+  likewise returns `null` immediately for a part with no non-replacement
+  code unit instead of segmenting it.
+- **Tier 1 is deliberately unguarded and cannot be fixed the same way.**
+  At the cursor, a manufactured bare U+FFFD is byte-identical to a literal
+  one, so a literal U+FFFD standing there may claim a manufactured part.
+  Cost is one extra chunk boundary and no drift, since both are one code
+  unit wide. Do not "fix" this by probing the source — that is what the
+  removed disjunct did.
+- **The quadratic has now moved three times** — out of `findGrapheme`, out
+  of the tier 2 failure branch, and out of the U+FFFD-bearing-source case
+  the previous round carved out as permanent (measured 40x → 7x cost for
+  an 8x input span). So it is pinned by two scaling regressions under
+  "anchoring cost" in [test/split.test.js](test/split.test.js): "grows
+  linearly with input size" for a clean source and "grows linearly when
+  the source itself contains U+FFFD" for a source holding one. Both
+  measure an 8x size span against a threshold of 16; a 2x span does not
+  separate linear from quadratic at sizes the suite can afford. Do not
+  weaken either to "fix" a slow machine — raise the base size instead.
+  They bite: on the pre-fix tree the U+FFFD one measures 42x.
 - After all chunks emit, a forward-extension pass sets
   `chunk[i].end = chunk[i+1].start` (and the last chunk to total input
   length). This enforces the **coverage invariant**.
@@ -270,6 +295,22 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
+- **Backtracking anchor walk** — not started, and the only remaining way to close the last
+  two anchoring residuals: a literal U+FFFD at the cursor claiming a manufactured bare part,
+  and a genuinely-verbatim mixed part anchoring on an earlier decoy grapheme. Both are
+  documented limitations in `multibyte-anchoring`, and both are **provably out of reach of any
+  local rule** — the spurious and the legitimate case present identical signatures (tier 2
+  match later than the offset-corrected tier 3 candidate) with opposite correct answers, so a
+  guard reading only the part, the source, and the cursor must be wrong on one of them. The
+  demonstration is in
+  [openspec/changes/literal-replacement-char-anchoring/design.md](openspec/changes/literal-replacement-char-anchoring/design.md)
+  → Decision 4; don't re-derive it, and don't accept a proposed guard that doesn't address it.
+  Separating them needs knowing whether the _remaining_ parts still anchor under each choice.
+  The cost is the open question: worst case it reintroduces a per-part factor, which is
+  exactly what `anchor-scan-short-circuit` spent a change removing. Nobody has asked for this
+  — both residuals are benign — so it stays unstarted until a caller reports a real
+  mis-anchoring it would fix.
+
 - **Quadratic tier-2 anchor scan** — shipped and archived. `indexOf(splitPart, cursor)` used to
   scan to end of input for every part that isn't verbatim in the source, making
   `character`-strategy splits O(n²) on tokenizer output; fixed by the tier 2 skip described in
@@ -279,6 +320,17 @@ library guarantees today_ vs _what we're going to change next_. See
   for rejecting a distance bound, and the measurements behind the regression's constants
   (including the conditional follow-up in `tasks.md` § 6 for revisiting a tier-2 distance bound
   if a caller ever reports a splitter that legitimately drops long spans).
+
+  **Its one carve-out is now closed.** That change left a source containing literal U+FFFD
+  outside the linearity guarantee, on the grounds that a U+FFFD-bearing part is genuinely
+  findable there so tier 2 could not be skipped. `literal-replacement-char-anchoring` showed the
+  carve-out was a consequence of the disjunct rather than a fact about the problem: skipping
+  tier 2 for those parts unconditionally makes that case linear too (measured 40x → 7x cost for
+  an 8x input span) and fixes a correctness bug in the bargain. Both scenarios recording the
+  carve-out were inverted rather than deleted, because a MODIFIED requirement cannot drop a
+  scenario — so if you read "Source containing U+FFFD keeps the unbounded search" in
+  `openspec/specs/multibyte-anchoring/spec.md`, check the body, not the title.
+
   `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
   this.
 
