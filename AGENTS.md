@@ -114,7 +114,8 @@ look broken (there is no `dist/split.js`), but they're not. TypeScript resolves 
 
 Verified by hand — `npm pack`, install the tarball into a scratch project, then import by
 package name — under `moduleResolution: nodenext` and `bundler`, plus runtime ESM and
-`require()`. There is **no automated test** for this; see "Deferred to 1.0" below.
+`require()`. There is **no automated test** for this; see "Considered and deliberately not
+taken" below.
 
 ### JSDoc gotchas under `strict` + `checkJs`
 
@@ -227,9 +228,12 @@ Three things follow from that, all of them deliberate:
   means regenerating them (command is in the docstring above the constant).
 - **Don't "simplify" it into a devDependency.** A `npm:` alias would work, but
   an unaliased `npm i -D llm-splitter` is the trap: it installs fine today only
-  because this package has no `exports` map. Add one (a "Deferred to 1.0" item
-  below) and Node's self-reference takes over, the baseline silently becomes
-  `src/index.js`, and the benchmark reports zero differences against itself.
+  because this package has no `exports` map (see "Considered and deliberately not
+  taken" below — declined, but one edit away). Add one and Node's self-reference
+  takes over, the baseline silently becomes `src/index.js`, and the benchmark
+  reports zero differences against itself. The current setup is immune: the
+  working copy comes in by relative path and the baseline from a cache URL, so
+  neither is resolved by package name.
 - **Still excluded from `check:types` and from `npm run check`.** The baseline
   import resolves at runtime through a cache URL, so there's no static path for
   `tsc`; and the run takes minutes and touches the network. `test/.cache/` is
@@ -278,19 +282,26 @@ library guarantees today_ vs _what we're going to change next_. See
   `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
   this.
 
-### Deferred to 1.0
+### Considered and deliberately not taken
 
-Surfaced during the pre-`0.3.0` review and deliberately **not** taken, because each is a
-breaking change or a new public surface and `0.x` is the wrong place to spend that. Revisit
-together when 1.0 is on the table.
+Surfaced during the pre-`0.3.0` review and declined on the merits — not parked pending a
+version. Recorded so none of them is re-proposed as an oversight. Each says what would
+change our mind, which is the only thing that should reopen it.
 
-- **No `exports` map.** `main: src/index.js` + `types: dist/index.d.ts` already resolves
-  correctly with no `exports` field — verified against a packed tarball under
-  `moduleResolution: nodenext` _and_ `bundler`, plus runtime ESM and `require()`. So the
-  `src`/`dist` skew is **not** a reason to add one; the only thing `exports` buys is
-  encapsulation. Today `import('llm-splitter/src/split.js')` resolves and hands back
-  `split`, which becomes a compatibility obligation the moment 1.0 ships. The minimal form
-  that closes it without disturbing the skew:
+- **No `exports` map, by choice — we prefer a soft contract.** `main: src/index.js` +
+  `types: dist/index.d.ts` already resolves correctly with no `exports` field — verified
+  against a packed tarball under `moduleResolution: nodenext` _and_ `bundler`, plus runtime
+  ESM and `require()`. So the `src`/`dist` skew is **not** a reason to add one; the only
+  thing `exports` buys is encapsulation, and we would rather document the supported surface
+  than have the resolver enforce it. Deep paths like
+  `import('llm-splitter/src/split.js')` do resolve today; that is understood and accepted,
+  not an oversight. `split()` and `getChunk()` from the package root are what the README and
+  `openspec/specs/` describe, and that is the contract — reaching past it is
+  use-at-your-own-risk rather than something the package prevents.
+
+  What would change our mind: an actual report of someone depending on an internal path in
+  a way that blocks a refactor. Hard enforcement is cheap to add at that point and needs no
+  redesign. The minimal form, kept here so the option stays one edit away:
 
   ```json
   "exports": {
@@ -301,7 +312,8 @@ together when 1.0 is on the table.
 
   Keep `main`/`types` alongside it for legacy resolvers. The `./package.json` entry is what
   keeps tooling that reads the manifest working. Measured: deep imports start returning
-  `ERR_PACKAGE_PATH_NOT_EXPORTED` and everything else stays green.
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` and everything else stays green. Note this is a breaking
+  change for any deep importer, so it wants its own minor and a changeset that says so.
 
 - **No packaged-consumer test.** Nothing in CI installs a packed tarball and imports the
   package by name, so the resolution model above is verified only by hand. Considered and
