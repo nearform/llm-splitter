@@ -8,10 +8,10 @@
 ## 2. Apply the fix — both halves, in this order
 
 - [ ] 2.1 In `anchorParts` ([src/split.js](../../../src/split.js)), make `firstAnchorGrapheme` return `{ segment, offset }` (the offset is `Intl.Segmenter`'s `index`, already available) and change the tier 3 locate to `indexOf(anchor.segment, cursor + anchor.offset) - anchor.offset`. Update the JSDoc `@returns`; `check:types` passes with the object form.
-- [ ] 2.2 Confirm 2.1 alone changes exactly one unit expectation — "drops unanchorable parts without dropping mixed ones" goes from `[["cd", 2, 4]]` to `[["bcd", 1, 4]]` — and update it per design.md → Decision 3, with a comment saying why 1 is the correct left edge. 166/167 at this point; the two § 1 regressions still fail.
+- [ ] 2.2 Confirm 2.1 alone changes exactly one unit expectation — "drops unanchorable parts without dropping mixed ones" goes from `[["cd", 2, 4]]` to `[["bcd", 1, 4]]` — and update it per design.md → Decision 3, with a comment saying why 1 is the correct left edge. Expected counts, since they move at every step: § 1 brings the suite to **170** tests (167 + 3), of which 1.1 and 1.2 fail at head → 168 pass. 2.1 alone breaks the expectation above → 167 pass. Updating it here → 168 pass, with 1.1 and 1.2 still failing.
 - [ ] 2.3 Replace the tier 2 guard's `sourceHasReplacement || !splitPart.includes(REPLACEMENT_CHAR)` with the bare `!splitPart.includes(REPLACEMENT_CHAR)`, and delete the now-unused `sourceHasReplacement` probe.
 - [ ] 2.4 Comment the tier 3 call site with _why_ the offset subtraction is load-bearing: it is what makes 2.3 safe. Design.md → Decision 2 records that dropping the disjunct **without** 2.1 fails "locates a replacement char that is genuinely in the source" (`[["a �",0,3],["b",3,4]]` instead of `[["a ",0,2],["�b",2,4]]`) and the contract fuzz. Without this comment the two edits look independent and either can be reverted alone — which is worse than reverting both.
-- [ ] 2.5 Confirm both § 1 regressions now pass and `npm test` is 167/167 (166 unchanged + the updated expectation from 2.2, plus the 3 new tests).
+- [ ] 2.5 Confirm both § 1 regressions now pass and `npm test` is **170/170**. Task 3.4 adds one more test, taking the final count to 171.
 
 ## 3. Verify against the measurements, not just the suite
 
@@ -20,7 +20,7 @@
 - [ ] 3.3 Re-run the position oracle (design.md → Method). Gate: **zero `ok→off` transitions** against head, and every remaining off-boundary start must land on a literal U+FFFD in the source — that is the tier 1 signature from Decision 4. A wrong start on anything else is a new defect, not the known residual.
 - [ ] 3.4 Add the U+FFFD-bearing linearity regression from "Acceptance criteria" § 5, and confirm both it and the existing "grows linearly with input size" test are green. 2.3 removes the guard the tier 2 skip lives in, so this is the test that catches getting it backwards. AGENTS.md is explicit that neither is to be weakened to accommodate a slow machine — raise the base size instead.
 - [ ] 3.5 Spot-check a handful of the 461 inputs (10k sweep) that succeed on both sides with different positions, and confirm the new positions are the correct ones. These are baseline silent mis-anchorings, so they are the fix working, not a regression.
-- [ ] 3.6 Run the change against the multibyte fixtures. **The gte-small leg was not run in the spike** — `@huggingface/transformers` is not a devDependency — so either run it here or hand it to `tokenizer-length-inflation` explicitly (see 6.2). Do not record it as passed.
+- [ ] 3.6 Run the change against the tiktoken multibyte fixtures, including the Devanagari case `"Hindi: नमस्ते दुनिया"` that broke the reverted hybrid-cursor attempt. **The gte-small leg is out of scope for this change** and is owned by `tokenizer-length-inflation` task 4.6 — that change re-adds `@huggingface/transformers` (its task 4.2), which this one has no other reason to do. Do not record gte-small as passed here.
 
 ## 4. Reconcile the spec delta with what actually shipped
 
@@ -38,7 +38,7 @@
 
 ## 6. Hand off what is not done
 
-- [ ] 6.1 Update `openspec/changes/tokenizer-length-inflation/research.md:36-43` — it currently records this shape as an open "fourth instance of the same root cause". Note what this change fixed and what residual remains. Also correct the overlap assessment: that change's tier 3 replacement is gated on `sourceNormalize`, so the default-path offset fix here survives it untouched.
-- [ ] 6.2 Hand the unrun gte-small verification (3.6) to `tokenizer-length-inflation` if it was not run here, since that change owns those tokenizers and edits the same tier 3 region.
+- [x] 6.1 Update `tokenizer-length-inflation`'s `research.md` — it recorded this shape as an open "fourth instance of the same root cause". Done: it now names the two-edit fix and the tier 1 residual, and states the two live consequences for that change (its Phase 1 evidence rows predate the tier 3 fix; its identity path now carries that fix).
+- [x] 6.2 Hand the gte-small verification to `tokenizer-length-inflation`. Done: its task 4.6, scoped to the corrected tier 3 on the identity path, plus its task 3.4 amended so "keep tiers 1-2 identical" means identical to `main` at rebase time rather than to what that change was written against.
 - [ ] 6.3 Capture the backtracking anchor walk from design.md → Open Questions as its own follow-up. It is the only remaining way to close the decoy class and the tier 1 residual, and Decision 4 proves nothing local can — that conclusion should not live only in an archived change's Open Questions.
 - [ ] 6.4 `openspec archive literal-replacement-char-anchoring` once `npm run check` is green.
