@@ -95,16 +95,3 @@ Authentication uses GitHub OIDC
 ([trusted publishing](https://docs.npmjs.com/trusted-publishers)), so no npm token is
 stored in the repo and provenance is attached automatically. `id-token: write` is granted
 only to the `publish` job.
-
-### Bootstrap notes (maintainers)
-
-`llm-splitter` is already on npm, so no manual first publish is needed. What must be in
-place:
-
-1. On npm, the **trusted publisher** for `llm-splitter`: GitHub org/repo
-   `nearform/llm-splitter`, workflow `release.yml`, environment `Production`.
-2. In GitHub repo settings, the **`Production`** environment, matching the npm
-   trusted-publisher config. Add required reviewers there if you want publishes gated on
-   manual approval.
-3. In `Settings > Actions > General`, **Allow GitHub Actions to create and approve pull
-   requests** must be enabled, or the `version` job cannot open the release PR.
