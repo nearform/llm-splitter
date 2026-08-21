@@ -218,9 +218,18 @@ result of such a match.
 skipped for every part containing U+FFFD (see "Three-tier locate strategy"), a part that
 mixes U+FFFD with real text and does occur verbatim in the source is positioned by Tier 3
 rather than by exact match. If the part's first anchorable grapheme also occurs between the
-cursor and the part's true position, Tier 3 anchors on that earlier occurrence. Reaching this
-requires a splitter that drops multi-character content between parts; no splitter named in
-"Supported tokenizer boundary" does.
+cursor and the part's true position, Tier 3 anchors on that earlier occurrence — a wrong
+position with no error.
+
+Reaching this requires a splitter that drops a **multi-character** span between parts. That
+includes splitters this specification lists as supported: sentence and line/paragraph
+splitters such as `text.split(/[.!?]+/)` or `text.split("\n\n")` drop two or more characters
+and their parts can contain U+FFFD once the source does. Single-character droppers like
+`text.split(/\s+/)` cannot reach it, because the cursor lands adjacent to the next part and
+Tier 1 or an exact Tier 3 match resolves it; `text.split('')` and `tiktoken` drop nothing at
+all. Measured over 16,842 randomized multi-character-dropping cases whose source contains
+U+FFFD, 1,663 anchored a part away from its true offset, against 489 before Tier 2 was
+skipped.
 
 #### Scenario: Manufactured U+FFFD does not match a literal one later in the source
 

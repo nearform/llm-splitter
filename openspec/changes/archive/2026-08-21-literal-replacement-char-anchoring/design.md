@@ -270,10 +270,25 @@ residual (spurious) " �"      2       12     2                 2       tier2 w
 decoy (legitimate)  "a�b"     1       4      2                 4       tier2 RIGHT
 ```
 
-Identical signatures — `tier2 > tier3corrected` in both — opposite truths. Any rule reading
-only those three inputs must be wrong on one of them. Separating them requires knowing
-whether the _rest_ of the parts still anchor under each choice, i.e. backtracking. That is a
-different change; it is recorded in Open Questions and not attempted here.
+Identical signatures — `tier2 > tier3corrected` in both — opposite truths. Any rule choosing
+between _those two candidate positions_ on those three inputs must be wrong on one of them.
+
+**Corrected after review: that conclusion was stated too broadly.** It rules out picking
+between tier 2's answer and tier 3's, which is what the table shows. It does _not_ rule out
+every local rule, because a tier 3 candidate has matched only one grapheme — so verifying the
+part's remaining non-U+FFFD code units against the source at that candidate is not vacuous
+there, unlike the same check on a verbatim tier 2 hit. Measured: adding a skeleton check to
+the tier 3 candidate (advance the search while the part's non-U+FFFD units do not align)
+fixes the paragraph-splitter case, both decoy cases, and cuts the multi-character-dropping
+regression from 1,663 wrong to 678 of 16,842 — while leaving every gate in "Reproducing the
+measurements" unchanged: 0 throws on all three fuzz sweeps, 0 `OK→THROW`, the same 142/461/107
+positions moved, the same oracle residual, 171/171 suite, and still linear at 7.2x for an 8x
+input span.
+
+It is not a complete fix (678 against 489 at the merge base) and it was not adopted here, so
+it is recorded as the concrete next step rather than as shipped. What genuinely needs
+backtracking is closing the remaining gap and the Tier 1 residual: knowing whether the _rest_
+of the parts still anchor under each choice.
 
 ### Decision 5: Ship it, and state the two residuals
 
@@ -744,9 +759,18 @@ process.exitCode = failures === 0 ? 0 : 1;
   ```
 
   The shape needs a splitter that **drops multi-character content**, plus a repeated anchor
-  grapheme in the dropped gap, plus a U+FFFD-bearing part. None of the documented splitters
-  qualify: `char` and `tiktoken` drop nothing (tier 1 covers them), and `text.split(/\s+/)`
-  drops only whitespace while its parts contain none, so no decoy is reachable.
+  grapheme in the dropped gap, plus a U+FFFD-bearing part.
+
+  **Corrected after review — the original claim here was wrong.** It read "None of the
+  documented splitters qualify", reasoning from `char` and `tiktoken` (which drop nothing) and
+  `text.split(/\s+/)` (which drops a single whitespace run). That reasoning does not
+  generalize, and the requirement it appealed to names _sentence/line regex splitters_ as
+  supported. `text.split(/[.!?]+/)` — the README's own worked example — drops `"..."`, and
+  `text.split("\n\n")` drops the same delimiter the library uses for
+  `chunkStrategy: "paragraph"`. Both qualify. Measured over 16,842 randomized
+  multi-character-dropping cases whose source holds a literal U+FFFD: **1,663 parts anchored
+  away from their true offset, against 489 at the merge base** — a real regression inside the
+  branch, though published 0.2.0 mis-anchors the same inputs, so nothing users hold regresses.
 
   Measured two independent ways, both clean. Against `tiktoken`'s byte-derived truth the
   oracle shows **0 `ok→off`** transitions — no case that was correctly positioned becomes

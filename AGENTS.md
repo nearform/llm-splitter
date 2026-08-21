@@ -51,10 +51,15 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   units wide whose anchor sits 1 unit in gets `start` at the match and
   `end` at `start + 3`, so the span is shifted right by one and the cursor
   overshoots by one. Searching from `cursor + offset` is what keeps the
-  corrected `start` at or after the cursor. It is pinned by "anchors a
-  mixed part at its left edge" (two leading U+FFFD, so `cursor + 1` fails
-  too) and by "drops unanchorable parts without dropping mixed ones",
-  whose `[1,4)` expectation looks wrong until you read this.
+  corrected `start` at or after the cursor. The two halves are pinned by
+  different tests and neither covers both. "anchors a mixed part at its
+  left edge" and "drops unanchorable parts without dropping mixed ones"
+  (whose `[1,4)` expectation looks wrong until you read this) pin the
+  `- offset` subtraction. "searches for the anchor grapheme forward of the
+  part's left edge" pins the `cursor + offset` search start, which needs
+  its own case because dropping the offset there silently breaks the
+  coverage invariant instead of throwing — the whole suite once stayed
+  green with it removed.
 - **Tier 2 is skipped for every part containing U+FFFD**, regardless of
   the source. For a source with no U+FFFD this is a provable equivalence:
   the part is not a substring, so the search could only scan to
@@ -298,11 +303,15 @@ library guarantees today_ vs _what we're going to change next_. See
 - **Backtracking anchor walk** — not started, and the only remaining way to close the last
   two anchoring residuals: a literal U+FFFD at the cursor claiming a manufactured bare part,
   and a genuinely-verbatim mixed part anchoring on an earlier decoy grapheme. Both are
-  documented limitations in `multibyte-anchoring`, and both are **provably out of reach of any
-  local rule** — the spurious and the legitimate case present identical signatures (tier 2
-  match later than the offset-corrected tier 3 candidate) with opposite correct answers, so a
-  guard reading only the part, the source, and the cursor must be wrong on one of them. The
-  demonstration is in
+  documented limitations in `multibyte-anchoring`. A guard that merely _picks between_ tier 2's
+  answer and the offset-corrected tier 3 candidate cannot work — the spurious and the
+  legitimate case present identical signatures with opposite correct answers. But do not read
+  that as "no local rule helps", which is how this entry originally overstated it: **verifying
+  the part's non-U+FFFD code units against the source at the tier 3 candidate is measured to
+  fix the decoy class substantially** (multi-character-dropping regression 1,663 → 678 of
+  16,842, every existing gate unchanged, still linear). That is the concrete next step and it
+  is cheaper than backtracking; backtracking is what the remaining gap and the tier 1 residual
+  need. The demonstration is in
   [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md)
   → Decision 4; don't re-derive it, and don't accept a proposed guard that doesn't address it.
   Separating them needs knowing whether the _remaining_ parts still anchor under each choice.

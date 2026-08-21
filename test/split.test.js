@@ -1479,9 +1479,12 @@ describe("split", () => {
       it("anchors a mixed part at its left edge, not at its anchor grapheme", () => {
         // The anchor grapheme "c" sits 2 code units into the part, so the
         // part's left edge is 2 before it. Anchoring on "c" itself reports
-        // [2,4) and advances the cursor two units too far. Two leading
-        // replacement chars rather than one, so that searching from
-        // `cursor + 1` is wrong here too, not just searching from `cursor`.
+        // [2,4) and advances the cursor two units too far.
+        //
+        // This pins the `- anchor.offset` subtraction only. It does not pin
+        // the offset in the *search start*: "c" is found at index 2 whether
+        // the search begins at the cursor, at cursor + 1, or at cursor + 2,
+        // so all three produce [0,4) here. The test below covers that half.
         const chunks = split("abcd", {
           chunkSize: 8,
           splitter: () => ["��cd"],
@@ -1490,6 +1493,28 @@ describe("split", () => {
         assert.deepStrictEqual(
           chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
           [["abcd", 0, 4]],
+        );
+      });
+
+      it("searches for the anchor grapheme forward of the part's left edge", () => {
+        // Covers the other half of the tier 3 arithmetic: the `+ anchor.offset`
+        // in the search start. The anchor "b" sits at part offset 1 and the
+        // source holds another "b" at index 1, exactly where the cursor is.
+        // Searching from the cursor finds that one and puts the part's start at
+        // 0 — behind the cursor, and before the previous chunk ends, which
+        // breaks the coverage invariant rather than throwing. Starting the
+        // search at cursor + 1 is what rules it out.
+        const chunks = split("abzb", {
+          chunkSize: 1,
+          splitter: () => ["a", "�b"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["ab", 0, 2],
+            ["zb", 2, 4],
+          ],
         );
       });
 
