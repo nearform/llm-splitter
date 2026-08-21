@@ -7,9 +7,6 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  // `test/benchmark.js` imports a sibling checkout of the published
-  // `llm-splitter`, which isn't present in a fresh clone. Nothing else imports
-  // it, so excluding it keeps it out of the program entirely.
-  "exclude": ["node_modules", "dist", "test/benchmark.js"],
+  "exclude": ["node_modules", "dist"],
   "include": ["src/**/*.js", "test/**/*.js"]
 }

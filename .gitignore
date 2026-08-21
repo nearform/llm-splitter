@@ -34,6 +34,9 @@ coverage
 demo-public
 tmp-*
 
+# `test/benchmark.js` downloads the published llm-splitter here on first run.
+test/.cache
+
 # Claude Code: ignore personal/local files but track the shared OpenSpec
 # workflow (regenerable via `openspec update`, but committed so contributors
 # get the /opsx: commands without re-running init).

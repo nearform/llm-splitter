@@ -1,7 +1,3 @@
-// TODO: Resolve the baseline from the published package (`npm i -D llm-splitter`
-// and `import { split, getChunk } from "llm-splitter"`) instead of a sibling
-// checkout, so this runs without cloning and building a second repo. Blocked
-// until the rewrite ships, because right now both names resolve to this repo.
 /**
  * Head-to-head benchmark: this working copy vs. the published `llm-splitter`.
  *
@@ -24,14 +20,10 @@
  *
  * ## Prerequisite
  *
- * Needs a built checkout of the published library as a SIBLING directory, so
- * that `../../llm-splitter/dist/index.js` resolves from this file:
- *
- *     git clone https://github.com/nearform/llm-splitter ../llm-splitter
- *     cd ../llm-splitter && npm ci && npm run build
- *
- * Without it the import below throws ERR_MODULE_NOT_FOUND. There is no
- * fallback — a head-to-head against the shipped code is the entire point.
+ * None beyond `npm ci`, but the FIRST run needs network: the baseline is
+ * downloaded from a CDN into `test/.cache/` (gitignored) and reused offline
+ * from then on. See `loadBaseline` below for why it is fetched rather than
+ * installed or vendored.
  *
  * ## Run
  *
@@ -99,18 +91,112 @@
  * explain every surviving residual. `--explain` prints both catalogues;
  * `--raw` turns normalization off.
  *
- * Deliberately not wired into `npm run check` (it needs that sibling checkout).
- * `npm test` globs `test/*.test.js`, so the runner skips this file, and `files`
- * in package.json lists only `src` and `dist`, so it is never published.
+ * Deliberately not wired into `npm run check` — it takes minutes and its first
+ * run reaches the network. `npm test` globs `test/*.test.js`, so the runner
+ * skips this file, and `files` in package.json lists only `src` and `dist`, so
+ * it is never published.
  */
 
-import { writeFileSync } from "node:fs";
-import {
-  split as splitOld,
-  getChunk as getChunkOld,
-} from "../../llm-splitter/dist/index.js";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { split as splitNew, getChunk as getChunkNew } from "../src/index.js";
 import tiktoken from "tiktoken";
+
+// ----- Baseline -----------------------------------------------------------
+
+const BASELINE_VERSION = "0.2.0";
+const BASELINE_DIR = new URL(
+  `./.cache/llm-splitter-${BASELINE_VERSION}/`,
+  import.meta.url,
+);
+
+/**
+ * SHA-256 of each published file, as shipped in the npm tarball (jsDelivr
+ * serves those bytes verbatim). Pinned because this executes downloaded code,
+ * and because a benchmark whose baseline can change underneath it measures
+ * nothing. Regenerate with:
+ *
+ *     npm pack llm-splitter@<version> && tar xzf llm-splitter-<version>.tgz
+ *     shasum -a 256 package/dist/{index,split,get-chunk}.js
+ */
+const BASELINE_FILES = {
+  "index.js":
+    "9e3af65e455cf8020ebf048be805e0775a9f0e1116807871a3d56f2f74aa5b10",
+  "split.js":
+    "71841e06d9316892a5025efa0c33caf641e36e6b3bc9d97633e7ee60f774b92f",
+  "get-chunk.js":
+    "52782ff072ae5dd24674e9b8a5c32955b13c6eed3001638a949c71a5f7e06735",
+};
+
+/** @param {Uint8Array} bytes */
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * Fetch one baseline file into the cache unless a byte-correct copy is already
+ * there. Verifying the cached copy (rather than just checking existence) means
+ * a truncated or hand-edited cache self-heals on the next run.
+ *
+ * @param {string} name
+ * @param {string} digest
+ */
+const cacheBaselineFile = async (name, digest) => {
+  const dest = new URL(name, BASELINE_DIR);
+  try {
+    if (sha256(await readFile(dest)) === digest) {
+      return;
+    }
+  } catch {
+    // Not cached yet, or unreadable — fall through and fetch.
+  }
+
+  const url = `https://cdn.jsdelivr.net/npm/llm-splitter@${BASELINE_VERSION}/dist/${name}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText} fetching ${url}`);
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const actual = sha256(bytes);
+  if (actual !== digest) {
+    throw new Error(
+      `digest mismatch for ${name}\n  expected ${digest}\n  actual   ${actual}`,
+    );
+  }
+  await writeFile(dest, bytes);
+};
+
+/**
+ * Resolve the published baseline without a sibling checkout or a
+ * devDependency. `llm-splitter@0.2.0` publishes three dependency-free ESM
+ * files that import each other by relative path, so caching them side by side
+ * is all it takes to make `index.js` importable.
+ *
+ * Fetching beats the alternatives here: a `npm:` alias devDependency would put
+ * the package's own former self in its manifest (and, once an `exports` map
+ * lands, an unaliased one would silently self-resolve and make the benchmark
+ * compare this copy against itself), while vendoring commits 15KB of someone
+ * else's build output. The cache is gitignored, so a clean clone stays clean.
+ */
+const loadBaseline = async () => {
+  await mkdir(BASELINE_DIR, { recursive: true });
+  try {
+    await Promise.all(
+      Object.entries(BASELINE_FILES).map(([name, digest]) =>
+        cacheBaselineFile(name, digest),
+      ),
+    );
+  } catch (err) {
+    throw new Error(
+      `Could not resolve the published llm-splitter@${BASELINE_VERSION} baseline.\n` +
+        `It downloads once into ${BASELINE_DIR.pathname} and is reused offline after that,\n` +
+        `so the first run needs network access. Behind a proxy, Node ignores\n` +
+        `HTTPS_PROXY for fetch() unless you set NODE_USE_ENV_PROXY=1.`,
+      { cause: err },
+    );
+  }
+  return import(new URL("index.js", BASELINE_DIR).href);
+};
+
+const { split: splitOld, getChunk: getChunkOld } = await loadBaseline();
 
 const tt = tiktoken.encoding_for_model("text-embedding-ada-002");
 const td = new TextDecoder();
@@ -1632,7 +1718,7 @@ if (args.diffJson !== undefined) {
     2,
   );
   if (args.diffJson) {
-    writeFileSync(args.diffJson, payload);
+    await writeFile(args.diffJson, payload);
     console.log(`\nWrote ${args.diffJson}`);
   } else {
     console.log(payload);

@@ -10,6 +10,9 @@ export default [
       "**/build/**",
       "**/coverage/**",
       "**/node_modules/**",
+      // The published baseline `test/benchmark.js` downloads — someone else's
+      // build output, and not ours to lint.
+      "test/.cache/**",
     ],
   },
   {
@@ -17,7 +20,9 @@ export default [
     files: ["test/benchmark.js"],
     languageOptions: {
       globals: {
+        URL: "readonly",
         console: "readonly",
+        fetch: "readonly",
         performance: "readonly",
         process: "readonly",
       },

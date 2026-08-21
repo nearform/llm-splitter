@@ -175,6 +175,37 @@ gte-small ones. Both the synthetic repro and the gte-small fixture code
 live in the change's `design.md` → "Acceptance criteria", not the test
 suite — see "Open work / future".
 
+### The benchmark baseline is downloaded, not installed or vendored
+
+`test/benchmark.js` compares this working copy against published
+`llm-splitter@0.2.0`. It no longer needs a sibling checkout: the three
+dependency-free ESM files that release publishes are fetched from jsDelivr into
+`test/.cache/` (gitignored) on first run, verified against pinned SHA-256
+digests, and reused offline after that. A clean clone needs only `npm ci` plus
+network on the first run.
+
+Three things follow from that, all of them deliberate:
+
+- **The digests in `BASELINE_FILES` are load-bearing.** The script executes
+  downloaded code, and a benchmark whose baseline can drift measures nothing.
+  A mismatch is a hard failure, not a warning. Bumping `BASELINE_VERSION`
+  means regenerating them (command is in the docstring above the constant).
+- **Don't "simplify" it into a devDependency.** A `npm:` alias would work, but
+  an unaliased `npm i -D llm-splitter` is the trap: it installs fine today only
+  because this package has no `exports` map. Add one (a "Deferred to 1.0" item
+  below) and Node's self-reference takes over, the baseline silently becomes
+  `src/index.js`, and the benchmark reports zero differences against itself.
+- **Still excluded from `check:types` and from `npm run check`.** The baseline
+  import resolves at runtime through a cache URL, so there's no static path for
+  `tsc`; and the run takes minutes and touches the network. `test/.cache/` is
+  also in the eslint and prettier ignore lists — it's someone else's build
+  output.
+
+Behind a corporate proxy the first run fails with `fetch failed`: Node's
+`fetch` ignores `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is set in the
+environment. Setting it from inside the script does not work — undici reads it
+at bootstrap — so the error message says so instead.
+
 ## Spec-driven workflow (OpenSpec)
 
 This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) to track _what the
@@ -247,11 +278,6 @@ together when 1.0 is on the table.
   package by name, so the resolution model above is verified only by hand. Considered and
   declined for `0.3.0` as disproportionate for a package this shape. Worth reconsidering if
   `exports` lands, since that is exactly the kind of change that breaks resolution silently.
-
-- **`test/benchmark.js` needs a sibling checkout.** Its line-1 TODO stands: the baseline
-  resolves from `../../llm-splitter/dist/index.js` rather than the published package, so the
-  head-to-head numbers don't reproduce from a clean clone without manual setup. It's excluded
-  from `check:types` for this reason and can't run in CI.
 
 - **No `engines` field, by choice.** Raised in review and declined — the constraint causes
   more friction than it prevents. Recorded so it isn't re-proposed as an oversight.
