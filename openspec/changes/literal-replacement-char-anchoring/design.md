@@ -394,6 +394,331 @@ suite (it needs both a patched and an unpatched tree). Bar to clear before landi
 `OK→THROW` transitions** and **zero invariant violations** across the 3,000-string,
 10,000-string, and 2,000-array sweeps. Achieved: 0 throws of any kind on all three.
 
+## Reproducing the measurements
+
+Every gate in `tasks.md` § 3 is checked by one script. It is recorded here rather than added
+to `test/split.js` because it needs **two trees** — an unpatched and a patched copy of `src/`
+— which the suite cannot express. Set up and run:
+
+```sh
+mkdir -p /tmp/verify/base /tmp/verify/patched
+git -C . show HEAD:src/split.js > /dev/null   # sanity: run from the repo root
+cp -R src /tmp/verify/base/src                # baseline: src/ before the fix
+cp -R src /tmp/verify/patched/src             # then apply the fix to this copy
+node verify.mjs /tmp/verify/base /tmp/verify/patched
+```
+
+It exits non-zero when any gate fails, so it can be dropped into CI as-is. The gates are
+adversarially checked: run it against the fix's own rejected alternatives and it fails —
+dropping the Tier 2 disjunct _without_ Decision 1 trips "no OK→THROW" (21 / 73 / 8 across the
+three sweeps), and the superseded bare/mixed gate trips both "patched throws zero times" and
+"patched is linear" (39.9x). A harness that passes everything proves nothing; this one does
+not.
+
+Expected output against Decision 1 + 2, reproduced verbatim on a clean run:
+
+```
+fuzz 3,000 strings: baseline threw 743, patched threw 0, THROW→OK 743, positions moved 142
+fuzz 10,000 strings: baseline threw 2487, patched threw 0, THROW→OK 2487, positions moved 461
+fuzz 2,000 arrays: baseline threw 472, patched threw 0, THROW→OK 472, positions moved 107
+oracle 2,000 cases: baseline threw 1534/off 4, patched threw 0/off 7
+scaling (U+FFFD-bearing source, 8x span): baseline 41.9x, patched 7.7x
+ALL GATES PASS
+```
+
+The two timing figures vary a few points run to run; the throw counts, moved counts, and
+oracle counts are exact. `off 7` against `off 4` is not a regression — the oracle's
+`ok→off` gate is what catches regressions, and those 7 are the Tier 1 residual (Decision 4),
+which the script verifies by checking each one lands on a literal U+FFFD.
+
+```js
+// Differential verification for literal-replacement-char-anchoring.
+// Usage: node verify.mjs <baselineTree> <patchedTree>
+// Each tree is a directory holding a copy of src/ (e.g. an unpatched and a
+// patched checkout). Needs `tiktoken` resolvable from the CWD.
+import { performance } from "node:perf_hooks";
+import tiktoken from "tiktoken";
+
+const [BASE, PATCHED] = process.argv.slice(2);
+if (!BASE || !PATCHED) throw new Error("usage: verify.mjs <base> <patched>");
+
+const load = async (dir) => ({
+  split: (await import(`${dir}/src/split.js`)).split,
+  getChunk: (await import(`${dir}/src/get-chunk.js`)).getChunk,
+});
+
+const tk = tiktoken.encoding_for_model("text-embedding-ada-002");
+const td = new TextDecoder();
+const enc = new TextEncoder();
+const tokenSplitter = (text) =>
+  Array.from(tk.encode(text)).map((t) =>
+    td.decode(tk.decode(new Uint32Array([t]))),
+  );
+
+// Deterministic: mulberry32, never Math.random, so both trees see one corpus.
+const rngFor = (seed) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// The last entry is the point: a source that already holds U+FFFD.
+const CORPUS = ["a", "b", ".", "\n", "漢", "👋", "é", "�"];
+const SPLITTERS = [
+  { name: "tiktoken", fn: tokenSplitter },
+  { name: "char", fn: (t) => t.split("") },
+  { name: "space", fn: (t) => t.split(" ") },
+];
+
+const caseFor = (seed, i, useArrays) => {
+  const rng = rngFor(seed + i * 7919);
+  let text = "";
+  for (let t = 0, n = 5 + Math.floor(rng() * 36); t < n; t++) {
+    text += CORPUS[Math.floor(rng() * CORPUS.length)];
+    if (rng() < 0.25) text += " ";
+  }
+  const splitter = SPLITTERS[Math.floor(rng() * SPLITTERS.length)];
+  const chunkSize = 1 + Math.floor(rng() * 10);
+  const chunkStrategy = rng() < 0.5 ? "character" : "paragraph";
+  let input = text;
+  if (useArrays && rng() < 0.5) {
+    const cuts = [];
+    for (let c = 0, n = 1 + Math.floor(rng() * 3); c < n; c++) {
+      cuts.push(Math.floor(rng() * text.length));
+    }
+    cuts.sort((x, y) => x - y);
+    input = [];
+    let prev = 0;
+    for (const cut of [...cuts, text.length]) {
+      input.push(text.slice(prev, cut));
+      prev = cut;
+    }
+  }
+  return { input, splitter, chunkSize, chunkStrategy };
+};
+
+/** Coverage-contract fuzz: throws, plus every invariant split() promises. */
+const fuzz = ({ split, getChunk }, cases, seed, useArrays) => {
+  const out = [];
+  for (let i = 0; i < cases; i++) {
+    const { input, splitter, chunkSize, chunkStrategy } = caseFor(
+      seed,
+      i,
+      useArrays,
+    );
+    let chunks;
+    try {
+      chunks = split(input, {
+        chunkSize,
+        splitter: splitter.fn,
+        chunkStrategy,
+      });
+    } catch {
+      out.push({ i, splitter: splitter.name, ok: false });
+      continue;
+    }
+    const items = Array.isArray(input) ? input : [input];
+    const total = items.reduce((s, x) => s + x.length, 0);
+    const bad = [];
+    for (const c of chunks) {
+      const want = getChunk(input, c.start, c.end);
+      const same = Array.isArray(want)
+        ? JSON.stringify(want) === JSON.stringify(c.text)
+        : want === c.text;
+      if (!same) bad.push(`text@${c.start}`);
+      if (!(c.start >= 0 && c.end <= total && c.start <= c.end)) {
+        bad.push(`bounds@${c.start}`);
+      }
+    }
+    if (chunks.length) {
+      if (chunks.at(-1).end !== total) bad.push("lastEnd");
+      for (let k = 0; k + 1 < chunks.length; k++) {
+        if (chunks[k].end < chunks[k + 1].start) bad.push(`gap@${k}`);
+        if (chunks[k].start > chunks[k + 1].start) bad.push(`monotonic@${k}`);
+      }
+    }
+    out.push({
+      i,
+      splitter: splitter.name,
+      ok: true,
+      n: chunks.length,
+      sig: chunks.map((c) => `${c.start}-${c.end}`).join(","),
+      bad,
+    });
+  }
+  return out;
+};
+
+/**
+ * Ground-truth token starts, from byte arithmetic rather than from split().
+ * tiktoken is byte-level BPE, so concatenating each token's decoded bytes
+ * reproduces the input's UTF-8 exactly; a byte offset that falls on a
+ * character boundary maps back to a true UTF-16 start.
+ */
+const trueStarts = (text) => {
+  const u2b = [0];
+  let bytes = 0;
+  for (let i = 0; i < text.length;) {
+    const cp = text.codePointAt(i);
+    const width = cp > 0xffff ? 2 : 1;
+    const n = enc.encode(String.fromCodePoint(cp)).length;
+    for (let k = 0; k < width; k++) {
+      u2b[i + k + 1] = bytes + (k === width - 1 ? n : 0);
+    }
+    bytes += n;
+    i += width;
+  }
+  const b2u = new Map();
+  for (let i = 0; i <= text.length; i++) {
+    if (!b2u.has(u2b[i])) b2u.set(u2b[i], i);
+  }
+  const starts = new Set([0]);
+  let b = 0;
+  for (const t of Array.from(tk.encode(text))) {
+    if (b2u.has(b)) starts.add(b2u.get(b));
+    b += tk.decode(new Uint32Array([t])).length;
+  }
+  return starts;
+};
+
+/** Position correctness, not just absence of a throw. */
+const oracle = ({ split }, cases, seed) => {
+  const out = [];
+  for (let i = 0; i < cases; i++) {
+    const { input } = caseFor(seed, i, false);
+    let chunks;
+    try {
+      chunks = split(input, {
+        chunkSize: 1,
+        splitter: tokenSplitter,
+        chunkStrategy: "character",
+      });
+    } catch {
+      out.push({ i, status: "throw" });
+      continue;
+    }
+    const truth = trueStarts(input);
+    const bad = chunks.map((c) => c.start).filter((s) => !truth.has(s));
+    out.push({
+      i,
+      status: bad.length ? "off" : "ok",
+      bad,
+      // The known Tier 1 residual: a manufactured bare U+FFFD matched a
+      // literal one standing at the cursor. Anything else is a new defect.
+      allOnLiteral: bad.every((s) => input[s] === "�"),
+    });
+  }
+  return out;
+};
+
+/** Anchoring cost only — parts are precomputed, so tokenization is excluded. */
+const scaling = ({ split }) => {
+  const rows = [];
+  for (const n of [5000, 10000, 20000, 40000]) {
+    const body = "これは日本語のテキストです"
+      .repeat(Math.ceil(n / 13))
+      .slice(0, n);
+    const input = "� " + body;
+    const chars = [...body];
+    const parts = [];
+    for (let i = 0; i + 1 < chars.length; i += 2) parts.push(chars[i] + "�");
+    const splitter = () => parts;
+    split(input, { chunkSize: 8, splitter });
+    let best = Infinity;
+    for (let r = 0; r < 3; r++) {
+      const t0 = performance.now();
+      split(input, { chunkSize: 8, splitter });
+      best = Math.min(best, performance.now() - t0);
+    }
+    rows.push({ len: input.length, ms: best });
+  }
+  return {
+    span: rows.at(-1).len / rows[0].len,
+    cost: rows.at(-1).ms / rows[0].ms,
+    rows,
+  };
+};
+
+// ---------------------------------------------------------------- report
+
+const base = await load(BASE);
+const patched = await load(PATCHED);
+let failures = 0;
+const gate = (label, pass, detail) => {
+  if (!pass) failures++;
+  console.log(
+    `  ${pass ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`,
+  );
+};
+
+for (const [label, cases, seed, arrays] of [
+  ["3,000 strings", 3000, 20260821, false],
+  ["10,000 strings", 10000, 99001, false],
+  ["2,000 arrays", 2000, 777001, true],
+]) {
+  const b = fuzz(base, cases, seed, arrays);
+  const p = fuzz(patched, cases, seed, arrays);
+  let okThrow = 0;
+  let throwOk = 0;
+  let moved = 0;
+  for (let i = 0; i < b.length; i++) {
+    if (b[i].ok && !p[i].ok) okThrow++;
+    else if (!b[i].ok && p[i].ok) throwOk++;
+    else if (b[i].ok && p[i].ok && b[i].sig !== p[i].sig) moved++;
+  }
+  const viol = p.filter((r) => r.ok && r.bad.length).length;
+  console.log(
+    `\nfuzz ${label}: baseline threw ${b.filter((r) => !r.ok).length}, ` +
+      `patched threw ${p.filter((r) => !r.ok).length}, ` +
+      `THROW→OK ${throwOk}, positions moved ${moved}`,
+  );
+  gate("no OK→THROW", okThrow === 0, `${okThrow}`);
+  gate("no invariant violations", viol === 0, `${viol}`);
+  gate(
+    "patched throws zero times",
+    p.every((r) => r.ok),
+  );
+}
+
+const ob = oracle(base, 2000, 4242);
+const op = oracle(patched, 2000, 4242);
+let okOff = 0;
+for (let i = 0; i < ob.length; i++) {
+  if (ob[i].status === "ok" && op[i].status === "off") okOff++;
+}
+const offP = op.filter((r) => r.status === "off");
+console.log(
+  `\noracle 2,000 cases: baseline threw ${ob.filter((r) => r.status === "throw").length}` +
+    `/off ${ob.filter((r) => r.status === "off").length}, ` +
+    `patched threw ${op.filter((r) => r.status === "throw").length}/off ${offP.length}`,
+);
+gate("no ok→off regressions", okOff === 0, `${okOff}`);
+gate(
+  "every residual is the Tier 1 signature",
+  offP.every((r) => r.allOnLiteral),
+  `${offP.filter((r) => !r.allOnLiteral).length} unexplained`,
+);
+
+const sb = scaling(base);
+const sp = scaling(patched);
+console.log(
+  `\nscaling (U+FFFD-bearing source, ${sb.span.toFixed(0)}x span): ` +
+    `baseline ${sb.cost.toFixed(1)}x, patched ${sp.cost.toFixed(1)}x`,
+);
+gate("patched is linear", sp.cost < sp.span * 2, `${sp.cost.toFixed(1)}x`);
+
+tk.free();
+console.log(
+  `\n${failures === 0 ? "ALL GATES PASS" : `${failures} GATE(S) FAILED`}`,
+);
+process.exitCode = failures === 0 ? 0 : 1;
+```
+
 ## Risks / Trade-offs
 
 - **[A genuinely-verbatim mixed part can now be mis-anchored — the decoy class]** → This is

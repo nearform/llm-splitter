@@ -15,7 +15,7 @@
 
 ## 3. Verify against the measurements, not just the suite
 
-- [ ] 3.1 Re-run the differential fuzz from design.md → Method on a patched and an unpatched tree, same seed. Gate: **zero `OK→THROW` transitions** and **zero invariant violations** across all three sweeps (3,000 strings, 10,000 strings, 2,000 arrays).
+- [ ] 3.1 Run the harness in design.md → "Reproducing the measurements" against an unpatched and a patched copy of `src/`. It covers 3.1-3.3 in one invocation and exits non-zero on any failed gate, so there is no harness to rewrite from prose. Gate: **zero `OK→THROW`** and **zero invariant violations** across all three sweeps (3,000 strings, 10,000 strings, 2,000 arrays).
 - [ ] 3.2 Record the final throw counts in this file. The spike measured **0** throws in all three sweeps, against 743 / 2,487 / 472 at head. Any nonzero result means the patch drifted from what was measured and needs explaining before landing.
 - [ ] 3.3 Re-run the position oracle (design.md → Method). Gate: **zero `ok→off` transitions** against head, and every remaining off-boundary start must land on a literal U+FFFD in the source — that is the tier 1 signature from Decision 4. A wrong start on anything else is a new defect, not the known residual.
 - [ ] 3.4 Add the U+FFFD-bearing linearity regression from "Acceptance criteria" § 5, and confirm both it and the existing "grows linearly with input size" test are green. 2.3 removes the guard the tier 2 skip lives in, so this is the test that catches getting it backwards. AGENTS.md is explicit that neither is to be weakened to accommodate a slow machine — raise the base size instead.
