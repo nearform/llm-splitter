@@ -20,6 +20,7 @@ npm test             # node --test
 npm run build        # tsc -p tsconfig.json  (emits dist/*.d.ts only)
 npm run check        # lint + check:types + test + format check
 npm run format       # prettier + eslint --fix
+npx changeset        # add a changeset for a user-facing change
 ```
 
 `check:types` and `build` use **two different tsconfigs**: `tsconfig.json` builds
@@ -128,6 +129,32 @@ look broken (there is no `dist/split.js`), but they're not. TypeScript resolves 
 `commitlint`, `husky`, `lint-staged`, `typescript-eslint`, `ts-node`, and `globals` were
 deliberately removed. The `prepare` script was removed alongside husky. If you find
 yourself wanting any of them back, ask first.
+
+`@changesets/cli` and `@changesets/changelog-github` are the exception — they were added
+deliberately and drive releases. See docs/CONTRIBUTING.md, "Releasing with Changesets".
+
+### `GITHUB_TOKEN` in the release workflow has two unrelated consumers
+
+`changesets/action@v2` deliberately stopped reading the `GITHUB_TOKEN` **env var** — it
+takes a `github-token` **input** instead. But `@changesets/changelog-github` runs inside
+`changeset version` as a library, not as part of the action, and still reads
+`process.env.GITHUB_TOKEN` to resolve each changeset's commit into a PR link over the
+GraphQL API. It throws outright when the var is missing, so the `version` job keeps an
+explicit `env: GITHUB_TOKEN`. Deleting it as "v1 leftover" makes the release PR stop
+opening.
+
+This fails closed and it fails invisibly in local dry runs: an **uncommitted** changeset
+has no commit for the generator to look up, so it skips the API entirely and
+`changeset version` succeeds on a dirty tree while the same changeset fails in CI. To
+exercise the real path you have to commit the changeset first.
+
+### `prepack` is what puts `dist/` in the tarball
+
+`files` ships `src` and `dist`, but nothing else builds `dist/` at publish time —
+`prepack` (`npm run build`) is the only thing standing between a release and a tarball
+whose `types` entry points at a file that isn't there. `changeset pack` runs `npm pack`,
+which fires it; the release workflow's `pack` job also runs `npm run build` explicitly.
+Don't drop `prepack` on the grounds that CI already builds.
 
 ### Demo (`index.html`) imports from `src/`, not `dist/`
 

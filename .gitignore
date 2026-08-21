@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# `@changesets/get-github-info` reads GITHUB_TOKEN from a .env in cwd, so a
+# maintainer running `changeset version` locally may put a PAT here.
+.env
+.env.*
+!.env.example
 .eslintcache
 
 # Editor directories and files

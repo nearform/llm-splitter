@@ -30,6 +30,7 @@
   "scripts": {
     "prebuild": "rm -rf dist",
     "build": "tsc --project tsconfig.json",
+    "prepack": "npm run build",
     "check": "npm run lint && npm run check:types && npm run check:format && npm run test",
     "check:format": "prettier --check .",
     "check:lint": "eslint .",
@@ -41,6 +42,8 @@
     "dep:check": "npx npm-check-updates"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
     "eslint": "^10.8.1",
