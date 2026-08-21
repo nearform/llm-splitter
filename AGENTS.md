@@ -303,13 +303,23 @@ library guarantees today_ vs _what we're going to change next_. See
   match later than the offset-corrected tier 3 candidate) with opposite correct answers, so a
   guard reading only the part, the source, and the cursor must be wrong on one of them. The
   demonstration is in
-  [openspec/changes/literal-replacement-char-anchoring/design.md](openspec/changes/literal-replacement-char-anchoring/design.md)
+  [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md)
   → Decision 4; don't re-derive it, and don't accept a proposed guard that doesn't address it.
   Separating them needs knowing whether the _remaining_ parts still anchor under each choice.
   The cost is the open question: worst case it reintroduces a per-part factor, which is
   exactly what `anchor-scan-short-circuit` spent a change removing. Nobody has asked for this
   — both residuals are benign — so it stays unstarted until a caller reports a real
   mis-anchoring it would fix.
+
+- **Literal U+FFFD in the source** — shipped and archived. A source carrying a literal U+FFFD
+  made `split()` throw or mis-anchor under `tiktoken`, because tier 2 matched a manufactured
+  U+FFFD against the literal one. Fixed by skipping tier 2 for every U+FFFD-bearing part plus
+  correcting the tier 3 left-edge offset (both described in the algorithm map), and it closed
+  the linearity carve-out below. Background, measurements, and a reusable differential
+  verification harness live in
+  [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/) —
+  `design.md` → "Reproducing the measurements" is the script, and Decision 4 is why the two
+  remaining residuals cannot be closed locally.
 
 - **Quadratic tier-2 anchor scan** — shipped and archived. `indexOf(splitPart, cursor)` used to
   scan to end of input for every part that isn't verbatim in the source, making
@@ -326,10 +336,9 @@ library guarantees today_ vs _what we're going to change next_. See
   findable there so tier 2 could not be skipped. `literal-replacement-char-anchoring` showed the
   carve-out was a consequence of the disjunct rather than a fact about the problem: skipping
   tier 2 for those parts unconditionally makes that case linear too (measured 40x → 7x cost for
-  an 8x input span) and fixes a correctness bug in the bargain. Both scenarios recording the
-  carve-out were inverted rather than deleted, because a MODIFIED requirement cannot drop a
-  scenario — so if you read "Source containing U+FFFD keeps the unbounded search" in
-  `openspec/specs/multibyte-anchoring/spec.md`, check the body, not the title.
+  an 8x input span) and fixes a correctness bug in the bargain. `multibyte-anchoring` now states
+  linearity for a U+FFFD-bearing source as a guarantee; the scenario that recorded it as a
+  permanent limitation is gone.
 
   `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
   this.
