@@ -291,8 +291,9 @@ const boundaryGroups = (strategy, inputs) => {
  * extend into and remain uncovered.
  *
  * Trade-off: chunk text may carry trailing whitespace or `\n\n` delimiters
- * absorbed from the gap. A caller who wants trimmed text can call
- * `chunk.text.trim()`; the reverse (dropped content, want it back) would
+ * absorbed from the gap. A caller who wants trimmed text can trim it
+ * themselves — `chunk.text.trim()` for string input, or per element when
+ * `text` is a `string[]`. The reverse (dropped content, want it back) would
  * require re-reading source. The library prefers lossless.
  *
  * ## chunkSize

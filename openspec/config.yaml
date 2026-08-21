@@ -14,7 +14,8 @@ context: |
 
   Non-negotiable behavioral contracts (encoded in openspec/specs/):
   - Coverage invariant (chunk-coverage): positions are lossless from chunks[0].start
-    onward; last chunk ends at input.length. RAG/citation consumers depend on it.
+    onward; last chunk ends at the total input length (for array input, the sum of the
+    element lengths — not the array's own length). RAG/citation consumers depend on it.
   - Three-tier anchoring (multibyte-anchoring); splitters may drop bytes but must not
     mutate tokens.
 

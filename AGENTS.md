@@ -126,8 +126,8 @@ package name — under `moduleResolution: nodenext` and `bundler`, plus runtime 
 - Arrow helpers like `text => text.split('')` need `/** @param {string} text */` —
   parameters can't be inferred from usage in strict mode.
 - For type-predicate assertion functions, JSDoc supports the full TS syntax:
-  `@returns {asserts x is keyof typeof Foo}`. See `assertChunkStrategy` in
-  [src/split.js](src/split.js).
+  `@returns {asserts x is keyof typeof Foo}`. Nothing in `src/` needs it today —
+  `splitValidate` checks `chunkStrategy` with `Set` membership instead.
 
 ### Don't reintroduce removed tooling
 

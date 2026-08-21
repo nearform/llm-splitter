@@ -346,7 +346,7 @@ const totalLength = Array.isArray(input)
 - `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
 - `chunks[chunks.length - 1].end === totalLength`.
 
-The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
+The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can trim it themselves — `chunk.text.trim()` for string input, or per element when `text` is a `string[]`; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
 
 Practical consequences:
 

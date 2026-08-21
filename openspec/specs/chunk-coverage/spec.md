@@ -11,12 +11,14 @@ reason chunks carry positions at all, and it MUST NOT be broken by algorithm cha
 ### Requirement: Lossless position coverage
 
 The system SHALL ensure that every UTF-16 code unit of the source at index `p`, where
-`chunks[0].start <= p < input.length`, appears in at least one chunk's `[start, end)` range.
+`chunks[0].start <= p < total input length`, appears in at least one chunk's `[start, end)`
+range. For array input, total input length is the sum of the element lengths, not the array's
+`length` property (see "Final chunk terminates at input length").
 
 #### Scenario: Every interior position is covered
 
 - **WHEN** `split(input, options)` returns a non-empty chunk list
-- **THEN** for every position `p` from `chunks[0].start` up to `input.length - 1`, some chunk's range `[start, end)` contains `p`
+- **THEN** for every position `p` from `chunks[0].start` up to total input length - 1, some chunk's range `[start, end)` contains `p`
 
 ### Requirement: Adjacent chunk continuity
 
@@ -61,7 +63,7 @@ character is one).
 #### Scenario: Offsets index the source string
 
 - **WHEN** a chunk has `start` and `end`
-- **THEN** `input.slice(start, end)` yields that chunk's source span
+- **THEN** `getChunk(input, start, end)` yields that chunk's source span — for a string input that is `input.slice(start, end)`; for an array input the offsets index the elements concatenated with no separator
 
 ### Requirement: Dropped code units absorbed into previous chunk
 
