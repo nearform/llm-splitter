@@ -1,11 +1,11 @@
 ## Context
 
 See [proposal.md](./proposal.md) → "Why" for motivation. This section records only the
-mechanism and the measurements, because the fix hinges on a distinction that is not obvious
-from reading `anchorParts`.
+mechanism and the measurements, because the fix hinges on two distinctions that are not
+obvious from reading `anchorParts`.
 
-**The mechanism.** `anchorParts` computes `sourceHasReplacement = input.includes(U+FFFD)`
-once per call, then gates tier 2 on:
+**Mechanism 1 — the Tier 2 disjunct.** `anchorParts` computes
+`sourceHasReplacement = input.includes(U+FFFD)` once per call, then gates tier 2 on:
 
 ```js
 } else if (sourceHasReplacement || !splitPart.includes(REPLACEMENT_CHAR)) {
@@ -25,7 +25,7 @@ Traced on the reduced repro, with real `tiktoken` (`text-embedding-ada-002`):
 ```
 input : "漢 hello world � tail"          // literal U+FFFD at index 14
 parts : ["�","�"," hello"," world"," �"," tail"]
-                ^^^^^^^^^^^^^^^^^^^ the leading 漢 fragments into two bare U+FFFD parts
+         ^^^^^^^ the leading 漢 fragments into two bare U+FFFD parts
 ```
 
 Part 1 is a bare U+FFFD with the cursor at 0. Tier 1 fails. Tier 2 is enabled (the source
@@ -55,12 +55,35 @@ So the trigger is a _co-occurrence_: a bare-U+FFFD part must be manufactured, **
 literal U+FFFD must sit forward of the cursor, **and** the spurious match must land past a
 later real part. A source containing U+FFFD is necessary but not sufficient.
 
-**The tier 2 skip is load-bearing for correctness, not only for speed.** The control row
-above is the same code path with the skip active. `anchor-scan-short-circuit`'s spec delta
-frames the skip purely as a linearity optimization and carves out the U+FFFD-bearing source
-as a _performance_ exception ("no linearity guarantee applies"). That framing understates it:
-with the skip active the manufactured part is correctly dropped, and with it inactive the
-same part mis-anchors. The spec delta in this change fixes that framing.
+**Mechanism 2 — Tier 3 treats the anchor's position as the part's position.** This is a
+second, independent defect, and it turns out to be the one that decides the shape of the fix:
+
+```js
+const anchor = firstAnchorGrapheme(splitPart);
+if (anchor === null) continue;
+start = input.indexOf(anchor, cursor);      // <-- position OF THE ANCHOR
+...
+const end = Math.min(start + splitPart.length, input.length);
+```
+
+`firstAnchorGrapheme` returns the first _positionable_ cluster in the part, which sits at
+some offset `k ≥ 0` into it. When `k > 0`, `start` is the anchor's position, not the part's,
+so the span is shifted right by `k` and the cursor overshoots by `k`:
+
+```
+part  = "�cd"          anchor = "c" at part offset k=1
+source= "abcd"          true part span [1,4)
+        a  b  c  d
+        0  1  2  3
+              └── indexOf("c", 0) = 2  →  start=2, end=min(2+3,4)=4     shifted +1
+                                          corrected: 2-1 = 1 → [1,4)    correct
+```
+
+This contradicts the assumption AGENTS.md calls load-bearing — `end = start + part.length`,
+"decoded length equals source span". Tier 3 asserts that a part's span is `part.length` wide
+while simultaneously placing its left edge at an interior grapheme. Correcting it is a
+one-line change, `indexOf(anchor.segment, cursor + anchor.offset) - anchor.offset`, where
+searching from `cursor + offset` is what keeps the corrected `start` at or after the cursor.
 
 ## Goals / Non-Goals
 
@@ -68,130 +91,220 @@ same part mis-anchors. The spec delta in this change fixes that framing.
 
 - Anchoring positions do not depend on whether the source happens to contain U+FFFD.
 - Preserve the behavior pinned by `test/split.test.js` → "locates a replacement char that is
-  genuinely in the source". See Decision 2 — this turns out to be free.
+  genuinely in the source".
 - Quantify the residual, so whatever ships is described accurately rather than as "fixed".
+- Close the _linearity_ carve-out for a U+FFFD-bearing source if it comes for free. It does
+  — see Decision 2.
 
 **Non-Goals:**
 
-- Closing the _linearity_ carve-out for a U+FFFD-bearing source. Mixed parts still take an
-  unbounded tier 2 search under the recommended approach; the perf half stays carved out.
 - Any change to normalizing/length-inflating tokenizers, which remain
   `tokenizer-length-inflation`'s scope.
 - Reopening the distance-bound idea rejected in
   `archive/2026-08-20-anchor-scan-short-circuit/design.md` → "Alternatives".
+- Backtracking or lookahead in the anchor walk. Decision 4 shows that is the only thing
+  left that could close the last residual, and it is a different change.
+
+## Method
+
+Every number below is measured, not reasoned about. `src/` and `test/` at head were copied
+into five scratch trees, one patch applied per tree, nothing applied to the project tree.
+Harnesses, all deterministic (seeded `mulberry32`, no `Math.random`):
+
+- **Reduced repro** — the shapes in the table above, plus the two pinned unit-test shapes.
+- **Unit suite** — `node --test`, 167 tests at head.
+- **Differential fuzz** — corpus `a b . \n 漢 👋 é` **plus literal U+FFFD**, splitters
+  `tiktoken`/`char`/`space`, `chunkSize` 1-10, both strategies; identical case sequence
+  across trees. Checks `chunk.text === getChunk(...)`, bounds, ordering, adjacency,
+  monotonicity, last-`end`. Run at 3,000 strings, 10,000 strings, and 2,000 array inputs.
+- **Position oracle** — `tiktoken` is byte-level BPE, so concatenating each token's decoded
+  _bytes_ reproduces the input's UTF-8 exactly. Token `i` therefore owns byte range
+  `[b_i, b_i+len_i)`, and mapping those byte offsets back to UTF-16 gives each token's
+  **true** source span independent of anything `src/split.js` does. Every anchored chunk
+  start must land on some true token boundary; one that does not is a provable mis-anchoring.
+  This is the only harness here that measures position _correctness_ rather than the absence
+  of a throw.
+- **Neutrality sweep** — the same text with its literal U+FFFD replaced by `・` (also 3
+  UTF-8 bytes, so byte offsets are preserved). Parts may be _omitted_ between the two runs
+  (a manufactured part is unanchorable, `・` is not), so the invariant checked is that the
+  U+FFFD run's positions are a **subsequence** of the control's: omitted, never moved.
+- **Isolated scaling** — a pre-computed parts array, so the timing excludes tokenization and
+  measures only the tier walk, over a U+FFFD-bearing source at an 8x size span.
 
 ## Decisions
 
-All three candidates below were **measured**, not reasoned about. Method: a copy of `src/`
-and `test/` at head into a scratch tree, one patch applied, then (a) the reduced repro, (b)
-the full `node --test` suite, and (c) a deterministic differential fuzz — 3,000 cases over a
-corpus of `a b . \n 漢 👋 é` **plus literal U+FFFD**, across the `tiktoken`, `char`, and
-`space` splitters, `chunkSize` 1-10, both strategies, same seed on both sides — checking
-`chunk.text === getChunk(...)`, bounds, adjacency, monotonicity, and last-`end`. Nothing was
-applied to the project tree.
+### Decision 1: Correct the Tier 3 anchor offset
 
-### Decision 1: Gate tier 2 on the part being _entirely_ U+FFFD, not on merely containing one
+**Chosen.** `indexOf(anchor.segment, cursor + anchor.offset) - anchor.offset`, with
+`firstAnchorGrapheme` returning `{ segment, offset }` (the offset is already available as
+`Intl.Segmenter`'s `index`). Type-checks clean under `strict` + `checkJs`.
 
-**Chosen.** Attempt tier 2 when the part has no U+FFFD at all (unchanged), or when the source
-has one **and** the part is not made only of replacement characters:
+On its own this fixes **nothing** in the repro and moves **zero** fuzz positions — with tier
+2 still enabled for U+FFFD-bearing parts, few such parts reach tier 3 with `k > 0`. Its
+entire value is that it makes Decision 2 correct. Measured alone: 743 → 743 fuzz throws, 0
+positions moved, and one unit test changes expectation (Decision 3).
+
+### Decision 2: Skip Tier 2 for every U+FFFD-bearing part
+
+**Chosen.** Drop the `sourceHasReplacement ||` disjunct outright:
 
 ```js
-} else if (
-  !splitPart.includes(REPLACEMENT_CHAR) ||
-  (sourceHasReplacement && !ONLY_REPLACEMENT_CHARS.test(splitPart))
-) {
+} else if (!splitPart.includes(REPLACEMENT_CHAR)) {
 ```
 
-`ONLY_REPLACEMENT_CHARS` already exists (it is `firstAnchorGrapheme`'s fast path), so this
-adds no new predicate.
-
-The rationale is an _identifiability_ argument. A part that is entirely U+FFFD carries no
-information locating it: it is byte-for-byte identical whether the splitter manufactured it
-or passed through a literal one, so tier 2's match on it is a coin flip. A part that mixes
-U+FFFD with real text does carry locating information, and tier 2's match on it is meaningful.
-Splitting on "bare vs mixed" therefore separates the untrustworthy searches from the
-trustworthy ones exactly.
-
-Dropping a bare part costs nothing in coverage: `chunk-coverage` absorbs unclaimed code units
-forward into the previous chunk, so the source's real U+FFFD is still inside a chunk's
-`[start, end)` — it just is not the anchor for a part.
-
-**Measured:**
-
-|                            | baseline (head) | Decision 1                               |
-| -------------------------- | --------------- | ---------------------------------------- |
-| reduced repro (5 cases)    | 2 throw         | **0 throw**, positions equal the control |
-| `node --test`              | 167/167         | **167/167**                              |
-| fuzz: succeeded            | 2,180           | **2,881**                                |
-| fuzz: threw                | 820             | **119**                                  |
-| fuzz: invariant violations | 0               | **0**                                    |
-
-Transition matrix over the 3,000 shared cases: `2180 OK→OK`, `701 THROW→OK`,
-`119 THROW→THROW`, and **`0 OK→THROW`** — no case regressed. 69 cases succeed on both sides
-with a different chunk count; those are baseline silent mis-anchorings being corrected (see
-Risks).
-
-**Alternative considered — drop the `sourceHasReplacement ||` disjunct entirely** (always skip
-tier 2 for any U+FFFD-bearing part). Simplest possible patch, and it would additionally close
-the linearity carve-out. **Rejected on measurement:** it fixes the repro but fails 2 of 167
-tests — "locates a replacement char that is genuinely in the source", and the contract fuzz,
-which throws on the `space` splitter over `"…ad ad\n��"` where a legitimately mixed
-part needs its verbatim search. Over-broad: it discards the trustworthy searches along with
-the untrustworthy ones.
-
-### Decision 2: Do not renegotiate the pinned "genuinely in the source" scenario
-
-The proposal flagged as a risk that any fix might have to renegotiate
-`test/split.test.js:1407`. On inspection it does not, and the reason is worth recording
-because it is what makes Decision 1 cheap. That test splits `"a �b"` with a whitespace
-splitter, so the part under test is `"�b"` — **mixed**, not bare. Decision 1 leaves
-every mixed part on tier 2, so the scenario passes untouched. The pinned benign case and the
-bug live on opposite sides of the bare/mixed line.
-
-### Decision 3: Ship the partial fix and state the residual, rather than holding for a complete one
-
-Decision 1 removes 85% of the failures (701 of 820) with zero regressions, but **119 remain**,
-all `tiktoken`. The residual is the same bug one level up — a manufactured _mixed_ part can
-also match verbatim by accident:
+This is the simplest possible patch, and it was **rejected in an earlier round of this
+design** because it failed 2 of 167 tests. That rejection was correct on the evidence
+available and wrong in its diagnosis. Both failures were the Tier 3 off-by-`k`, not the
+skip:
 
 ```
-input : "\n� 👋\n\n.b�.\n ��"
-parts : ["\n","�"," �","�","\n\n",".b","�",".\n"," ","��"]
-                       ^^^^^^^^ manufactured from 👋 at index 3
+"locates a replacement char that is genuinely in the source"   input "a �b", whitespace splitter
+  head                       [["a ", 0, 2], ["�b", 2, 4]]     ✓  (tier 2 exact match)
+  skip only                  [["a �", 0, 3], ["b",  3, 4]]     ✗  anchored on "b" at 3, k=1 lost
+  skip + Decision 1          [["a ", 0, 2], ["�b", 2, 4]]     ✓  2 = indexOf("b", 1+1) - 1
 ```
 
-The part `" �"` is mixed, so tier 2 runs, and `" �"` does occur verbatim at index 13. The cursor jumps to 15 and the following `"\n\n"` throws. Identifiability is a matter of
-degree, not a binary: one real code unit alongside a manufactured U+FFFD is weak evidence.
+With Decision 1 in place, both failures disappear and the skip becomes shippable. The
+contract fuzz — the second failure — passes too.
 
-Closing this needs something strictly stronger — validating a tier 2 match by checking the
-part's non-U+FFFD skeleton against the source at the matched offset, or bounding the search
-distance (rejected before, on different grounds). Both are larger than a spike, and neither is
-needed to make the 85% improvement safe to ship. So: land Decision 1, and describe the
-contract by what it actually guarantees.
+**Why the skip is the right primitive.** A part containing U+FFFD carries a code unit the
+splitter invented. Searching the source for it verbatim asks "does this invented byte
+sequence happen to occur downstream", and a hit answers a question nobody asked. Tier 3
+already knows how to position such a part from the real graphemes inside it; Decision 1 is
+what makes it do so accurately. The skip simply stops consulting the unreliable oracle first.
 
-**This is the one place the spec delta runs ahead of the implementation.**
-[specs/multibyte-anchoring/spec.md](./specs/multibyte-anchoring/spec.md) is written for the
-target behavior — positions independent of literal U+FFFD. Decision 1 does not fully deliver
-it. Before archiving, either the residual is closed, or the delta's "A literal U+FFFD in the
-source does not misdirect anchoring" requirement is narrowed to the bare-part case with the
-mixed-part residual stated as a known limitation. **Do not archive this change without making
-that call** — see `tasks.md` § 4.
+**Measured, 3,000-case differential fuzz** (identical cases across trees):
+
+| variant                   | succeeded | threw | OK→THROW | invariant violations |
+| ------------------------- | --------- | ----- | -------- | -------------------- |
+| head                      | 2,257     | 743   | —        | 0                    |
+| skip only (no Decision 1) | 2,979     | 21    | **21**   | 0                    |
+| Tier 2 bare/mixed gate    | 2,750     | 250   | 0        | 0                    |
+| Decision 1 only           | 2,257     | 743   | 0        | 0                    |
+| **Decision 1 + 2**        | **3,000** | **0** | **0**    | **0**                |
+
+The `skip only` row is the earlier rejection, quantified: 21 real regressions, all `space`
+splitter. Decision 1 removes all 21.
+
+At 10,000 strings: head 2,487 throws, bare/mixed gate 768, Decision 1+2 **0**, with 0
+OK→THROW and 0 invariant violations. At 2,000 array inputs: head 472, bare/mixed gate 128,
+Decision 1+2 **0**.
+
+**Decision 1 + 2 strictly dominates the bare/mixed gate.** Taking the gate as the baseline
+and Decision 1+2 as the variant, over 3,000 cases: `2,750 OK→OK` with **0 positions moved**,
+`250 THROW→OK`, `0 OK→THROW`. Wherever the gate produces an answer, Decision 1+2 produces
+byte-identical positions; it additionally rescues every case the gate throws on. Same result
+on the array sweep.
+
+**It also closes the linearity carve-out**, which the bare/mixed gate explicitly could not
+(mixed parts stay on tier 2 there). Isolated anchoring cost over a U+FFFD-bearing source,
+8x size span:
+
+| variant                | 5k    | 10k    | 20k     | 40k     | cost growth | verdict   |
+| ---------------------- | ----- | ------ | ------- | ------- | ----------- | --------- |
+| head                   | 9.2ms | 28.9ms | 100.2ms | 374.8ms | **40.8x**   | quadratic |
+| Tier 2 bare/mixed gate | 8.8ms | 29.0ms | 100.2ms | 370.9ms | **42.0x**   | quadratic |
+| Decision 1 + 2         | 3.1ms | 8.2ms  | 16.5ms  | 33.0ms  | **10.7x**   | linear    |
+
+So the shipped spec's "Source containing U+FFFD keeps the unbounded search (known
+limitation)" scenario is not a permanent fact about the problem — it is a consequence of the
+disjunct, and it goes away with it. That is a spec _deletion_, not a widening.
+
+The in-suite "grows linearly with input size" regression stays green.
+
+### Decision 3: Accept the one changed unit expectation
+
+Decision 1 changes exactly one pinned expectation, in
+`test/split.test.js` → "drops unanchorable parts without dropping mixed ones":
+
+```
+input "abcd", splitter () => ["���", "́�", "�cd"]
+  head        [["cd",  2, 4]]
+  Decision 1  [["bcd", 1, 4]]
+```
+
+`[1,4)` is the correct value. The part `"�cd"` is 3 code units and the library's core
+assumption is that a part's span equals its length, so its left edge belongs at `4-3 = 1`.
+The old `2` was the anchor `"c"`'s position standing in for the part's, which is the defect
+Decision 1 removes. Nothing else in the suite moves: 166/167, with
+"locates a replacement char that is genuinely in the source", the contract fuzz, and the
+scaling regression all green.
+
+### Decision 4: The last residual is Tier 1, and no local rule can close it
+
+Under Decision 1+2 the fuzz throws zero times, but the position oracle still finds a small
+number of wrong positions. **They are not a tier 2 or tier 3 problem.** Every one of them is
+`startsWith` at the cursor matching a manufactured bare U+FFFD part against a **literal**
+U+FFFD standing exactly at the cursor:
+
+```
+input : "\n. a� 漢��é"                    literal U+FFFD at 4, 7, 8
+parts : ["\n",".", " a", "�", " �", "�", "�", "��", "é"]
+                                     ^^^  ^^^  manufactured from 漢's tail bytes
+true token starts : {0,1,2,4,5,7,9}       (from byte arithmetic)
+reported starts   : {0,1,2,4,5,7,8,9}
+                              ^ token 6 (bare, manufactured) matched the literal U+FFFD at 8
+```
+
+Tested over 8,000 cases: **33 wrong positions, 33 of which land on a literal U+FFFD in the
+source, 0 counterexamples.** The bare/mixed gate has the same defect at the same rate
+(22 of 22). Tier 1 fires before any gate, and at the cursor a manufactured bare U+FFFD and a
+literal one are byte-identical — there is nothing to test.
+
+**It is benign, and materially different from what it replaced.** The matched part is one
+code unit and the literal U+FFFD it matched is one code unit, so the cursor advances by
+exactly the right amount. There is no overshoot and therefore no drift: every _other_ part
+in an affected input still anchors correctly. The whole effect is one extra chunk boundary,
+attributing one source U+FFFD to the wrong token. Coverage is unaffected.
+
+**And the general form is undecidable locally.** The Open Question in the earlier round
+asked whether validating a tier 2 match against the part's non-U+FFFD skeleton could close
+the mixed-part residual. It cannot, twice over. First it is vacuous: `indexOf` succeeding
+already guarantees `input[m+i] === part[i]` for every `i`, so a skeleton comparison at the
+matched offset can never reject anything. Second, and more fundamentally, the spurious case
+and the legitimate case are **indistinguishable from the part, the source, and the cursor**:
+
+```
+                    part      cursor  tier2  tier3(corrected)  truth   verdict
+residual (spurious) " �"      2       12     2                 2       tier2 wrong
+decoy (legitimate)  "a�b"     1       4      2                 4       tier2 RIGHT
+```
+
+Identical signatures — `tier2 > tier3corrected` in both — opposite truths. Any rule reading
+only those three inputs must be wrong on one of them. Separating them requires knowing
+whether the _rest_ of the parts still anchor under each choice, i.e. backtracking. That is a
+different change; it is recorded in Open Questions and not attempted here.
+
+### Decision 5: Ship it, and state the two residuals
+
+Decision 1+2 eliminates every throw in 15,000 fuzz cases and every throw in the reduced
+repro, moves no position that the previously-chosen gate got right, and closes the linearity
+carve-out. Two residuals remain and both are stated rather than hidden: the Tier 1 artifact
+above, and the decoy class in Risks. The spec delta is narrowed to match — see
+[specs/multibyte-anchoring/spec.md](./specs/multibyte-anchoring/spec.md).
+
+**Superseded:** the Tier 2 bare/mixed gate, which an earlier round of this design chose. It
+is dominated on every measurement taken — same positions where it succeeds, 768 residual
+throws at 10k cases against 0, quadratic where Decision 1+2 is linear, and a more
+complicated predicate. Its identifiability argument ("a bare part carries no locating
+information, a mixed part does") is still sound as far as it goes; Decision 4 is why it does
+not go far enough — one real code unit beside a manufactured U+FFFD is weak evidence, and
+the gate has no way to say how weak.
 
 ## Acceptance criteria
 
 Following the convention `tokenizer-length-inflation` set, the regression code lives here
-until the fix lands, so `test/split.test.js` stays unconditional and green. Both tests below
-fail at head and pass under Decision 1.
+until the fix lands, so `test/split.test.js` stays unconditional and green.
 
 **1. Real-tokenizer regression.** Goes in `test/split.test.js` alongside the existing
-`tiktoken` cases:
+`tiktoken` cases. Fails at head, passes under Decision 1+2:
 
 ```js
 it("does not anchor a manufactured replacement char on a literal one", () => {
   // tiktoken fragments the leading 漢 into two bare U+FFFD parts. The source
-  // also holds a literal U+FFFD, which re-enables the verbatim search, so the
-  // manufactured part used to match that literal one 13 code units downstream,
-  // strand the cursor past " world", and throw.
+  // also holds a literal U+FFFD, which used to re-enable the verbatim search,
+  // so the manufactured part matched that literal one 13 code units
+  // downstream, stranded the cursor past " world", and threw.
   const tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002");
   const td = new TextDecoder();
   const tokenSplitter = (text) =>
@@ -240,54 +353,120 @@ it("drops a bare replacement part rather than matching a literal one", () => {
     splitter: fragmentingSplitter,
   });
 
-  // The two manufactured parts anchor nothing; coverage still starts at the
-  // first anchorable part and runs to the end of input.
-  assert.strictEqual(chunks.at(-1).end, "漢ab�cd".length);
-  assert.strictEqual(
-    chunks[0].text,
-    getChunk("漢ab�cd", chunks[0].start, chunks[0].end),
+  assert.deepStrictEqual(chunks, [{ text: "ab�cd", start: 1, end: 6 }]);
+});
+```
+
+**3. Tier 3 offset regression.** Pins Decision 1 directly, so the `- anchor.offset` cannot
+be dropped as redundant. The mixed part `"�b"` must anchor at its own left edge, not at
+its `"b"`:
+
+```js
+it("anchors a mixed part at its left edge, not at its anchor grapheme", () => {
+  // "�b" is 2 code units, so its span is [2,4) — the replacement char stands
+  // in for the source's own. Anchoring on the "b" would report [3,5)->[3,4)
+  // and advance the cursor one unit too far.
+  const chunks = split("a �b", { chunkSize: 1, splitter: whitespaceSplitter });
+
+  assert.deepStrictEqual(
+    chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+    [
+      ["a ", 0, 2],
+      ["�b", 2, 4],
+    ],
   );
 });
 ```
 
-**3. Differential fuzz gate.** The harness from Decisions above, kept as a one-off during the
-spike rather than added to the suite (it needs both a patched and an unpatched tree). Bar to
-clear before landing: **zero `OK→THROW` transitions** and **zero invariant violations** on
-3,000 cases over a U+FFFD-bearing corpus. Record the final throw count in `tasks.md`.
+**4. Updated expectation** in "drops unanchorable parts without dropping mixed ones":
+`[["cd", 2, 4]]` becomes `[["bcd", 1, 4]]`, per Decision 3. Worth a comment saying why 1 is
+the correct left edge, since the change looks like a regression otherwise.
 
-**4. No linearity regression.** `npm test` includes the "grows linearly with input size"
-scaling regression; it must stay green, since Decision 1 touches the same guard the tier 2
-skip lives in. Confirmed green under Decision 1 (167/167).
+**5. Linearity over a U+FFFD-bearing source.** The existing "grows linearly with input size"
+regression uses a source with no U+FFFD, which is the case head already guarantees. Decision
+2 extends the guarantee to a source that has one, and nothing pins that. Add a sibling case
+with a literal U+FFFD in the source; head measures 40.8x for an 8x span, Decision 1+2
+measures 10.7x. Keep AGENTS.md's rule that the threshold is not to be weakened for a slow
+machine — raise the base size instead.
+
+**6. Differential fuzz gate.** Kept as a one-off during the spike rather than added to the
+suite (it needs both a patched and an unpatched tree). Bar to clear before landing: **zero
+`OK→THROW` transitions** and **zero invariant violations** across the 3,000-string,
+10,000-string, and 2,000-array sweeps. Achieved: 0 throws of any kind on all three.
 
 ## Risks / Trade-offs
 
-- **[69 fuzz cases change chunk count while succeeding on both sides]** → These are baseline
-  _silent_ mis-anchorings — the failure mode README:372 warns about ("a lowercased `"hi"` will
-  happily anchor on some later `h`… yielding a wrong position with no error"). Correcting them
-  is the point, but it means chunk counts and positions change for affected inputs, so this
-  needs a changeset and the same "regenerate persisted embeddings" note the `0.3.0` rewrite
-  carries. Not a patch release.
-- **[A source's genuine U+FFFD is no longer anchored as a part]** → Its code units stay
+- **[A genuinely-verbatim mixed part can now be mis-anchored — the decoy class]** → This is
+  the real cost of Decision 2, and it is constructible even though no fuzz case hit it. When
+  a mixed part _is_ verbatim in the source, tier 2 used to find it exactly; tier 3 now walks
+  to its first anchor grapheme, which can match a decoy occurrence between the cursor and
+  the part's true position:
+
+  ```
+  source "a a a�b", splitter () => ["a", "a�b"]     true start of part 2 = 4
+    head / bare-mixed gate    4  ✓   (tier 2 exact)
+    Decision 1 + 2            2  ✗   (decoy "a" at index 2)
+  ```
+
+  The shape needs a splitter that **drops multi-character content**, plus a repeated anchor
+  grapheme in the dropped gap, plus a U+FFFD-bearing part. None of the documented splitters
+  qualify: `char` and `tiktoken` drop nothing (tier 1 covers them), and `text.split(/\s+/)`
+  drops only whitespace while its parts contain none, so no decoy is reachable. Zero
+  occurrences in 15,000 fuzz cases and 2,000 array cases. It is a silent position error, not
+  a throw, which is the failure mode README:372 warns is worse — so it gets stated in the
+  spec, not left implicit.
+
+- **[The Tier 1 residual]** → Decision 4. Benign (one extra chunk boundary, no drift, no
+  throw, coverage intact), unavoidable locally, and present in the superseded approach at
+  the same rate. Stated in the spec as a narrow exception to position-neutrality.
+
+- **[461 fuzz cases change position while succeeding on both sides, 226 with a different
+  chunk count]** (10,000-case sweep) → These are baseline _silent_ mis-anchorings being
+  corrected. Position-neutrality against a byte-width-preserving control, over the 3,562
+  cases containing a literal U+FFFD:
+
+  | variant                | positions a subsequence of control | moved  | threw |
+  | ---------------------- | ---------------------------------- | ------ | ----- |
+  | head                   | 429                                | 11     | 3,122 |
+  | Tier 2 bare/mixed gate | 2,555                              | 9      | 998   |
+  | **Decision 1 + 2**     | **3,550**                          | **12** | **0** |
+
+  The oracle agrees: taking the bare/mixed gate as baseline, Decision 1+2 is `ok→ok 1,513`,
+  `throw→ok 480`, `off→off 5` (identical wrong starts), `throw→off 2`, and **`ok→off` 0**.
+  Against head it is `off→ok 3` — it repairs mis-anchorings head had. Still: positions and
+  chunk counts change for affected inputs, so this needs a changeset with the "regenerate
+  persisted embeddings / citation offsets" note the `0.3.0` rewrite carries. Not a patch.
+
+- **[A source's genuine U+FFFD is less often anchored as a part]** → Its code units stay
   covered, absorbed forward into the previous chunk per `chunk-coverage`, so nothing is lost
-  positionally. Only the part-level anchor disappears, and `chunkSize` counts parts, so an
-  affected chunk may hold marginally more source. Same class of undercount already documented
-  at README:389.
-- **[The 119 residual throws]** → Not mitigated; deliberately scoped out by Decision 3, and
-  the reason the spec delta must be reconciled before archiving. Stated, not hidden.
-- **[Overlap with `tokenizer-length-inflation`]** → Both edit the same tier 2/tier 3 region of
-  `anchorParts`, and that change's `research.md:36-43` already lists this shape as "a fourth
-  instance of the same root cause". Whichever lands second rebases; if `tokenizer-length-
-inflation` lands first with a cursor model that makes length-vs-span mismatch impossible,
-  re-measure before assuming Decision 1 is still needed.
-- **[The fix is one boolean expression, so it is easy to "simplify" back]** → The rejected
-  alternative in Decision 1 is _exactly_ what a later reader would reduce it to. The
-  bare/mixed distinction needs a comment at the call site and a line in AGENTS.md's algorithm
-  map, or it will be undone.
+  positionally. `chunkSize` counts parts, so an affected chunk may hold marginally more
+  source. Same class of undercount already documented at README:389.
+
+- **[Not verified against `gte-small`]** → AGENTS.md requires tokenizer-affecting changes to
+  run against the real gte-small fixtures as well as the multibyte ones.
+  `@huggingface/transformers` is not a devDependency of this repo and was not installed for
+  this spike, so that leg is **unrun**. It is a genuine gap, not a pass. Those tokenizers are
+  already a documented limitation for a different reason (length inflation), and this change
+  edits the same tier 3 region `tokenizer-length-inflation` will, so the check belongs to
+  whichever lands second.
+
+- **[Overlap with `tokenizer-length-inflation`]** → Both edit tier 2/tier 3 of `anchorParts`,
+  and that change's `research.md:36-43` lists this shape as "a fourth instance of the same
+  root cause". Note that its Decision 2 replaces tier 3 **only when `sourceNormalize` is
+  set**, so the default-path off-by-`k` fixed here survives it untouched — the two changes
+  are more independent than that risk note implies. Whichever lands second rebases.
+
+- **[The fix is two small edits, so it is easy to half-revert]** → Decision 1 alone looks
+  like a no-op (it moves zero fuzz positions) and Decision 2 alone regresses 21 cases.
+  Reverting either one separately is worse than reverting both. This needs a comment at the
+  tier 3 call site saying the offset subtraction is what makes the tier 2 skip safe, and a
+  line in AGENTS.md's algorithm map.
 
 ## Open Questions
 
-- Is the tier-2-match-validation refinement (compare the part's non-U+FFFD skeleton against
-  the source at the matched offset) cheap enough to close the residual 119 without
-  reintroducing a per-part cost proportional to part length? Deferrable: it does not change
-  Decision 1, the task breakdown, or the delta as written — only whether § 4's reconciliation
-  narrows the requirement or not.
+- Would a backtracking anchor walk — accept a candidate position only if the remaining parts
+  still anchor from it — close both the decoy class and the Tier 1 residual? Decision 4
+  establishes that nothing local can, so this is the only remaining direction. Cost is the
+  open part: worst-case it reintroduces a per-part factor, which is exactly what
+  `anchor-scan-short-circuit` spent a change removing. Deferrable — it does not change
+  Decision 1, Decision 2, the task breakdown, or the delta as written.
