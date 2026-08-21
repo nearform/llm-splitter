@@ -1486,8 +1486,15 @@ describe("split", () => {
         // ~26-35x, so the threshold sits at twice the ideal factor with
         // room on both sides. If the baseline ever gets too small to divide
         // by, raise BASE rather than the threshold.
+        //
+        // BASE is 100_000 rather than 40_000 because the ratio is only as
+        // stable as its denominator. At 40_000 the baseline measured 2.5-7ms,
+        // and that spread alone moved observed growth between 5.4x and 12.1x
+        // across repeated local runs — close enough to 16 that a loaded CI
+        // runner could trip it with no regression present. A larger baseline
+        // costs a little wall-clock and buys back the margin.
         const SPAN = 8;
-        const BASE = 40_000;
+        const BASE = 100_000;
         const baseline = fastestSplitMs(BASE);
         const scaled = fastestSplitMs(BASE * SPAN);
 
@@ -1563,6 +1570,31 @@ describe("split", () => {
           },
         );
       });
+
+      it("rejects a splitter that is not a function", () => {
+        assert.throws(
+          () =>
+            split("hello", {
+              // @ts-expect-error a string is not a splitter
+              splitter: "not a function",
+            }),
+          { message: "Splitter must be a function" },
+        );
+      });
+
+      it("rejects a splitter returning an array with a non-string element", () => {
+        assert.throws(
+          () =>
+            split("hello", {
+              chunkSize: 1,
+              // @ts-expect-error testing non-string element in splitter return
+              splitter: () => ["he", 42, "llo"],
+            }),
+          {
+            message: "Splitter returned a non-string part: 42 for input: hello",
+          },
+        );
+      });
     });
 
     describe("paragraph group offsets", () => {
@@ -1613,6 +1645,227 @@ describe("split", () => {
         assert.deepStrictEqual(result, [
           { text: ["b", "", "b"], start: 0, end: 2 },
         ]);
+      });
+    });
+
+    // The hand-written cases above each pin one known shape. This walks the
+    // same contract across randomly combined inputs, splitters, strategies
+    // and sizes, so a regression that lands between the shapes we thought to
+    // enumerate still has something to trip over.
+    describe("contract fuzz", () => {
+      // Linear congruential generator (glibc constants). Seeded and stepped
+      // by hand rather than using Math.random so a failure reproduces from
+      // the printed seed instead of only happening once in CI.
+      /** @param {number} seed */
+      const rng = (seed) => {
+        let state = seed >>> 0;
+        return () => {
+          state = (state * 1664525 + 1013904223) >>> 0;
+          return state / 0x100000000;
+        };
+      };
+
+      // Each alphabet targets a different part of the anchoring machinery:
+      // pure ASCII stays on tier 1, whitespace exercises tier 2's forward
+      // search, and the multi-byte sets drive tier 3 and the U+FFFD skip.
+      // The last one matters most — a source that already holds U+FFFD is
+      // what disables the tier 2 short-circuit.
+      const ALPHABETS = [
+        "abcdefg ",
+        "ab \n\n",
+        "这是一个测试文本。 \n\n",
+        "देवनागरी लिपि \n\n",
+        "a🤫b🕷️c \n\n",
+        "éà \n\n",
+        "a😀b \n\n",
+        "  \n\n\t ",
+        "ab�cd \n\n",
+      ];
+
+      // `mutates` records whether the splitter can emit a part that is not
+      // verbatim in its source. Only those are allowed to fail to anchor;
+      // see the assertion below.
+      const SPLITTERS = [
+        {
+          name: "char",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.split(""),
+        },
+        {
+          name: "codepoint",
+          mutates: false,
+          fn: (/** @type {string} */ t) => [...t],
+        },
+        {
+          name: "whitespace",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.split(/\s+/),
+        },
+        {
+          name: "space",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.split(" "),
+        },
+        {
+          name: "runs-of-3",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.match(/[\s\S]{1,3}/g) ?? [],
+        },
+        {
+          name: "utf16-pairs",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.match(/[\s\S]{1,2}/g) ?? [],
+        },
+        {
+          name: "drop-every-3rd",
+          mutates: false,
+          fn: (/** @type {string} */ t) => [...t].filter((_, i) => i % 3 !== 1),
+        },
+        {
+          name: "interleaved-empties",
+          mutates: false,
+          fn: (/** @type {string} */ t) => t.split("").flatMap((c) => ["", c]),
+        },
+        // Models a BPE tokenizer decoding tokens that straddle a multi-byte
+        // boundary: every nth part comes back as U+FFFD.
+        {
+          name: "fragmenting-4",
+          mutates: true,
+          fn: (/** @type {string} */ t) =>
+            [...t].map((c, i) => (i % 4 === 3 ? "�" : c)),
+        },
+        {
+          name: "fragmenting-7",
+          mutates: true,
+          fn: (/** @type {string} */ t) =>
+            [...t].map((c, i) => (i % 7 === 0 ? "�" : c)),
+        },
+        {
+          name: "all-replacement",
+          mutates: true,
+          fn: (/** @type {string} */ t) => [...t].map(() => "�"),
+        },
+      ];
+
+      // 20k cases run in roughly a quarter second, so there is no reason to
+      // economize below that. Past this point a fixed seed only walks further
+      // down one sequence — if you are chasing something specific, vary SEED
+      // rather than pushing CASES much higher.
+      const CASES = 20_000;
+      const SEED = 0x2f6e2b1;
+
+      it("holds the coverage contract across randomized inputs", () => {
+        const next = rng(SEED);
+        /** @param {number} n */
+        const int = (n) => Math.floor(next() * n);
+
+        let anchored = 0;
+        let unanchorable = 0;
+
+        for (let caseIndex = 0; caseIndex < CASES; caseIndex++) {
+          const alphabet = ALPHABETS[int(ALPHABETS.length)];
+          /** @param {number} n */
+          const text = (n) =>
+            Array.from(
+              { length: n },
+              () => alphabet[int(alphabet.length)],
+            ).join("");
+
+          /** @type {string|string[]} */
+          const input =
+            next() < 0.35
+              ? Array.from({ length: int(4) }, () => text(int(40)))
+              : text(int(120));
+
+          const splitter = SPLITTERS[int(SPLITTERS.length)];
+          const chunkSize = 1 + int(12);
+          const chunkOverlap = int(chunkSize);
+          const chunkStrategy = next() < 0.5 ? "character" : "paragraph";
+
+          // Printed on every failure: enough to replay the exact case
+          // without re-deriving it from the seed.
+          const where = `case ${caseIndex} (seed ${SEED}): splitter=${splitter.name} chunkSize=${chunkSize} chunkOverlap=${chunkOverlap} chunkStrategy=${chunkStrategy} input=${JSON.stringify(input)}`;
+
+          /** @type {Chunk[]} */
+          let chunks;
+          try {
+            chunks = split(input, {
+              chunkSize,
+              chunkOverlap,
+              splitter: splitter.fn,
+              chunkStrategy,
+            });
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            // A splitter that rewrites its parts may legitimately fail to
+            // anchor. One that preserves them must never fail — that is the
+            // property worth pinning, and it is what regressed historically.
+            assert.ok(
+              splitter.mutates && /could not be located in input/.test(message),
+              `${where}\n  unexpected throw: ${message}`,
+            );
+            unanchorable++;
+            continue;
+          }
+          anchored++;
+
+          const inputs = Array.isArray(input) ? input : [input];
+          const total = inputs.reduce((sum, item) => sum + item.length, 0);
+
+          // A splitter can anchor nothing at all (whitespace-only source,
+          // all-replacement splitter); there is no contract to check then.
+          if (chunks.length === 0) {
+            continue;
+          }
+
+          for (const chunk of chunks) {
+            assert.deepStrictEqual(
+              chunk.text,
+              getChunk(input, chunk.start, chunk.end),
+              `${where}\n  chunk.text disagrees with getChunk at [${chunk.start},${chunk.end})`,
+            );
+            assert.ok(
+              chunk.start >= 0 && chunk.end <= total,
+              `${where}\n  chunk [${chunk.start},${chunk.end}) outside [0,${total})`,
+            );
+            assert.ok(
+              chunk.start <= chunk.end,
+              `${where}\n  chunk start ${chunk.start} exceeds end ${chunk.end}`,
+            );
+          }
+
+          assert.strictEqual(
+            chunks[chunks.length - 1].end,
+            total,
+            `${where}\n  last chunk must end at total input length`,
+          );
+
+          for (let i = 0; i + 1 < chunks.length; i++) {
+            assert.ok(
+              chunks[i].end >= chunks[i + 1].start,
+              `${where}\n  gap between chunk ${i} [${chunks[i].start},${chunks[i].end}) and ${i + 1} [${chunks[i + 1].start},${chunks[i + 1].end})`,
+            );
+            assert.ok(
+              chunks[i].start <= chunks[i + 1].start,
+              `${where}\n  chunk starts went backwards at ${i + 1}`,
+            );
+            if (chunkOverlap === 0) {
+              assert.ok(
+                chunks[i].end <= chunks[i + 1].start,
+                `${where}\n  chunks overlap despite chunkOverlap=0 at ${i}`,
+              );
+            }
+          }
+        }
+
+        // Guards the generator itself: if a refactor made every case throw or
+        // every case trivial, the loop above would pass while checking almost
+        // nothing.
+        assert.ok(
+          anchored > CASES * 0.9,
+          `expected most cases to anchor, got ${anchored}/${CASES} (${unanchorable} unanchorable)`,
+        );
       });
     });
   });

@@ -1,3 +1,5 @@
+<!-- TODO(REWRITE): Capture any useful info and remove this before merging to main -->
+
 # Rewrite: what changed vs. the published library
 
 Findings from running [test/benchmark.js](test/benchmark.js) head-to-head against

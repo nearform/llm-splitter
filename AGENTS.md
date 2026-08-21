@@ -108,8 +108,11 @@ invocation starts a fresh shell — so re-source nvm every time, or chain it inl
 `dist/index.d.ts` has lines like `export { ... } from "./split.js"`. Those `.js` strings
 look broken (there is no `dist/split.js`), but they're not. TypeScript resolves `.js` in a
 `.d.ts` to a sibling `.d.ts` (here: `dist/split.d.ts`); Node runtime resolution uses
-`src/` via the `main` field. The two graphs are independent. Don't try to "fix" the paths
-— verified working by a packed-tarball consumer test.
+`src/` via the `main` field. The two graphs are independent. Don't try to "fix" the paths.
+
+Verified by hand — `npm pack`, install the tarball into a scratch project, then import by
+package name — under `moduleResolution: nodenext` and `bundler`, plus runtime ESM and
+`require()`. There is **no automated test** for this; see "Deferred to 1.0" below.
 
 ### JSDoc gotchas under `strict` + `checkJs`
 
@@ -208,3 +211,47 @@ library guarantees today_ vs _what we're going to change next_. See
   if a caller ever reports a splitter that legitimately drops long spans).
   `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
   this.
+
+### Deferred to 1.0
+
+Surfaced during the pre-`0.3.0` review and deliberately **not** taken, because each is a
+breaking change or a new public surface and `0.x` is the wrong place to spend that. Revisit
+together when 1.0 is on the table.
+
+- **No `exports` map.** `main: src/index.js` + `types: dist/index.d.ts` already resolves
+  correctly with no `exports` field — verified against a packed tarball under
+  `moduleResolution: nodenext` _and_ `bundler`, plus runtime ESM and `require()`. So the
+  `src`/`dist` skew is **not** a reason to add one; the only thing `exports` buys is
+  encapsulation. Today `import('llm-splitter/src/split.js')` resolves and hands back
+  `split`, which becomes a compatibility obligation the moment 1.0 ships. The minimal form
+  that closes it without disturbing the skew:
+
+  ```json
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./src/index.js" },
+    "./package.json": "./package.json"
+  }
+  ```
+
+  Keep `main`/`types` alongside it for legacy resolvers. The `./package.json` entry is what
+  keeps tooling that reads the manifest working. Measured: deep imports start returning
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` and everything else stays green.
+
+- **`Chunk.text` is `string | string[]` unconditionally.** The union is fully determined by
+  the caller's own `input` argument, but every TypeScript consumer has to narrow it anyway.
+  Overloads on `split` (`Chunk<string>[]` for string input, `Chunk<string[]>[]` for array
+  input) would remove the narrowing. It's a breaking type change, hence deferred — but note
+  it only gets more expensive after 1.0, so decide it _at_ 1.0 rather than after.
+
+- **No packaged-consumer test.** Nothing in CI installs a packed tarball and imports the
+  package by name, so the resolution model above is verified only by hand. Considered and
+  declined for `0.3.0` as disproportionate for a package this shape. Worth reconsidering if
+  `exports` lands, since that is exactly the kind of change that breaks resolution silently.
+
+- **`test/benchmark.js` needs a sibling checkout.** Its line-1 TODO stands: the baseline
+  resolves from `../../llm-splitter/dist/index.js` rather than the published package, so the
+  head-to-head numbers don't reproduce from a clean clone without manual setup. It's excluded
+  from `check:types` for this reason and can't run in CI.
+
+- **No `engines` field, by choice.** Raised in review and declined — the constraint causes
+  more friction than it prevents. Recorded so it isn't re-proposed as an oversight.

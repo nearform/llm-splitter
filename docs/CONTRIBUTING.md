@@ -60,10 +60,11 @@ npx changeset
 This prompts you for a bump type and a summary, then writes a markdown file under
 `.changeset/`. **Commit that file with your PR.**
 
-- **Bump type** — `patch` (fixes), `minor` (backwards-compatible features), `major`
-  (breaking changes). `llm-splitter` is pre-1.0, so in practice changes are `patch` or
-  `minor` today. Anything that alters the coverage contract or anchoring guarantees
-  documented in AGENTS.md is a `major`.
+- **Bump type** — while pre-1.0, `minor` is the breaking-change slot (`0.2.0` → `0.3.0`)
+  and `patch` covers fixes and compatible features alike; skip `major`, which publishes
+  `1.0.0` outright. From 1.0 on it's plain semver: `major` for breaking, `minor` for
+  backwards-compatible features, `patch` for fixes.
+
 - **Summary** — write it for the changelog reader: what changed and why it matters, not
   the internal mechanics.
 
