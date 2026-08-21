@@ -1446,6 +1446,30 @@ describe("split", () => {
           [["cd", 2, 4]],
         );
       });
+
+      it("drops a part whose replacement char carries a combining mark", () => {
+        // Order matters, which is why this is separate from the case above. A
+        // mark *after* a replacement char merges into it, so `Intl.Segmenter`
+        // reports one cluster rather than two — and that cluster is neither a
+        // bare replacement char nor mark-only. Testing the two conditions
+        // separately let it through as an anchor, and the anchor search then
+        // failed on a character the splitter had invented, throwing instead of
+        // dropping the part.
+        const input = "café naïve";
+        /** @param {string} text */
+        const splitter = (text) =>
+          [...text].map((ch) => (/\p{M}/u.test(ch) ? `�${ch}` : ch));
+
+        const chunks = split(input, { chunkSize: 4, splitter });
+
+        assert.strictEqual(chunks[chunks.length - 1].end, input.length);
+        for (const chunk of chunks) {
+          assert.strictEqual(
+            chunk.text,
+            getChunk(input, chunk.start, chunk.end),
+          );
+        }
+      });
     });
 
     describe("anchoring cost", () => {

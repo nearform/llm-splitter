@@ -17,8 +17,18 @@ import { getChunk } from "./get-chunk.js";
 
 const CHUNK_STRATEGIES = new Set(["character", "paragraph"]);
 const REPLACEMENT_CHAR = "�";
-// Fails only for a string of nothing but replacement characters.
-const NON_REPLACEMENT_CHAR = /[^�]/;
+// Parts that are nothing but replacement characters are the bulk of a
+// tokenizer's unanchorable output on dense multi-byte text. One scan rules them
+// out and skips an `Intl.Segmenter` pass that could only reach the same answer.
+const ONLY_REPLACEMENT_CHARS = /^�+$/;
+// A grapheme cluster with nothing positionable in it: replacement characters,
+// which a splitter invents so the source may not contain them, and combining
+// marks, which only ever appear merged into a preceding base grapheme. Both
+// belong in one character class rather than two tests, because `Intl.Segmenter`
+// merges a mark into a preceding U+FFFD base — `"�́"` is a single cluster
+// that is neither a bare replacement char nor mark-only, and anchoring on it
+// searches the source for a character the splitter manufactured.
+const UNANCHORABLE_CLUSTER = /^[�\p{M}]+$/u;
 // The only paragraph break `chunkStrategy: "paragraph"` recognizes — used for
 // both the split and the per-paragraph cursor advance.
 const PARAGRAPH_DELIMITER = "\n\n";
@@ -84,28 +94,26 @@ const splitValidate = ({
  * @returns {string|null}
  */
 const firstAnchorGrapheme = (splitPart) => {
-  // Nothing but replacement characters, so the loop can only return null —
-  // and segmenting these dominates on dense multi-byte text. Keyed on having
-  // no other code unit, not on containing U+FFFD: a part mixing U+FFFD with
-  // real text is still anchorable.
-  if (!NON_REPLACEMENT_CHAR.test(splitPart)) {
+  // Fast path only — not the full unanchorable test. Keyed on the part being
+  // nothing but replacement chars, not on merely containing one: a part mixing
+  // U+FFFD with real text is still anchorable.
+  if (ONLY_REPLACEMENT_CHARS.test(splitPart)) {
     return null;
   }
 
   for (const { segment } of SEGMENTER.segment(splitPart)) {
-    if (segment === REPLACEMENT_CHAR) {
-      continue;
-    }
-
-    // Combining marks (including variation selectors FE00-FE0F, class Mn)
-    // merge into a preceding base grapheme in real text — they have no
-    // standalone position to anchor against.
-    if (/^\p{M}+$/u.test(segment)) {
+    // Whole clusters, not code units: a mark merges into whatever precedes it,
+    // so a cluster anchors only if it holds something other than a replacement
+    // char or a mark. `\p{M}` covers variation selectors FE00-FE0F.
+    if (UNANCHORABLE_CLUSTER.test(segment)) {
       continue;
     }
 
     return segment;
   }
+
+  // Reached when no single cluster anchors but the part was not caught above —
+  // an isolated combining mark, or a mark alongside a replacement char.
   return null;
 };
 

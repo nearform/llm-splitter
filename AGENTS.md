@@ -82,10 +82,12 @@ change's `research.md` → "What the anchoring machinery actually rests on".
 **Coverage contract** (also in the `split()` docstring and the README
 "Chunk Coverage and Positions" section): from `chunks[0].start` onward,
 every UTF-16 code unit of source appears in exactly one chunk (modulo
-`chunkOverlap`); `chunks[chunks.length - 1].end === input.length`. The
-only place coverage isn't full is code units before `chunks[0].start`
-(no previous chunk to extend into). **Don't break this** — downstream
-RAG/citation use cases rely on it.
+`chunkOverlap`); the last chunk's `end` equals the **total source length**.
+For an array input that total is the sum of the element lengths, not the
+array's own `length` — positions index the elements concatenated with no
+separator. The only place coverage isn't full is code units before
+`chunks[0].start` (no previous chunk to extend into). **Don't break this**
+— downstream RAG/citation use cases rely on it.
 
 ## Pitfalls
 

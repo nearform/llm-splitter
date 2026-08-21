@@ -333,10 +333,18 @@ const chunks = split(text, {
 
 ### Chunk Coverage and Positions
 
-`split()` is **lossless on positions** from `chunks[0].start` onward: every UTF-16 code unit of the source string at index `p` (where `chunks[0].start <= p < input.length`) appears in at least one chunk's `[start, end)` range. `start` and `end` are JavaScript string indices — i.e. UTF-16 code-unit offsets — so for non-ASCII text a single character may occupy one or two code units (a typical emoji is two; a CJK character is one). Concretely:
+Positions index the source as one continuous run of code units. For a string input that is just the string; for an array input it is the elements concatenated in order **with no separator**, so the total length is the sum of the element lengths and _not_ the array's own `length`:
+
+```js
+const totalLength = Array.isArray(input)
+  ? input.reduce((sum, item) => sum + item.length, 0)
+  : input.length;
+```
+
+`split()` is **lossless on positions** from `chunks[0].start` onward: every UTF-16 code unit of the source at index `p` (where `chunks[0].start <= p < totalLength`) appears in at least one chunk's `[start, end)` range. `start` and `end` are UTF-16 code-unit offsets — so for non-ASCII text a single character may occupy one or two code units (a typical emoji is two; a CJK character is one). Concretely:
 
 - `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
-- `chunks[chunks.length - 1].end === input.length`.
+- `chunks[chunks.length - 1].end === totalLength`.
 
 The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can call `chunk.text.trim()` themselves; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
 
