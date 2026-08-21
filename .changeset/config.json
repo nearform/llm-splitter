@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "nearform/llm-splitter", "disableThanks": true }
+  ],
+  "access": "public",
+  "baseBranch": "main"
+}
