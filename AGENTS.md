@@ -136,6 +136,19 @@ yourself wanting any of them back, ask first.
 `@changesets/cli` and `@changesets/changelog-github` are the exception — they were added
 deliberately and drive releases. See docs/CONTRIBUTING.md, "Releasing with Changesets".
 
+Three CI/automation files were removed for reasons that aren't recoverable from the diff,
+so they're recorded here rather than re-added as "missing":
+
+- `.github/workflows/notify-release.yml` — superseded by Changesets.
+  `changesets/action/publish` creates the GitHub release and git tag itself, so a separate
+  notifier was duplicating it.
+- `.github/workflows/check-linked-issues.yml` — the linked-issue requirement was dropped
+  deliberately. It also ran on `pull_request_target`, so retiring it removed a
+  fork-privileged trigger as a bonus.
+- `.github/dependabot.yml` — this package has **zero production dependencies**, so the
+  bot's value didn't justify the PR noise. `npm run dep:check` (`npx npm-check-updates`)
+  covers dev-dependency drift on demand.
+
 ### `GITHUB_TOKEN` in the release workflow has two unrelated consumers
 
 `changesets/action@v2` deliberately stopped reading the `GITHUB_TOKEN` **env var** — it

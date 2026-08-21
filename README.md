@@ -27,6 +27,13 @@ $ npm install llm-splitter
 import { split, getChunk } from "llm-splitter";
 ```
 
+TypeScript consumers can also import the types. `Chunk` is the element type of the array
+`split()` returns; `SplitOptions` is its second argument, useful for typing a wrapper.
+
+```ts
+import type { Chunk, SplitOptions } from "llm-splitter";
+```
+
 ## API
 
 ### `split(input, options)`
