@@ -1,8 +1,14 @@
 import { getChunk } from "./get-chunk.js";
 
 /**
+ * `text` is whatever the caller passed to `split()`: a `string` for string
+ * input, a `string[]` for array input. The default keeps a bare `Chunk`
+ * meaning the union, so an annotation written without a type argument still
+ * accepts either.
+ *
+ * @template {string|string[]} [T=string|string[]]
  * @typedef {object} Chunk
- * @property {string|string[]} text
+ * @property {T} text
  * @property {number} start
  * @property {number} end
  */
@@ -311,9 +317,9 @@ const boundaryGroups = (strategy, inputs) => {
  *
  * @param {string|string[]} input
  * @param {SplitOptions} [options]
- * @returns {Chunk[]}
+ * @returns {Chunk<string|string[]>[]}
  */
-export const split = (
+const splitImpl = (
   input,
   {
     chunkSize = 512,
@@ -425,3 +431,34 @@ export const split = (
 
   return chunks;
 };
+
+/**
+ * Call signatures for `split`, so `chunk.text` narrows to the caller's own
+ * input type instead of forcing every consumer to re-narrow the union.
+ *
+ * The union signature is kept **last and is not optional**: without it, a
+ * caller holding a `string | string[]` variable matches neither narrow
+ * signature and stops compiling. With it, both the narrowed and the union
+ * call sites resolve.
+ *
+ * @typedef {{
+ *   (input: string, options?: SplitOptions): Chunk<string>[];
+ *   (input: string[], options?: SplitOptions): Chunk<string[]>[];
+ *   (input: string|string[], options?: SplitOptions): Chunk<string|string[]>[];
+ * }} SplitFn
+ */
+
+/**
+ * Split text into size-bounded chunks that carry their source positions.
+ *
+ * See `splitImpl` above for the full contract — coverage semantics, chunk
+ * structure, `chunkSize` units, and the two chunk strategies.
+ *
+ * The cast is required because the implementation returns the union form,
+ * which is not assignable to the narrowed signatures even though every call
+ * site is sound. `@overload` is not an option here: it applies to `function`
+ * declarations, not to a `const` bound to an arrow function.
+ */
+export const split = /** @type {SplitFn} */ (
+  /** @type {unknown} */ (splitImpl)
+);

@@ -9,7 +9,7 @@
  * @param {number} end - The end of the chunk.
  * @returns {string|string[]} The text or array of texts of the chunk.
  */
-export const getChunk = (input, start, end) => {
+const getChunkImpl = (input, start, end) => {
   /** @type {string[]} */
   const matches = [];
   let offset = 0;
@@ -38,3 +38,28 @@ export const getChunk = (input, start, end) => {
 
   return Array.isArray(input) ? matches : matches[0] || "";
 };
+
+/**
+ * Call signatures for `getChunk`, mirroring `split`'s so the two agree: the
+ * return type follows the caller's input type. The union signature is last and
+ * is not optional — for the same reason as `SplitFn`, a caller holding a
+ * `string | string[]` variable must still resolve.
+ *
+ * @typedef {{
+ *   (input: string, start: number, end: number): string;
+ *   (input: string[], start: number, end: number): string[];
+ *   (input: string|string[], start: number, end: number): string|string[];
+ * }} GetChunkFn
+ */
+
+/**
+ * Get the text of a chunk from positional parameters. See `getChunkImpl` above
+ * for the contract.
+ *
+ * The cast is required because the implementation returns the union form,
+ * which is not assignable to the narrowed signatures even though every call
+ * site is sound.
+ */
+export const getChunk = /** @type {GetChunkFn} */ (
+  /** @type {unknown} */ (getChunkImpl)
+);

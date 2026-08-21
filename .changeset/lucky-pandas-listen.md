@@ -12,4 +12,6 @@ Rewrite the chunking core so chunk positions account for the whole input.
 
 Positions and chunk counts change, so persisted embeddings, citation offsets, and anything keyed on chunk index need regenerating.
 
+**Types: `chunk.text` now follows your input.** `split(str)` returns `Chunk<string>[]` and `split(arr)` returns `Chunk<string[]>[]`, so TypeScript consumers no longer have to narrow `string | string[]` on every access; `getChunk` narrows the same way, and `Chunk` takes an optional type parameter that defaults to the union. Runtime behavior is unchanged. Passing a value typed `string | string[]` still compiles and still returns the union, so most code needs no edit — but code that relied on `chunk.text` being the union (for example an `Array.isArray` branch that is now unreachable, or an explicit `Chunk<string | string[]>` annotation assigned from a narrowed call) may need adjusting.
+
 Also: source is now plain JavaScript with JSDoc annotations rather than TypeScript, with `.d.ts` files published for TypeScript consumers, and `SplitOptions` is exported as a type.

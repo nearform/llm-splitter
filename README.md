@@ -80,6 +80,11 @@ Returns an array of chunk objects with the following structure:
 }
 ```
 
+`text` follows the input you passed: `split(str)` gives chunks whose `text` is a `string`,
+`split(arr)` gives chunks whose `text` is a `string[]`. TypeScript consumers get that
+narrowing automatically and don't need to re-check the union — `getChunk` narrows the same
+way. Passing a value typed `string | string[]` still works and still returns the union.
+
 #### Examples
 
 **Basic usage with default options:**

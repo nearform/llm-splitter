@@ -128,6 +128,26 @@ package name — under `moduleResolution: nodenext` and `bundler`, plus runtime 
 - For type-predicate assertion functions, JSDoc supports the full TS syntax:
   `@returns {asserts x is keyof typeof Foo}`. Nothing in `src/` needs it today —
   `splitValidate` checks `chunkStrategy` with `Set` membership instead.
+- **`@overload` does not work on an arrow function.** It applies to `function`
+  declarations, so on `export const split = (…) => {…}` it is silently ignored and every
+  call keeps the widest signature — you get no error, just no narrowing. (Nor do multiple
+  `@overload` tags in one comment block work; TS wants a separate block each.) Since this
+  repo prefers arrows, `split` and `getChunk` instead declare a `@typedef` of call
+  signatures and export a cast of a private `…Impl` arrow. The cast is load-bearing: the
+  implementation returns the union form, which is not assignable to the narrowed
+  signatures.
+
+### Overload sets keep a union signature last
+
+`SplitFn` in [src/split.js](src/split.js) and `GetChunkFn` in
+[src/get-chunk.js](src/get-chunk.js) each end with a `string|string[]` signature after the
+two narrow ones. It looks redundant and it is not: with only the narrow signatures, a caller
+holding a `string | string[]` variable matches neither and stops compiling — which is what
+makes narrowing a breaking change rather than a free one. Keeping the union last means
+`chunk.text` narrows for callers who pass a literal type _and_ union-typed call sites still
+resolve. Verified against a probe covering both narrowed forms, union input, a bare
+`Chunk[]` annotation, and assignment to the pre-change function type. Don't "simplify" the
+third signature away.
 
 ### Don't reintroduce removed tooling
 
@@ -282,12 +302,6 @@ together when 1.0 is on the table.
   Keep `main`/`types` alongside it for legacy resolvers. The `./package.json` entry is what
   keeps tooling that reads the manifest working. Measured: deep imports start returning
   `ERR_PACKAGE_PATH_NOT_EXPORTED` and everything else stays green.
-
-- **`Chunk.text` is `string | string[]` unconditionally.** The union is fully determined by
-  the caller's own `input` argument, but every TypeScript consumer has to narrow it anyway.
-  Overloads on `split` (`Chunk<string>[]` for string input, `Chunk<string[]>[]` for array
-  input) would remove the narrowing. It's a breaking type change, hence deferred — but note
-  it only gets more expensive after 1.0, so decide it _at_ 1.0 rather than after.
 
 - **No packaged-consumer test.** Nothing in CI installs a packed tarball and imports the
   package by name, so the resolution model above is verified only by hand. Considered and
