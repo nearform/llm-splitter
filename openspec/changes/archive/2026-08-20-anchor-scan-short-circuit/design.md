@@ -71,9 +71,9 @@ devanagari tiktoken   102073  25072  12527 13915  50559  64474 / 0
 `other` column being uniformly zero is what makes this a complete fix rather than a partial
 one on these corpora.
 
-**Alternatives considered** — the three other sketches. [REWRITE.md](../../../REWRITE.md) —
-"The Devanagari case" summarizes them in a sentence and points here for the rationale, so this
-section is their record:
+**Alternatives considered** — the three other sketches.
+[core-rewrite/design.md](../2026-08-20-core-rewrite/design.md) — "Performance" summarizes
+them in a sentence and points here for the rationale, so this section is their record:
 
 - _Bound the Tier 2 search window._ The same instrumentation records how far Tier
   2 legitimately has to reach: **never more than 4 code units**, with the entire histogram in

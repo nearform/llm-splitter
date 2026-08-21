@@ -50,7 +50,7 @@
 
 ## 5. Docs
 
-- [x] 5.1 Refresh [REWRITE.md](../../../REWRITE.md) — "The Devanagari case". Its narrative
+- [x] 5.1 Refresh the rewrite record — [core-rewrite/design.md](../2026-08-20-core-rewrite/design.md) → "Performance". Its narrative
       already describes this fix and delegates the rejected alternatives to design.md, so the
       work is: confirm the before/after and growth tables against the landed code (they came
       from the prototype), update the splitter median-ratio table, and flip the

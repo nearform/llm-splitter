@@ -8,7 +8,7 @@ becomes O(n²) in `character` strategy.
 
 The cost is not theoretical. On a 100KB Devanagari document with a `tiktoken` splitter,
 `split()` takes **1976ms**; at 400KB it takes **30.2 seconds**, growing 3.9x per doubling.
-[REWRITE.md](../../../REWRITE.md) — "The Devanagari case" records this as the one severe
+[core-rewrite/design.md](../2026-08-20-core-rewrite/design.md) — "Performance" records this as the one severe
 outstanding regression against the published library (25.6x slower on that row), carries the
 instrumentation and the prototype measurements below, and marks the fix "proposed, not
 landed". What is missing is the code.
@@ -30,12 +30,12 @@ precisely the boundary `multibyte-anchoring` already draws.
 - Pin the resulting complexity with a scaling regression test, so the quadratic cannot
   return unnoticed — it has already moved once, from `findGrapheme` to the Tier 2 failure
   branch.
-- Re-measure REWRITE.md's Devanagari numbers against the landed implementation. Its narrative
+- Re-measure the rewrite record's Devanagari numbers against the landed implementation. Its narrative
   already describes this fix and delegates the rejected alternatives to `design.md`, so the
   work there is confirming the figures, not rewriting the section.
 
 Not in scope: bounding the Tier 2 search window, classifying the splitter up front, or
-carrying a resync hint. See `design.md` — Decision 1, alternatives, which is where REWRITE.md
+carrying a resync hint. See `design.md` — Decision 1, alternatives, which is where the rewrite record
 now points for all three: the U+FFFD test subsumes them at zero heuristic cost, and the
 measured evidence argues against a distance bound.
 
@@ -57,7 +57,7 @@ No public API change. No observable output change.
   `firstAnchorGrapheme` (all-replacement fast path). ~9 lines added, 1 changed.
 - Tests: [test/split.test.js](../../../test/split.test.js) — a scaling regression asserting
   sub-quadratic growth on a U+FFFD-heavy synthetic splitter, plus equivalence cases.
-- Docs: [REWRITE.md](../../../REWRITE.md) Devanagari section (measurement refresh and status
+- Docs: [core-rewrite/design.md](../2026-08-20-core-rewrite/design.md) — "Performance" (measurement refresh and status
   flip); [AGENTS.md](../../../AGENTS.md) algorithm map.
 - Performance: 19x on the pathological row, 3.4x on CJK, and the growth curve goes from
   quadratic to linear. Cost on splitters that never emit U+FFFD is ≤0.3ms per 100KB
