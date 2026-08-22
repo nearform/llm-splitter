@@ -31,12 +31,11 @@
     "prebuild": "rm -rf dist",
     "build": "tsc --project tsconfig.json",
     "prepack": "npm run build",
-    "check": "npm run lint && npm run check:types && npm run check:format && npm run test",
+    "check": "npm run check:lint && npm run check:types && npm run check:format && npm run test",
     "check:format": "prettier --check .",
     "check:lint": "eslint .",
     "check:types": "tsc --project tsconfig.check.json",
     "format": "prettier --write . && eslint --cache --fix .",
-    "lint": "eslint .",
     "test": "node --test 'test/*.test.js'",
     "test:only": "node --test --test-only 'test/*.test.js'",
     "dep:check": "npx npm-check-updates"

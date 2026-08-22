@@ -118,8 +118,9 @@ input. `chunkSize` MUST be an integer of at least `1`; `chunkOverlap` MUST be an
 at least `0` and MUST be less than `chunkSize`; `splitter` MUST be a function that returns an
 array of strings; `input` MUST be a string or an array whose every element is a string.
 
-Option and splitter-contract violations SHALL throw `Error`, while type violations of `input`
-and of the splitter's return value SHALL throw `TypeError`.
+Invalid options, and a splitter element that is neither a string nor an object, SHALL throw
+`Error`. An invalid `input` type, a splitter that does not return an array, and a reported
+part whose `text` is not a string or whose `start` is out of range SHALL throw `TypeError`.
 
 #### Scenario: Invalid chunkSize
 

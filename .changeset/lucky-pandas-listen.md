@@ -9,6 +9,7 @@ Rewrite the chunking core so chunk positions account for the whole input.
 - Chunks now cover the source: each chunk's `end` extends to the next chunk's `start`, and the last chunk ends at the input length. Chunk text therefore includes whitespace and `\n\n` delimiters that previously fell between chunks.
 - `chunk.text` now follows your input type — `split(str)` returns `Chunk<string>[]`, `split(arr)` returns `Chunk<string[]>[]`, so TypeScript consumers no longer narrow a union on every access. A `string | string[]` argument still compiles and still returns the union.
 - Removed the `splitToParts` export. It exposed an internal stage of the old algorithm and has no drop-in replacement; `split()` is the supported entry point.
+- `main` is now `src/index.js` rather than `dist/index.js`, so deep imports of `llm-splitter/dist/*.js` no longer resolve. Import from the package root.
 - Splitters that rewrite their parts (lowercasing, accent-stripping, NFC/NFD — common in `@huggingface/transformers` embedding tokenizers such as `gte-small`) may now throw instead of returning mis-anchored chunks. Normalize the input the same way before calling `split()`, or chunk with a 1:1 tokenizer such as `tiktoken`.
 
 **Fixed**

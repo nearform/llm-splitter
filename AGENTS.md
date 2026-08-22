@@ -18,7 +18,7 @@ Runtime consumers load `src/index.js` (via `main`), TypeScript consumers `dist/i
 ## Commands
 
 ```
-npm run lint         # eslint
+npm run check:lint   # eslint
 npm run check:types  # tsc -p tsconfig.check.json  (JSDoc on src + test)
 npm run check:format # prettier checks
 npm test             # node --test
