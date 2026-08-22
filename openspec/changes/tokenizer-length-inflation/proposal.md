@@ -10,12 +10,10 @@ authors — the library's primary audience — reach for, yet today they either 
 `"Splitter returned a part that could not be located in input"` or, worse, silently
 mis-anchor `start`/`end`.
 
-Phase 1 (real `gte-small` regression fixtures) is complete and
-narrowed the problem: length inflation is only one of three failure modes, and the most
-common one for `gte-small` is **equal-length content mutation** (`"Hi"` → `"hi"`), which a
-pure inflation detector cannot locate. The evidence behind that finding lives in
-[research.md](./research.md) (codename B7); this change tracks turning it into an
-implementation.
+Phase 1 (real `gte-small` regression fixtures) is complete and narrowed the problem: length
+inflation is only one of three failure modes, and the most common one for `gte-small` is
+**equal-length content mutation** (`"Hi"` → `"hi"`), which a pure inflation detector cannot
+locate. Evidence in [research.md](./research.md).
 
 ## What Changes
 
@@ -55,7 +53,7 @@ implementation.
 - Tests: [test/split.test.js](../../../test/split.test.js) — wire the drift case and the
   gte-small fixtures from `design.md` into asserting tests; must keep tiktoken/Devanagari
   green.
-- Docs: README "Supported tokenizers" section updated once implemented.
+- Docs: the README's "Supported tokenizers" section, once implemented.
 - Performance: normalized comparison only runs on the Tier 3 fallback path; the char/tiktoken
   happy paths (Tiers 1–2) are untouched.
 - API: additive and backward compatible — `sourceNormalize` defaults to identity.

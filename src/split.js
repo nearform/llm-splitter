@@ -14,12 +14,9 @@ import { getChunk } from "./get-chunk.js";
  */
 
 /**
- * One element of a splitter's return value.
- *
- * A bare string is positioned by the three-tier locate strategy, which infers
- * an offset from the text. The object form carries the offset the splitter
- * already knows, so nothing is inferred for that part. The two may be mixed in
- * one array, letting a splitter report only the offsets it is sure of.
+ * One element of a splitter's return value. A bare string is positioned by the
+ * three-tier locate strategy; the object form carries an offset the splitter
+ * already knows, so nothing is inferred for that part. The two may be mixed.
  *
  * @typedef {string|{ text: string, start: number }} SplitterPart
  */
@@ -34,22 +31,17 @@ import { getChunk } from "./get-chunk.js";
 
 const CHUNK_STRATEGIES = new Set(["character", "paragraph"]);
 const REPLACEMENT_CHAR = "�";
-// Parts that are nothing but replacement characters are the bulk of a
-// tokenizer's unanchorable output on dense multi-byte text. One scan rules them
-// out and skips an `Intl.Segmenter` pass that could only reach the same answer.
+// Fast path: parts that are nothing but replacement chars are the bulk of a
+// tokenizer's unanchorable output, and one scan skips an `Intl.Segmenter` pass.
 const ONLY_REPLACEMENT_CHARS = /^�+$/;
-// A grapheme cluster with nothing positionable in it: replacement characters,
-// which a splitter invents so the source may not contain them, and combining
-// marks, which only ever appear merged into a preceding base grapheme. Both
-// belong in one character class rather than two tests, because `Intl.Segmenter`
-// merges a mark into a preceding U+FFFD base — `"�́"` is a single cluster
-// that is neither a bare replacement char nor mark-only, and anchoring on it
-// searches the source for a character the splitter manufactured.
+// A grapheme cluster with nothing positionable in it. One character class, not
+// two tests: `Intl.Segmenter` merges a mark into a preceding U+FFFD base, so
+// `"�́"` is a single cluster that is neither bare-replacement nor mark-only.
 const UNANCHORABLE_CLUSTER = /^[�\p{M}]+$/u;
 // The only paragraph break `chunkStrategy: "paragraph"` recognizes — used for
 // both the split and the per-paragraph cursor advance.
 const PARAGRAPH_DELIMITER = "\n\n";
-// Host default locale: grapheme segmentation per UAX #29 is locale-independent,
+// Host default locale: UAX #29 grapheme segmentation is locale-independent,
 // verified identical across en, th, ja, ar, hi and und.
 const SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -102,30 +94,26 @@ const splitValidate = ({
   }
 };
 
-// First grapheme of `splitPart` that can plausibly stand alone in `input`.
-// Needed when the splitter mutated bytes: tiktoken decoding a token that
-// straddles a multi-byte char emits U+FFFD, or emits an isolated combining
-// mark that only ever appears merged into a preceding base grapheme.
 /**
- * Returns the cluster together with its offset into `splitPart`, because the
- * cluster's position in the source is not the part's position unless that
- * offset is zero — see the tier 3 call site.
+ * First grapheme of `splitPart` that can plausibly stand alone in `input`,
+ * with its offset into the part — the cluster's position in the source is not
+ * the part's position unless that offset is zero (see the tier 3 call site).
+ *
+ * Returns `null` when nothing in the part is positionable.
  *
  * @param {string} splitPart
  * @returns {{ segment: string, offset: number }|null}
  */
 const firstAnchorGrapheme = (splitPart) => {
-  // Fast path only — not the full unanchorable test. Keyed on the part being
-  // nothing but replacement chars, not on merely containing one: a part mixing
-  // U+FFFD with real text is still anchorable.
+  // Fast path only, not the full unanchorable test: a part mixing U+FFFD with
+  // real text is still anchorable.
   if (ONLY_REPLACEMENT_CHARS.test(splitPart)) {
     return null;
   }
 
   for (const { segment, index } of SEGMENTER.segment(splitPart)) {
-    // Whole clusters, not code units: a mark merges into whatever precedes it,
-    // so a cluster anchors only if it holds something other than a replacement
-    // char or a mark. `\p{M}` covers variation selectors FE00-FE0F.
+    // Whole clusters, not code units: a mark merges into whatever precedes it.
+    // `\p{M}` covers variation selectors FE00-FE0F.
     if (UNANCHORABLE_CLUSTER.test(segment)) {
       continue;
     }
@@ -133,29 +121,21 @@ const firstAnchorGrapheme = (splitPart) => {
     return { segment, offset: index };
   }
 
-  // Reached when no single cluster anchors but the part was not caught above —
-  // an isolated combining mark, or a mark alongside a replacement char.
   return null;
 };
 
 /**
  * Does every code unit the splitter could not have invented line up with the
- * source at `at`?
+ * source at `at`? Rejects a tier 3 candidate whose anchor grapheme also occurs
+ * inside the span the splitter dropped, so the search can walk forward instead
+ * of trusting the first hit.
  *
- * The anchor grapheme alone is a weak signal: a part whose first anchorable
- * grapheme also occurs inside the span the splitter dropped anchors on that
- * earlier occurrence and reports a position a few code units early. Checking
- * the rest of the part rejects those candidates, so the search can move on to
- * the next occurrence instead of trusting the first.
+ * U+FFFD and combining marks are skipped — the splitter may have manufactured
+ * them, so they constrain nothing. That makes the check weakest for a part that
+ * is mostly U+FFFD, which is where the residual mis-anchorings live.
  *
- * Positions holding U+FFFD or a combining mark are skipped, since the splitter
- * may have manufactured them and they constrain nothing. That makes the check
- * weakest for a part that is mostly U+FFFD, which is where the residual
- * mis-anchorings live.
- *
- * Comparing at fixed offsets is only meaningful while a part's decoded length
- * equals the source span it consumed — the same assumption `end = start +
- * splitPart.length` already rests on, so this adds none. It does mean the check
+ * Comparing at fixed offsets rests on decoded length equalling the source span,
+ * the same assumption as `end = start + splitPart.length`, so it adds none. It
  * is invalid for a length-inflating tokenizer; see `tokenizer-length-inflation`.
  *
  * @param {string} input
@@ -171,8 +151,8 @@ const skeletonAligns = (input, splitPart, at) => {
   for (let i = 0; i < splitPart.length; i += 1) {
     const ch = splitPart[i];
     // Per code unit, not per cluster: `UNANCHORABLE_CLUSTER` is a character
-    // class, so testing one unit is valid for the marks and replacement chars
-    // it covers. If it ever becomes cluster-aware, both call sites change.
+    // class, so testing one unit is valid. If it ever becomes cluster-aware,
+    // both call sites change.
     if (ch === REPLACEMENT_CHAR || UNANCHORABLE_CLUSTER.test(ch)) {
       continue;
     }
@@ -190,14 +170,11 @@ const skeletonAligns = (input, splitPart, at) => {
  * where `start` is `null` for a bare string and the splitter's own offset for
  * a reported part.
  *
- * A reported offset is validated for *possibility*, not correctness. The
- * library cannot know whether an offset is right — that is precisely the
- * knowledge the splitter has and `split()` does not — so it only rejects
- * offsets that could not be right under any splitter: non-integer, out of
- * range, or behind the cursor. `text` is deliberately never compared against
- * the source at `start`: a byte-mutating splitter legitimately returns text
- * differing from its source span (tiktoken emitting U+FFFD across a multi-byte
- * boundary), and rejecting a mismatch would exclude the primary use case.
+ * A reported offset is validated for *possibility*, not correctness: only
+ * offsets that could not be right under any splitter are rejected — non-
+ * integer, out of range, or behind the cursor. `text` is deliberately never
+ * compared against the source at `start`, because a byte-mutating splitter
+ * legitimately returns text differing from its source span.
  *
  * @param {SplitterPart} element
  * @param {string} input
@@ -229,9 +206,8 @@ const normalizePart = (element, input, cursor) => {
     );
   }
 
-  // A start behind the cursor would make this part overlap the previous one,
-  // which breaks the coverage contract by producing overlap `chunkOverlap`
-  // never asked for. Clamping would hide a splitter bug, so it throws.
+  // A start behind the cursor overlaps the previous part, producing overlap
+  // `chunkOverlap` never asked for. Clamping would hide a splitter bug.
   if (start < cursor) {
     throw new TypeError(
       `Splitter reported start ${start} for part: "${text}", behind the previous part's end ${cursor}`,
@@ -247,45 +223,34 @@ const normalizePart = (element, input, cursor) => {
  * throws when it holds something positionable that is nowhere to be found.
  *
  * This is the inference a reported position replaces: every limitation below
- * is a consequence of guessing an offset from text alone, and none of them
- * applies to a part whose splitter reported where it came from.
+ * is a consequence of guessing an offset from text alone.
  *
- * Three-tier locate strategy, cheapest first:
- *  1. `startsWith` at the current cursor — byte-preserving splitter with the
- *     cursor sitting exactly on the next part (char/tiktoken happy path).
- *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops
- *     bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so
- *     the cursor lands in the gap and `startsWith` fails). Skipped for every
- *     part containing U+FFFD. When the source has none, that is an
- *     equivalence: the part cannot be a substring, so the search could only
- *     fail after scanning to end of input, and with O(n) such parts that is
- *     quadratic. When the source does have one, it is a deliberate preference
- *     for tier 3 — U+FFFD is a character the splitter invented, so a verbatim
- *     hit on it says nothing about where the part came from, and acting on
- *     such a hit strands the cursor past real source. U+FFFD is the only
- *     character a splitter may introduce, so nothing else admits either
- *     inference.
- *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter
- *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find the
- *     first positionable grapheme inside splitPart and anchor the part's left
- *     edge relative to it, correcting for that grapheme's offset into the
- *     part. Each occurrence is only a candidate: it is accepted once
- *     `skeletonAligns` confirms the part's non-invented code units line up
- *     there, and the search walks forward otherwise. Without that check a
- *     part whose anchor grapheme also occurs inside the span the splitter
- *     dropped anchors early — see `skeletonAligns`.
+ * Three tiers, cheapest first:
+ *  1. `startsWith` at the cursor — byte-preserving splitter with the cursor
+ *     sitting exactly on the next part (char/tiktoken happy path).
+ *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops bytes
+ *     between parts (`text.split(/\s+/)` discards whitespace, so the cursor
+ *     lands in the gap and `startsWith` fails). **Skipped for every part
+ *     containing U+FFFD.** With no U+FFFD in the source that is an equivalence
+ *     — the part cannot be a substring, so the search could only scan to end of
+ *     input, quadratic over O(n) such parts. With one in the source it is a
+ *     correctness choice: U+FFFD is a character the splitter invented, so a
+ *     verbatim hit says nothing about origin and strands the cursor past real
+ *     source.
+ *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter.
+ *     Anchor the part's left edge relative to its first positionable grapheme,
+ *     correcting for that grapheme's offset into the part. Each occurrence is
+ *     only a candidate, accepted once `skeletonAligns` confirms it.
  *
- * The tier 3 *match* cannot land mid-surrogate or mid-cluster, because
- * `firstAnchorGrapheme` returns a whole grapheme cluster and a cluster never
- * starts with a low surrogate or combining mark. Note this is a claim about
- * the match, not about `start`: subtracting the anchor's offset can put
- * `start` inside a surrogate pair, which is consistent with chunk boundaries
- * carrying no code-point integrity guarantee (see the `split()` docstring).
+ * The tier 3 *match* cannot land mid-surrogate or mid-cluster, since a grapheme
+ * cluster never starts with a low surrogate or combining mark. That is a claim
+ * about the match, not about `start`: subtracting the anchor's offset can put
+ * `start` inside a surrogate pair, consistent with chunk boundaries carrying no
+ * code-point integrity guarantee.
  *
- * Tier 1 remains unguarded, and cannot be: at the cursor a manufactured bare
- * U+FFFD is byte-identical to a literal one, so a literal U+FFFD standing
- * there may claim a manufactured part. That costs one chunk boundary and no
- * drift, since both are one code unit wide.
+ * Tier 1 is unguarded and cannot be: at the cursor a manufactured bare U+FFFD
+ * is byte-identical to a literal one, so a literal U+FFFD standing there may
+ * claim a manufactured part. Costs one chunk boundary and no drift.
  *
  * @param {string} input
  * @param {string} splitPart
@@ -311,19 +276,12 @@ const locatePart = (input, splitPart, cursor) => {
       return null;
     }
 
-    // The anchor cluster sits `anchor.offset` code units into the part, so
-    // its match position is not the part's start — subtracting the offset is
-    // what makes `end = start + splitPart.length` span the source the part
-    // actually consumed. This is also what lets tier 2 be skipped for every
-    // U+FFFD-bearing part above: without it, a mixed part like `"�b"`
-    // anchors on its `"b"` one unit late, and the tier 2 exact match is the
-    // only thing that hides it. Searching from `cursor + offset` keeps the
-    // corrected start at or after the cursor.
-    //
-    // The first occurrence is only a candidate. The anchor grapheme can also
-    // occur inside the span the splitter dropped, so accept an occurrence
-    // only once the part's non-invented code units line up there too, and
-    // keep walking forward otherwise.
+    // Subtracting `anchor.offset` is what makes `end = start + length` span
+    // the source the part consumed; without it a mixed part like `"�b"`
+    // anchors on its `"b"` one unit late. Searching from `cursor + offset`
+    // keeps the corrected start at or after the cursor. The first occurrence
+    // is only a candidate — the anchor grapheme can also occur inside the span
+    // the splitter dropped, so verify before accepting.
     let match = input.indexOf(anchor.segment, cursor + anchor.offset);
     while (
       match !== -1 &&
@@ -346,10 +304,9 @@ const locatePart = (input, splitPart, cursor) => {
  * Anchor splitter parts against a single source string, producing parts with
  * absolute (offset-adjusted) `start`/`end` positions.
  *
- * A part carries its own offset (`{ text, start }`) or it does not (a bare
- * string). Reported offsets are used as given; bare parts go to `locatePart`.
- * Both forms then share one `end` computation and one cursor advance, so the
- * coverage contract holds across a mixture of the two.
+ * Reported offsets are used as given; bare strings go to `locatePart`. Both
+ * forms share one `end` computation and one cursor advance, so the coverage
+ * contract holds across a mixture of the two.
  *
  * @param {string} input
  * @param {(input: string) => SplitterPart[]} splitter
@@ -379,8 +336,7 @@ const anchorParts = (input, splitter, baseOffset) => {
       continue;
     }
 
-    // A reported offset skips all three tiers, so none of their limitations
-    // reaches this part.
+    // A reported offset skips all three tiers.
     const start =
       reported === null ? locatePart(input, splitPart, cursor) : reported;
     if (start === null) {
@@ -410,11 +366,9 @@ const anchorParts = (input, splitter, baseOffset) => {
  * preferred to stay together in the same chunk; parts across groups can split
  * if a boundary is reached and the next group wouldn't fit.
  *
- * Each group carries its absolute `baseOffset` in the joined input string so
- * callers don't need to recover it by searching. This is what makes paragraph
- * mode robust against adversarial inputs where a paragraph's content appears
- * as a substring inside an earlier paragraph or where empty elements shift
- * what `indexOf` would have returned.
+ * Each group carries its absolute `baseOffset`, computed arithmetically rather
+ * than recovered by searching. That is what keeps paragraph mode correct when a
+ * paragraph's content also appears inside an earlier one.
  *
  * @param {string} strategy
  * @param {string[]} inputs
@@ -472,26 +426,21 @@ const boundaryGroups = (strategy, inputs) => {
  * - `chunks[i].end >= chunks[i+1].start` for adjacent pairs.
  * - `chunks[chunks.length - 1].end === total input length`.
  *
- * Code units between the splitter's anchored parts (whitespace stripped by
- * `split(/\s+/)`, paragraph `\n\n` delimiters, tokenizer-dropped multi-byte
- * fragments) are absorbed into the *previous* chunk by extending its `end`
- * forward to the next chunk's `start`. This means callers can rely on
- * positions to attribute every source code unit to a chunk — useful for
- * RAG citations, source highlighting, and re-chunking. The one exception
- * is code units before `chunks[0].start`, which have no previous chunk to
- * extend into and remain uncovered.
+ * Code units between anchored parts (whitespace stripped by `split(/\s+/)`,
+ * paragraph `\n\n` delimiters, tokenizer-dropped fragments) are absorbed into
+ * the *previous* chunk by extending its `end` forward, so callers can attribute
+ * every source code unit to a chunk — RAG citations, source highlighting,
+ * re-chunking. The one exception is code units before `chunks[0].start`, which
+ * have no previous chunk to extend into.
  *
- * Trade-off: chunk text may carry trailing whitespace or `\n\n` delimiters
- * absorbed from the gap. A caller who wants trimmed text can trim it
- * themselves — `chunk.text.trim()` for string input, or per element when
- * `text` is a `string[]`. The reverse (dropped content, want it back) would
- * require re-reading source. The library prefers lossless.
+ * Trade-off: chunk text may carry trailing whitespace or `\n\n` absorbed from
+ * the gap. A caller who wants trimmed text can trim it; the reverse would
+ * require re-reading source, so the library prefers lossless.
  *
  * ## chunkSize
- * `chunkSize` counts splitter *parts*, not code units or graphemes. With
- * multi-byte content the part-count may *undercount* relative to user
- * expectation if the tokenizer drops un-anchorable parts (see Multibyte
- * section in README).
+ * Counts splitter *parts*, not code units or graphemes. With multi-byte content
+ * it may *undercount* if the tokenizer drops un-anchorable parts (see the
+ * README's Multibyte section).
  *
  * ## Chunk strategies
  * - `"character"` (default): pack as many parts as fit per chunk.

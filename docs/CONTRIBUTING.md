@@ -18,15 +18,14 @@ Install the OpenSpec CLI **globally**:
 npm install -g @fission-ai/openspec@latest   # requires Node >= 20.19
 ```
 
-It is intentionally _not_ a `devDependency` — this library ships zero runtime deps and a
-deliberately trimmed dev toolchain (see AGENTS.md, "Don't reintroduce removed tooling").
+Intentionally _not_ a `devDependency` — see AGENTS.md, "Don't reintroduce removed tooling".
 The `/opsx:*` commands and `openspec-*` skills under `.claude/` **are** committed, so the
 workflow works on a fresh clone; run `openspec update` after a CLI upgrade.
 
 ## Spec workflow
 
 - `openspec/specs/` — what the library guarantees today (`chunking`, `chunk-coverage`,
-  `multibyte-anchoring`, `chunk-extraction`). Structured source of truth.
+  `multibyte-anchoring`, `chunk-extraction`, `splitter-positions`). Structured source of truth.
 - `openspec/changes/` — one folder per proposal: `proposal.md`, `design.md`, spec deltas
   under `specs/`, `tasks.md`. Archiving merges the deltas into `openspec/specs/`.
 - `README.md` — the human-facing narrative. When behavior changes, update the spec _and_
@@ -50,15 +49,9 @@ Releases are automated: merging to `main` publishes to npm over OIDC — no manu
 
 ### Add a changeset to your PR
 
-If your change affects published behavior (a fix, feature, or anything users will notice),
-add a changeset:
-
-```sh
-npx changeset
-```
-
-This prompts you for a bump type and a summary, then writes a markdown file under
-`.changeset/`. **Commit that file with your PR.**
+If your change affects published behavior, run `npx changeset`. It prompts for a bump type
+and a summary, then writes a markdown file under `.changeset/`. **Commit that file with your
+PR.**
 
 - **Bump type** — while pre-1.0, `minor` is the breaking-change slot (`0.2.0` → `0.3.0`)
   and `patch` covers fixes and compatible features alike; skip `major`, which publishes

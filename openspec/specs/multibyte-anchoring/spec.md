@@ -24,23 +24,20 @@ what keeps the corrected `start` at or after the cursor. Anchoring at the match 
 itself would place a part of width `part.length` with its left edge at an interior grapheme,
 contradicting the length-based advance below.
 
-**Tier 3 SHALL verify a candidate before accepting it.** The anchor grapheme is one cluster
-out of the whole part, so a match on it is evidence about that cluster only. Before accepting
-a candidate offset, the system SHALL check that every code unit of the part that the splitter
-could not have invented — everything other than U+FFFD, combining marks and variation
-selectors — appears at the corresponding offset in the source. Where it does not, the system
-SHALL continue the search from the next occurrence of the anchor grapheme rather than accept
-the candidate. This is not the same test as a Tier 2 verbatim match, which already implies
-agreement at every position and therefore verifies nothing; a Tier 3 candidate does not.
+**Tier 3 SHALL verify a candidate before accepting it.** A match on the anchor grapheme is
+evidence about that cluster only. Before accepting a candidate offset, the system SHALL check
+that every code unit of the part the splitter could not have invented — everything other than
+U+FFFD, combining marks and variation selectors — appears at the corresponding offset in the
+source, and SHALL otherwise continue from the next occurrence. A Tier 2 verbatim match already
+implies agreement at every position, so the same test verifies nothing there.
 
 **The system SHALL skip Tier 2 for every part containing U+FFFD**, whether or not the source
 contains one. For a source with no U+FFFD this is an equivalence — the skipped search could
-only have reported "not found". For a source that does contain one it is a deliberate
-preference for Tier 3 over a verbatim match: U+FFFD is a character the splitter invented, so
-a verbatim hit on it carries no information about where the part came from, and acting on
-such a hit displaces parts and throws. U+FFFD is the only character a supported splitter can
-introduce that was not in the source (see "Supported tokenizer boundary"), so no other part
-content admits either inference.
+only report "not found". For a source that does contain one it is a preference for Tier 3:
+U+FFFD is a character the splitter invented, so a verbatim hit on it carries no information
+about where the part came from, and acting on such a hit displaces parts and throws. U+FFFD is
+the only character a supported splitter can introduce that was not in the source (see
+"Supported tokenizer boundary").
 
 Regardless of which tier located the part, the system SHALL set `end = start + part.length`
 clamped to input length, and SHALL advance the cursor to that `end`. This length-based
@@ -105,18 +102,12 @@ trigger a search whose outcome is already determined or whose result would not b
 because a per-part search proportional to the remaining input makes the whole split
 quadratic — a document that is 10x larger must not cost ~100x more to chunk.
 
-Prior to this change the guarantee excluded a source containing U+FFFD, on the grounds that
-a U+FFFD-bearing part is genuinely findable there so Tier 2 could not be skipped. Tier 2 is
-skipped for such parts regardless of the source, for the correctness reasons in "Three-tier
-locate strategy", and the unbounded per-part search goes with it.
+One case falls outside the guarantee by design: a splitter that mutates bytes without emitting
+U+FFFD keeps the unbounded search, and is already unsupported for correctness reasons (see
+"Mutating splitters are unsupported").
 
-One case still falls outside the guarantee by design. A splitter that mutates bytes without
-emitting U+FFFD keeps the unbounded search, and is already unsupported for correctness
-reasons (see "Mutating splitters are unsupported").
-
-Within its scope this is a behavioral guarantee, not an implementation note: callers chunk
-whole documents, and a quadratic term makes large multi-byte inputs unusable rather than
-merely slow.
+Within its scope this is a behavioral guarantee, not an implementation note — callers chunk
+whole documents, and a quadratic term makes large multi-byte inputs unusable.
 
 #### Scenario: Growing the input grows anchoring time proportionally
 
@@ -217,50 +208,38 @@ consumed source span, the presence of a literal U+FFFD in the source SHALL NOT c
 that the same input without that character would not produce, and SHALL NOT displace any
 part from the position it would otherwise anchor to.
 
-This is the correctness counterpart to the linearity requirement in "Anchoring cost is
-linear in input length". Both stem from the same precondition, and both hold for a source
-that contains U+FFFD rather than carving it out.
+This is the correctness counterpart to "Anchoring cost is linear in input length". Both stem
+from the same precondition and both hold for a source that contains U+FFFD.
 
-Two narrow exceptions apply, both stated rather than implied.
+Three narrow exceptions apply, all stated rather than implied. In each, coverage and the
+correspondence between a chunk's text and its positions still hold — a displaced boundary moves
+earlier, so code units join the following chunk rather than being lost. None can be closed from
+the text; the remedy is a splitter that reports its own positions (see the `splitter-positions`
+capability).
 
-**Tier 1 may still match a manufactured bare U+FFFD.** Tier 1 tests only whether the source
-begins with the part at the cursor, and at that position a manufactured bare U+FFFD is
-byte-identical to a literal one. When a literal U+FFFD stands exactly at the cursor, a
-manufactured bare part MAY anchor there. This adds a chunk boundary at that position and
-attributes that one code unit to the wrong part; because the part and the character it
-matched are both one code unit wide, the cursor advances by exactly the consumed span, so no
-subsequent part is displaced and coverage is unaffected. The system SHALL NOT drift as a
-result of such a match. Candidate verification does not reach this case, because Tier 1 fires
-before Tier 3.
+**Tier 1 may still match a manufactured bare U+FFFD.** At the cursor a manufactured bare U+FFFD
+is byte-identical to a literal one, so a literal U+FFFD standing exactly there MAY claim a
+manufactured part. Both are one code unit wide, so the cursor advances by exactly the consumed
+span: one extra chunk boundary, no drift, no displaced part. Candidate verification does not
+reach this case, because Tier 1 fires before Tier 3.
 
 **A mixed part may still anchor on a decoy that verification cannot distinguish.** Candidate
-verification (see "Three-tier locate strategy") rejects an offset where the part's
-non-invented code units do not align, which resolves the common form of this exception. It
-does not resolve every form: where an earlier offset happens to align on all of them — easier
-the more of the part is U+FFFD, since those positions impose no constraint — the earlier
-offset is accepted and the part anchors before its true position. Reaching this at all
-requires a splitter whose dropped span contains a character that can also **begin** a part.
-Multi-character string delimiters qualify — `text.split("\n\n")`, `text.split(". ")`,
-`text.split("...")` — because a lone `\n` is not `"\n\n"`. Character-class regex splitters do
-not, however many characters they drop: a part containing a class member would itself have
-been split there, so no part can begin with a character the span contains. That rules out
+verification resolves the common form. It does not resolve the case where an earlier offset
+happens to align on every non-invented code unit — easier the more of the part is U+FFFD, since
+those positions impose no constraint. Reaching this requires a splitter whose dropped span
+contains a character that can also **begin** a part. Multi-character string delimiters qualify
+(`text.split("\n\n")`, `text.split(". ")`, `text.split("...")`) because a lone `\n` is not
+`"\n\n"`. Character-class regex splitters do not, however many characters they drop: a part
+containing a class member would itself have been split there. That rules out
 `text.split(/[.!?]+/)` and `text.split(/\s+/)`; `text.split('')` and `tiktoken` drop nothing.
 
-Where it occurs, the system SHALL still preserve coverage and the correspondence between a
-chunk's text and its positions: the boundary moves earlier, so code units join the following
-chunk rather than being lost.
-
-**A part with no U+FFFD may anchor on a verbatim decoy, independent of this exception.** Tier 2
-takes the first verbatim occurrence at or after the cursor, and where a splitter drops a
-multi-character span that itself contains the part, that occurrence can precede the part's true
-position — `text.split("...")` over `"…漢...é...."` anchors the final `"."` on the separator's
-first `.` rather than the source's own. This is not a multibyte or U+FFFD behaviour: it needs no
-replacement character anywhere and it predates candidate verification, which cannot address it
-because a Tier 2 hit aligns at every position by construction. It is recorded here because the
-same corpus surfaces both, and separating them is what keeps the U+FFFD residual measurable.
-Coverage and the text-to-position correspondence hold in this case too. It cannot be closed from
-the text, since every candidate offset tiles the source; the remedy is a splitter that reports its
-own positions — see the `splitter-positions` capability.
+**A part with no U+FFFD may anchor on a verbatim decoy.** Tier 2 takes the first verbatim
+occurrence at or after the cursor, and where a splitter drops a multi-character span containing
+a copy of the part, that occurrence can precede the part's true position — `text.split("...")`
+over `"…漢...é...."` anchors the final `"."` on the separator's first `.`. This needs no
+replacement character anywhere, and candidate verification cannot address it because a Tier 2
+hit aligns at every position by construction. It is recorded here because the same corpus
+surfaces both, and separating them is what keeps the U+FFFD residual measurable.
 
 #### Scenario: Manufactured U+FFFD does not match a literal one later in the source
 

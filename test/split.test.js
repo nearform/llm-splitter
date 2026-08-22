@@ -1149,11 +1149,9 @@ describe("split", () => {
             splitter: whitespaceSplitter,
           });
 
-          // The new grapheme-based anchoring correctly locates the inner '🚀'
-          // token in "more 🚀 text here". The previous algorithm silently
-          // dropped tokens that were entirely surrogate-pair code units
-          // (charCode > 255), producing 8 anchored tokens instead of 9. With
-          // 9 real tokens at chunkSize=5/chunkOverlap=2 we get 3 chunks, not 2.
+          // Grapheme anchoring locates the inner '🚀' token in "more 🚀 text
+          // here", so all 9 tokens anchor. At chunkSize=5/chunkOverlap=2 that
+          // is 3 chunks.
           assert.deepStrictEqual(result, [
             { text: ["hi👋 w🌍rld wow😃", "🚀", "more"], start: 0, end: 23 },
             { text: ["🚀", "more 🚀 text here"], start: 17, end: 36 },
@@ -1433,20 +1431,17 @@ describe("split", () => {
       });
 
       it("does not anchor a manufactured replacement char on a literal one", () => {
-        // tiktoken fragments the leading 漢 into two bare U+FFFD parts. The
-        // source also holds a literal U+FFFD at index 14, which used to
-        // re-enable the verbatim search, so a manufactured part matched that
-        // literal one 13 code units downstream, stranded the cursor past
-        // " world", and threw.
+        // tiktoken fragments the leading 漢 into two bare U+FFFD parts, and the
+        // source holds a literal U+FFFD at index 14. A manufactured part must
+        // not match that literal one 13 code units downstream, which would
+        // strand the cursor past " world".
         const withLiteral = split("漢 hello world � tail", {
           chunkSize: 100,
           splitter: tokenSplitter,
         });
-        // The same input with the replacement char swapped for an ordinary
-        // character is the control, and it succeeds either way with
-        // [{ text: " hello world X tail", start: 1, end: 20 }]. Comparing
-        // against it is what isolates the U+FFFD as the cause rather than the
-        // multi-byte character.
+        // Control: the same input with the replacement char swapped for an
+        // ordinary character. Comparing against it isolates the U+FFFD as the
+        // cause rather than the multi-byte character.
         const control = split("漢 hello world X tail", {
           chunkSize: 100,
           splitter: tokenSplitter,
@@ -1462,10 +1457,10 @@ describe("split", () => {
       });
 
       it("drops a bare replacement part rather than matching a literal one", () => {
-        // The same shape as above with no native dependency, so the regression
-        // still bites if the tiktoken devDependency is ever dropped: "漢"
-        // fragments into two bare U+FFFD parts, and the source holds a literal
-        // one for them to spuriously match.
+        // The same shape as above with no native dependency, so it still bites
+        // if the tiktoken devDependency is ever dropped: "漢" fragments into two
+        // bare U+FFFD parts, and the source holds a literal one for them to
+        // spuriously match.
         /** @param {string} text */
         const fragmentingSplitter = (text) =>
           [...text].flatMap((ch) => (ch === "漢" ? ["�", "�"] : [ch]));
@@ -1532,9 +1527,9 @@ describe("split", () => {
         const chunks = split(input, { chunkSize: 8, splitter });
 
         // `[1,4)`, not `[2,4)`: the part "�cd" is 3 code units and a part's
-        // span equals its length, so its left edge belongs at 4-3. The
-        // replacement char stands in for the source's "b". Reporting 2 was the
-        // anchor grapheme "c"'s own position standing in for the part's.
+        // span equals its length, so its left edge belongs at 4-3, with the
+        // replacement char standing in for the source's "b". `[2,4)` would be
+        // the anchor grapheme "c"'s own position standing in for the part's.
         assert.deepStrictEqual(
           chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
           [["bcd", 1, 4]],
@@ -1587,9 +1582,8 @@ describe("split", () => {
         // mark *after* a replacement char merges into it, so `Intl.Segmenter`
         // reports one cluster rather than two — and that cluster is neither a
         // bare replacement char nor mark-only. Testing the two conditions
-        // separately let it through as an anchor, and the anchor search then
-        // failed on a character the splitter had invented, throwing instead of
-        // dropping the part.
+        // separately lets it through as an anchor, and the search then hunts
+        // for a character the splitter invented, throwing instead of dropping.
         const input = "café naïve";
         /** @param {string} text */
         const splitter = (text) =>
@@ -1833,10 +1827,10 @@ describe("split", () => {
 
     describe("anchoring cost", () => {
       // Every fourth part becomes a replacement char, the shape a BPE
-      // tokenizer produces on dense multi-byte text. The source holds none,
-      // so those parts exist nowhere in it and the verbatim search for them
-      // can only fail — after scanning to the end of the input, which is
-      // what once made whole-document splits quadratic.
+      // tokenizer produces on dense multi-byte text. The source holds none, so
+      // those parts exist nowhere in it and a verbatim search for them can only
+      // fail after scanning to the end of the input — quadratic over the whole
+      // document if tier 2 is ever re-enabled for U+FFFD-bearing parts.
       /** @param {string} text */
       const fragmentingSplitter = (text) =>
         [...text].map((ch, i) => (i % 4 === 3 ? "�" : ch));
@@ -1862,20 +1856,12 @@ describe("split", () => {
       };
 
       it("grows linearly with input size", () => {
-        // An 8x span, not 2x: at 2x the quadratic term does not yet dominate
-        // the linear per-part work at a size this suite can afford, and a
-        // quadratic implementation measures only ~2.6x — inside any usable
-        // margin. Across 8x, linear anchoring measures ~6-9x and quadratic
-        // ~26-35x, so the threshold sits at twice the ideal factor with
-        // room on both sides. If the baseline ever gets too small to divide
-        // by, raise BASE rather than the threshold.
-        //
-        // BASE is 100_000 rather than 40_000 because the ratio is only as
-        // stable as its denominator. At 40_000 the baseline measured 2.5-7ms,
-        // and that spread alone moved observed growth between 5.4x and 12.1x
-        // across repeated local runs — close enough to 16 that a loaded CI
-        // runner could trip it with no regression present. A larger baseline
-        // costs a little wall-clock and buys back the margin.
+        // An 8x span, not 2x: at 2x a quadratic implementation measures only
+        // ~2.6x, inside any usable margin. Across 8x, linear measures ~6-9x and
+        // quadratic ~26-35x. BASE is 100_000 because the ratio is only as
+        // stable as its denominator — at 40_000 the baseline measured 2.5-7ms
+        // and growth swung 5.4-12.1x, close enough to 16 to trip on a loaded CI
+        // runner with no regression present. Raise BASE, never the threshold.
         const SPAN = 8;
         const BASE = 100_000;
         const baseline = fastestSplitMs(BASE);
@@ -1892,15 +1878,12 @@ describe("split", () => {
         );
       });
 
-      // The source above holds no U+FFFD, which was the only case the
-      // linearity guarantee used to cover. A source that has one re-enabled
-      // the verbatim search for every U+FFFD-bearing part, and that case was
-      // carved out as a permanent limitation. It is not permanent: skipping
-      // tier 2 for those parts closes it. Parts here are deliberately *mixed*
-      // — one real char plus a manufactured U+FFFD — because those are the
-      // ones that each paid a full failed scan. Two code units per part
-      // against two of source, so length still equals span and the cursor
-      // cannot run off the end.
+      // Companion to the case above, for a source that itself contains U+FFFD.
+      // Parts here are deliberately *mixed* — one real char plus a manufactured
+      // U+FFFD — since those are the ones that would each pay a full failed
+      // verbatim scan without the tier 2 skip. Two code units per part against
+      // two of source, so length still equals span and the cursor cannot run
+      // off the end.
       /** @param {string} text */
       const mixedFragmentingSplitter = (text) => {
         const chars = [...text];
@@ -1927,10 +1910,9 @@ describe("split", () => {
       it("grows linearly when the source itself contains U+FFFD", () => {
         // BASE is far smaller than the test above because every part here
         // reaches tier 3 and pays a grapheme segmentation, so the baseline is
-        // already ~10ms — measured at 10.2-12.3ms across repeated runs, a
-        // stable enough denominator. Growth measured 7.6-8.2x with the tier 2
-        // skip in place and 45.3x without it, so the threshold sits with ~2x
-        // margin below and ~3x above. Raise BASE, never the threshold.
+        // already ~10-12ms — a stable enough denominator. Growth measures
+        // 7.6-8.2x with the tier 2 skip and 45.3x without. Raise BASE, never
+        // the threshold.
         const SPAN = 8;
         const BASE = 12_500;
         const baseline = fastestReplacementBearingMs(BASE);

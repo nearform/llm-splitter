@@ -1,22 +1,14 @@
 /**
  * Head-to-head benchmark: this working copy vs. the published `llm-splitter`.
- *
- * Run it after any algorithm change in `src/split.js`. Verify perf claims by
- * measuring, not by reasoning — the `findGrapheme` slow path was assumed fine
- * until this benchmark surfaced a 659x worst-case slowdown against
- * byte-dropping splitters. The fix (replacing an `Intl.Segmenter` walk over
- * `input.slice(cursor)` with a native `indexOf`) was obvious in hindsight; the
- * magnitude was not, until it was measured.
+ * Run it after any algorithm change in `src/split.js` — verify perf claims by
+ * measuring, not by reasoning.
  *
  * ## Public API only
  *
  * Both sides are driven through `split()` and `getChunk()` — the only exports
- * the two versions have in common, and the only ones a consumer can rely on.
- * (The published library also exports `splitToParts`; this copy does not, so
- * the benchmark cannot use it.) Everything the diff report knows is derived
- * from `{ text, start, end }` chunk objects plus `getChunk()`. Nothing reaches
- * into module internals, so a scenario that looks wrong here is wrong for a
- * consumer too.
+ * the two versions have in common. Everything the diff report knows is derived
+ * from `{ text, start, end }` chunk objects plus `getChunk()`, so a scenario
+ * that looks wrong here is wrong for a consumer too.
  *
  * ## Prerequisite
  *
@@ -68,28 +60,24 @@
  * deliberately anchors better than the published one — read the diff report,
  * don't assume they are regressions.
  *
- * The closing summary splits those two concerns apart — PERFORMANCE (how the
- * ratios distribute, and which scenarios this copy is *slower* on, named with
- * their absolute millisecond cost) then CORRECTNESS (what still disagrees with
- * the baseline, and whether any of it is text lost or a broken contract). The
- * VERDICT block is the short answer: one line per thing that is fine and one
- * per thing that is not, with anything past the red thresholds named outright.
+ * The closing summary splits the two concerns apart: PERFORMANCE (ratio
+ * distribution, plus any scenario this copy is *slower* on with its absolute
+ * cost) then CORRECTNESS (what still disagrees, and whether any of it is text
+ * lost or a broken contract). VERDICT is the short answer.
  *
  * ## Normalization: separating intended changes from real ones
  *
  * Most raw differences are changes we chose to make, so comparing verbatim
- * buries the interesting cases. Each intended change is written down as a
- * `NORMALIZERS` entry — a prose rule plus a transform that rewrites the
- * *baseline* to follow this copy's rule. Run with normalizers on (the
- * default) and whatever still differs is a **real** difference, reported
- * under "REAL DIFFERENCES" and labelled by `residual`.
+ * buries the interesting cases. Each intended change is a `NORMALIZERS` entry —
+ * a prose rule plus a transform that rewrites the *baseline* to follow this
+ * copy's rule. With normalizers on (the default), whatever still differs is a
+ * **real** difference, reported under "REAL DIFFERENCES" and labelled by
+ * `residual`.
  *
- * A normalizer doubles as documentation: if the rule cannot be stated
- * crisply enough to implement, it is not yet a decision. Changes that alter
- * how the input is carved up (rather than how a chunk is reported) cannot be
- * undone from chunk output — those are catalogued in `NON_NORMALIZABLE` and
- * explain every surviving residual. `--explain` prints both catalogues;
- * `--raw` turns normalization off.
+ * Changes that alter how the input is carved up (rather than how a chunk is
+ * reported) cannot be undone from chunk output — those are catalogued in
+ * `NON_NORMALIZABLE` and explain every surviving residual. `--explain` prints
+ * both catalogues; `--raw` turns normalization off.
  *
  * Deliberately not wired into `npm run check` — it takes minutes and its first
  * run reaches the network. `npm test` globs `test/*.test.js`, so the runner
@@ -616,13 +604,9 @@ const contractViolations = (chunks, input, getChunk) =>
 
 /**
  * A *documented, intentional* divergence between the two versions, expressed
- * as a transform that removes it from the comparison.
- *
- * The point is subtractive: apply every normalizer that describes a change we
- * meant to make, and whatever still differs afterwards is a **real**
- * difference — either an unintended regression, or a change nobody wrote down.
- * A normalizer is therefore also a piece of documentation: if you cannot state
- * the rule crisply enough to implement it here, it is not yet a decision.
+ * as a transform that removes it from the comparison. Whatever still differs
+ * after all of them is a real difference — an unintended regression, or a
+ * change nobody wrote down.
  *
  * Normalizers only ever rewrite the *baseline* (old) side toward this copy's
  * documented rules. They never touch this copy's output — otherwise a genuine

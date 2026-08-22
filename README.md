@@ -14,7 +14,7 @@ A JavaScript library for splitting text into configurable chunks with overlap su
 - ⚡ **High Performance**: Single pass greedy algorithms for optimized processing
 - 🎨 **Flexible Input**: Supports strings, arrays, and custom tokenization
 - 🎯 **Exact Positions**: A splitter that knows its offsets can report them, skipping the anchoring search entirely
-- 📝 **Typed**: Authored in JS with JSDoc annotations; ships `.d.ts` type definitions for full editor and TypeScript consumer support
+- 📝 **Typed**: Authored in JS with JSDoc annotations; ships `.d.ts` type definitions
 
 ## Installation
 
@@ -41,7 +41,10 @@ import type { Chunk, SplitOptions } from "llm-splitter";
 
 Splits text into chunks based on a custom splitter function.
 
-Each chunk contains positional data (`start` and `end`) that may be used to separately retrieve the chunk string (or array of strings) from those arguments alone via `getChunk()`. The purpose of this pairing is for the common scenario of wanting to store embeddings for a chunk in a data (e.g. `pgvector`) but not wanting to also directly store the chunk -- yet being able to get the full text of the chunk later if you have the original string input.
+Each chunk carries positional data (`start` and `end`) that can retrieve the chunk string
+(or array of strings) later via `getChunk()`. This is for the common scenario of storing
+embeddings for a chunk in a database (e.g. `pgvector`) without also storing the chunk text,
+yet still being able to recover it from the original input.
 
 #### Parameters
 
@@ -55,15 +58,20 @@ Each chunk contains positional data (`start` and `end`) that may be used to sepa
 Notes:
 
 - `input` must be a `string` or an array whose elements are all strings; anything else throws `TypeError`.
-- `chunkSize` must be a positive integer ≥ 1
-- `chunkOverlap` must be a non-negative integer ≥ 0
-- `chunkOverlap` must be less than `chunkSize`
-- `splitter` must return an array whose elements are strings, or objects of the form `{ text, start }` reporting where each part came from (see "Reported positions" below). Returning a non-array throws `TypeError`, and returning an element that is neither throws.
-- `splitter` functions can omit text when splitting, but should not mutate the emitted tokens. This means that splitting by spaces is fine (e.g. `(t) => t.split(" ")`) but splitting and changing text is **not allowed** (e.g. `(t) => t.split(" ").map((x) => x.toUpperCase())`). A mutating splitter throws at runtime when a token can't be located in the source — but it can also anchor at a wrong position with no error, so don't rely on it failing loudly (see "Multibyte / Unicode Strings" below).
-- Zero-length tokens returned by a `splitter` are skipped: they anchor nowhere and don't count toward `chunkSize`.
-- Array element boundaries are always token boundaries — each element is tokenized on its own, so a token never spans two array elements.
-- Input with no anchorable content yields no chunks: `split("")` and `split([])` both return `[]`, as does a whitespace-only input under `chunkStrategy: "paragraph"` (paragraph mode trims whitespace, leaving nothing to anchor).
-- Here are some sample `splitter` functions:
+- `chunkSize` must be a positive integer ≥ 1.
+- `chunkOverlap` must be a non-negative integer ≥ 0, and less than `chunkSize`.
+- `splitter` must return an array whose elements are strings, or objects of the form
+  `{ text, start }` reporting where each part came from (see "Reported positions"). Anything
+  else throws `TypeError`.
+- `splitter` functions may **omit** text but must not **mutate** it. Splitting on spaces is
+  fine (`(t) => t.split(" ")`); uppercasing the results is not. A mutating splitter throws
+  when a token can't be located — but it can also anchor at a wrong position with no error,
+  so don't rely on it failing loudly (see "Multibyte / Unicode Strings").
+- Zero-length tokens are skipped: they anchor nowhere and don't count toward `chunkSize`.
+- Array element boundaries are always token boundaries — a token never spans two elements.
+- Input with no anchorable content yields no chunks: `split("")` and `split([])` return `[]`,
+  as does a whitespace-only input under `chunkStrategy: "paragraph"`.
+- Sample `splitter` functions:
   - Character: `text => text.split('')` (default)
   - Word: `text => text.split(/\s+/)`
   - Sentence: `text => text.split(/[.!?]+/)`
@@ -71,7 +79,7 @@ Notes:
 
 #### Returns
 
-Returns an array of chunk objects with the following structure:
+An array of chunk objects:
 
 ```js
 {
@@ -83,8 +91,8 @@ Returns an array of chunk objects with the following structure:
 
 `text` follows the input you passed: `split(str)` gives chunks whose `text` is a `string`,
 `split(arr)` gives chunks whose `text` is a `string[]`. TypeScript consumers get that
-narrowing automatically and don't need to re-check the union — `getChunk` narrows the same
-way. Passing a value typed `string | string[]` still works and still returns the union.
+narrowing automatically; `getChunk` narrows the same way. Passing a value typed
+`string | string[]` still works and still returns the union.
 
 #### Examples
 
@@ -153,12 +161,19 @@ const chunks = split(texts, {
 
 **Paragraph chunking**
 
-By default, we assemble chunks with as many tokens fit in. This default is considered the `chunkStrategy = "character"`. Another option is to fit as many whole _paragraphs_ (denoted by string array end or `\n\n` characters) as we can into a chunk. When the current chunk already holds a complete paragraph and the next paragraph wouldn't fit in what's left, we emit the chunk early so that paragraph can start a fresh one. This approach allows you to keep paragraph structures more contained within chunks which may yield advantageous context outcomes for your upstream usage (in a RAG app, etc).
+The default `chunkStrategy: "character"` fits as many tokens as it can into each chunk.
+`chunkStrategy: "paragraph"` instead fits as many whole _paragraphs_ (delimited by `\n\n` or
+a string array boundary) as it can. When the current chunk already holds a complete paragraph
+and the next one wouldn't fit, the chunk is emitted early so that paragraph can start a fresh
+one — which tends to keep more context together for RAG and similar uses.
 
-Whole paragraphs are a _preference_, not a guarantee. A paragraph still gets split across as many chunks as it needs when:
+Whole paragraphs are a _preference_, not a guarantee. A paragraph is still split across
+chunks when:
 
 - it has more tokens than `chunkSize` on its own, or
-- `chunkOverlap > 0` and the tokens carried over from the previous chunk leave too little room. Carried-over overlap tokens don't count as a paragraph boundary, so a paragraph that would fit in an empty chunk can still be split. If keeping paragraphs whole matters more than overlap context, use `chunkOverlap: 0`.
+- `chunkOverlap > 0` and tokens carried over from the previous chunk leave too little room.
+  Carried-over tokens don't count as a paragraph boundary. If keeping paragraphs whole
+  matters more than overlap context, use `chunkOverlap: 0`.
 
 <details>
   <summary>See example...</summary>
@@ -212,9 +227,9 @@ const chunks = split(texts, {
 
 ### `getChunk(input, start, end)`
 
-Extracts a specific chunk of text from the original input based on start and end positions. For array `input` the positions are treated as if all elements in the array were concatenated into a single long string.
-
-Note that for arrays, the returned result will be an array and that the first and/or last element of the array may be a substring of that array item's text.
+Extracts a chunk of text from the original input by position. For array `input` the positions
+are treated as if all elements were concatenated into one long string, so the returned result
+is an array whose first and/or last element may be a substring of that item's text.
 
 #### Parameters
 
@@ -229,8 +244,12 @@ Note that for arrays, the returned result will be an array and that the first an
 
 Notes:
 
-- Positions are clamped, not validated: a range that falls outside the input returns `""` (string input) or `[]` (array input) rather than throwing, and `start`/`end` below `0` are treated as `0`. A negative `end` therefore yields an empty result — this is _not_ `String.prototype.slice` semantics (`getChunk("hello", 0, -2)` is `""`, while `"hello".slice(0, -2)` is `"hel"`).
-- Every element of an array `input` must be a string, whether or not it falls inside `[start, end)`; a non-string element anywhere throws `TypeError`.
+- Positions are clamped, not validated: a range outside the input returns `""` (string) or
+  `[]` (array) rather than throwing, and `start`/`end` below `0` are treated as `0`. These are
+  _not_ `String.prototype.slice` semantics — `getChunk("hello", 0, -2)` is `""`, while
+  `"hello".slice(0, -2)` is `"hel"`.
+- Every element of an array `input` must be a string, whether or not it falls inside
+  `[start, end)`; a non-string element anywhere throws `TypeError`.
 
 #### Examples
 
@@ -248,15 +267,19 @@ const chunk = getChunk(texts, 0, 16);
 
 ### `delimiterSplitter(delimiter)`
 
-Builds a `splitter` that splits on `delimiter` and reports each part's exact source offset, so `split()` positions those parts from knowledge rather than by searching for them. Empty parts are omitted. See "Reported positions" below for why that matters.
+Builds a `splitter` that splits on `delimiter` and reports each part's exact source offset,
+so `split()` positions those parts from knowledge rather than by searching for them. Empty
+parts are omitted. See "Reported positions" for why that matters.
 
 #### Parameters
 
-- `delimiter` (string) - The separator to split on. Must be a non-empty string; anything else throws `TypeError`.
+- `delimiter` (string) - The separator to split on. Must be a non-empty string; anything else
+  throws `TypeError`.
 
 #### Returns
 
-`(input: string) => Array<{ text: string, start: number }>` — a splitter you can pass straight to `split()`.
+`(input: string) => Array<{ text: string, start: number }>` — a splitter you can pass straight
+to `split()`.
 
 #### Examples
 
@@ -273,14 +296,9 @@ delimiterSplitter(", ")("alpha, beta");
 
 ### Custom Splitter Functions
 
-You can create custom splitter functions for different tokenization strategies:
-
 #### Sentences
 
-Split by sentences using a regular expression.
-
 ```js
-// Sentence-based splitting
 const sentenceSplitter = (text) => text.split(/[.!?]+/);
 const chunks = split(text, {
   chunkSize: 5,
@@ -334,9 +352,13 @@ tokenizer.free();
 
 #### Reported positions
 
-A splitter returns strings, so `split()` has to work out where each part came from by searching the source — and a search can be wrong. Splitting `"a...."` on `"..."` gives `["a", "."]`, and that `"."` is at index 4; a search finds the one at index 1, inside the span the delimiter consumed. Nothing in the text recovers this: offsets 1 through 4 all tile the source, and only the splitter knows which is right.
+A splitter returns strings, so `split()` has to work out where each part came from by
+searching the source — and a search can be wrong. Splitting `"a...."` on `"..."` gives
+`["a", "."]`, and that `"."` is at index 4; a search finds the one at index 1, inside the
+span the delimiter consumed. Nothing in the text recovers this — only the splitter knows.
 
-So a splitter that knows its offsets can hand them over. Return `{ text, start }` in place of a bare string and that offset is used as given, with no search:
+So a splitter that knows its offsets can hand them over. Return `{ text, start }` in place of
+a bare string and that offset is used as given, with no search:
 
 ```js
 split("a....", {
@@ -365,9 +387,16 @@ const chunks = split("a....", {
 ];
 ```
 
-The two forms mix freely in one array, so a splitter can report only the offsets it is sure of and leave the rest to the search. `start` is a UTF-16 code unit offset into the string the splitter was handed — under `chunkStrategy: "paragraph"` that is a single paragraph, not the whole input.
+The two forms mix freely in one array, so a splitter can report only the offsets it is sure
+of and leave the rest to the search. `start` is a UTF-16 code unit offset into the string the
+splitter was handed — under `chunkStrategy: "paragraph"` that is a single paragraph, not the
+whole input.
 
-Reported offsets are validated for _possibility_, not correctness. A `start` that is fractional, negative, past the end of the input, or behind the previous part throws `TypeError`. But `text` is never compared against the source at `start`, because a byte-mutating tokenizer legitimately returns text that differs from the span it consumed — an offset that is merely wrong is used as given, and the splitter owns that.
+Reported offsets are validated for _possibility_, not correctness. A `start` that is
+fractional, negative, past the end of the input, or behind the previous part throws
+`TypeError`. But `text` is never compared against the source at `start`, because a
+byte-mutating tokenizer legitimately returns text that differs from the span it consumed — an
+offset that is merely wrong is used as given, and the splitter owns that.
 
 ### Working with Overlaps
 
@@ -399,7 +428,9 @@ const chunks = split(text, {
 
 ### Chunk Coverage and Positions
 
-Positions index the source as one continuous run of code units. For a string input that is just the string; for an array input it is the elements concatenated in order **with no separator**, so the total length is the sum of the element lengths and _not_ the array's own `length`:
+Positions index the source as one continuous run of UTF-16 code units. For an array input
+that is the elements concatenated in order **with no separator**, so the total length is the
+sum of the element lengths and _not_ the array's own `length`:
 
 ```js
 const totalLength = Array.isArray(input)
@@ -407,58 +438,130 @@ const totalLength = Array.isArray(input)
   : input.length;
 ```
 
-`split()` is **lossless on positions** from `chunks[0].start` onward: every UTF-16 code unit of the source at index `p` (where `chunks[0].start <= p < totalLength`) appears in at least one chunk's `[start, end)` range. `start` and `end` are UTF-16 code-unit offsets — so for non-ASCII text a single character may occupy one or two code units (a typical emoji is two; a CJK character is one). Concretely:
+`split()` is **lossless on positions** from `chunks[0].start` onward: every code unit at
+index `p` (where `chunks[0].start <= p < totalLength`) appears in at least one chunk's
+`[start, end)` range. Concretely:
 
-- `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap` may make them overlap; without overlap they're equal).
+- `chunks[i].end >= chunks[i+1].start` for every adjacent pair (`>=` because `chunkOverlap`
+  may make them overlap; without overlap they're equal).
 - `chunks[chunks.length - 1].end === totalLength`.
 
-The reason: chunks return `{ start, end }` so downstream code can locate them in the source — for RAG citations, source highlighting, re-chunking, completeness checks, and so on. If `split()` dropped code units that the splitter happened to skip (whitespace, paragraph delimiters, tokens that couldn't be anchored), those positions would belong to no chunk and position-based queries would have gaps in their answers ("which chunk owns position 12?" → none). A consumer who wants trimmed chunk text can trim it themselves — `chunk.text.trim()` for string input, or per element when `text` is a `string[]`; going the other way (we trim, they want the content back) is impossible without re-reading the source. So the library keeps everything.
+This exists so downstream code can locate chunks in the source — RAG citations, source
+highlighting, re-chunking, completeness checks. If `split()` dropped the code units a
+splitter skipped (whitespace, paragraph delimiters, unanchorable tokens), those positions
+would belong to no chunk and "which chunk owns position 12?" would answer "none". A consumer
+who wants trimmed text can trim it; going the other way is impossible without re-reading the
+source.
 
 Practical consequences:
 
-- **Chunk starts are clean.** In `chunkStrategy: "paragraph"` mode, leading whitespace inside a paragraph is stripped before anchoring, so `chunks[i].start` (for `i > 0`) lands on real content.
-- **Chunk ends may carry trailing whitespace.** When the splitter drops code units at a paragraph or token boundary, those positions get absorbed into the _previous_ chunk by extending its `end` forward to meet the next chunk's `start`. So a chunk's `text` may end with `"\n\n"` or trailing whitespace — those positions weren't "extra," they were the gap between the splitter's last token in this chunk and the first token in the next.
-- **Leading code units before `chunks[0].start` are uncovered.** If the very first paragraph has leading whitespace, those positions appear in no chunk (no previous chunk to extend forward into them). This is the one place coverage is not full.
+- **Chunk starts are clean.** In `chunkStrategy: "paragraph"` mode, leading whitespace inside
+  a paragraph is stripped before anchoring, so `chunks[i].start` (for `i > 0`) lands on real
+  content.
+- **Chunk ends may carry trailing whitespace.** Code units a splitter dropped at a paragraph
+  or token boundary are absorbed into the _previous_ chunk by extending its `end` forward. So
+  a chunk's `text` may end with `"\n\n"` or trailing whitespace. For LLM input this tends to
+  help: a chunk ending in `"\n\n"` carries an explicit paragraph-boundary signal.
+- **Leading code units before `chunks[0].start` are uncovered.** If the first paragraph has
+  leading whitespace, those positions appear in no chunk — there is no previous chunk to
+  extend into them. This is the one place coverage is not full.
 
-For LLM input this also tends to help, not hurt: a chunk ending with `"\n\n"` carries an explicit paragraph-boundary signal that the model can read.
+Note also that `start` and `end` are code-unit offsets, so a single character may occupy one
+or two of them (a typical emoji is two; a CJK character is one).
 
 ### Multibyte / Unicode Strings
 
-Processing text with multibyte Unicode characters (emoji, CJK, accented Latin, combining marks) is problematic for tokenizers that split byte streams without regard to character boundaries (as noted by [other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). When a tokenizer like `tiktoken` decodes a token that straddles a multi-byte sequence, the result is a JavaScript string containing U+FFFD replacement characters (and sometimes isolated combining marks). `llm-splitter` needs to map each such part back to a `start`/`end` position in the original input.
+Tokenizers that split byte streams without regard to character boundaries are problematic for
+multibyte text (as noted by
+[other text splitting libraries](https://js.langchain.com/docs/how_to/split_by_token/)). When
+`tiktoken` decodes a token straddling a multi-byte sequence, the result is a string containing
+U+FFFD replacement characters (and sometimes isolated combining marks). `llm-splitter` still
+has to map that part back to a `start`/`end` in the original input.
 
-`llm-splitter` anchors each part against the source string with a three-tier locate strategy (cheapest first):
+It does so with a three-tier locate strategy, cheapest first:
 
-1. **`startsWith` at cursor** — byte-preserving splitter with the cursor sitting exactly on the next part (the char and tiktoken happy paths).
-2. **`indexOf(part)` forward from cursor** — byte-preserving splitter that drops bytes between parts (`text.split(/\s+/)` discards whitespace, so the cursor lands in the gap and tier 1 fails). The part still exists verbatim, so a substring search finds it without allocating. **Skipped for any part containing U+FFFD**: the splitter invented that character, so a verbatim match on it says nothing about where the part came from.
-3. **`indexOf(firstAnchorGrapheme(part))` forward from cursor** — byte-mutating splitter (`tiktoken` emitting U+FFFD when a token straddles a multi-byte sequence). Walk the part's [`Intl.Segmenter`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter) graphemes for the first _anchorable_ one (not U+FFFD, not a combining mark or variation selector), locate it in the input, then subtract its offset within the part to get the part's own left edge. Each candidate is verified before it is accepted: the part's non-U+FFFD code units must line up with the source there, or the search moves to the next occurrence. `end` is `start + part.length`, clamped. Chunk boundaries carry no code-point integrity guarantee — `start` can land inside a surrogate pair (see "Chunk Coverage and Positions").
+1. **`startsWith` at cursor** — byte-preserving splitter with the cursor sitting exactly on
+   the next part (the char and tiktoken happy paths).
+2. **`indexOf(part)` forward from cursor** — byte-preserving splitter that drops bytes between
+   parts (`text.split(/\s+/)` discards whitespace, so the cursor lands in the gap and tier 1
+   fails). **Skipped for any part containing U+FFFD**: the splitter invented that character,
+   so a verbatim match on it says nothing about where the part came from.
+3. **`indexOf(firstAnchorGrapheme(part))` forward from cursor** — byte-mutating splitter. Walk
+   the part's [`Intl.Segmenter`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)
+   graphemes for the first _anchorable_ one (not U+FFFD, not a combining mark or variation
+   selector), locate it in the input, then subtract its offset within the part to get the
+   part's own left edge. Each candidate is verified before it is accepted: the part's
+   non-U+FFFD code units must line up with the source there, or the search moves to the next
+   occurrence. `end` is `start + part.length`, clamped.
 
-Four limitations worth knowing about. Every one of them is a consequence of _inferring_ a position from text, so a splitter that reports its own offsets is subject to none of them — see "Reported positions" above.
+#### Known limitations
 
-- **Unanchorable parts** — a part consisting entirely of U+FFFD and/or combining marks is dropped, since nothing in it can be positioned. The source it stood for is still covered: gaps between parts are absorbed forward (see "Chunk Coverage and Positions"). A literal U+FFFD in the source is dropped the same way, because a bare U+FFFD is byte-identical whether the splitter invented it or passed it through.
-- **Mutating splitters** — splitters must not transform tokens. If a part has anchorable graphemes but none are found in the input (e.g. a splitter that lowercases or strips accents), the library throws. It can only throw when the grapheme is genuinely absent, though: a lowercased `"hi"` will happily anchor on some later `h`, yielding a wrong position with no error. Don't rely on a mutating splitter failing loudly.
-- **Tier 2 takes the first verbatim match** — when the span a splitter dropped contains a copy of the part that follows it, the search anchors on that copy and reports a position a few code units early. `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })` puts the `"."` at 1; it is at 4. Plain ASCII, no U+FFFD involved, and the largest of the four in practice. `delimiterSplitter` removes it outright.
-- **A literal U+FFFD in your source** — common in scraped and mojibake-recovered text. Skipping tier 2 for U+FFFD-bearing parts stops a manufactured U+FFFD matching an unrelated literal one, which used to throw on ordinary RAG input. Two narrow effects remain, neither affecting coverage or `chunk.text === getChunk(input, start, end)`. **Tier 1** compares only at the cursor, so a literal U+FFFD sitting exactly there may be claimed by a manufactured part — one code unit attributed to the wrong token, and since both are one unit wide nothing after it shifts. **Tier 3** positions mixed parts by grapheme search rather than exact match; candidate verification settles parts with two or more real code units, but a part that is _mostly_ U+FFFD can still anchor a few code units early, so those characters join the following chunk instead of the preceding one. Raising `chunkOverlap` reduces the practical effect, since the shift is a few code units while the overlap is whole tokens.
+Every one of these is a consequence of _inferring_ a position from text, so a splitter that
+reports its own offsets is subject to none of them — see "Reported positions".
 
-### Supported tokenizers (and a known limitation)
+- **Unanchorable parts are dropped** — a part consisting entirely of U+FFFD and/or combining
+  marks can't be positioned by anything it contains. The source it stood for is still covered:
+  gaps between parts are absorbed forward. A literal U+FFFD in the source is dropped the same
+  way, because a bare U+FFFD is byte-identical whether the splitter invented it or passed it
+  through.
+- **Mutating splitters** — if a part has anchorable graphemes but none are found in the input
+  (a splitter that lowercases or strips accents), the library throws. It can only throw when
+  the grapheme is genuinely absent, though: a lowercased `"hi"` will happily anchor on some
+  later `h`, yielding a wrong position with no error.
+- **Tier 2 takes the first verbatim match** — when the span a splitter dropped contains a copy
+  of the part that follows it, the search anchors on that copy and reports a position a few
+  code units early. `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })`
+  puts the `"."` at 1; it is at 4. Plain ASCII, no U+FFFD involved, and the largest of these
+  in practice. `delimiterSplitter` removes it outright.
+- **A literal U+FFFD in your source** — common in scraped and mojibake-recovered text. Two
+  narrow effects remain, neither affecting coverage or the
+  `chunk.text === getChunk(input, start, end)` correspondence. **Tier 1** compares only at the
+  cursor, so a literal U+FFFD sitting exactly there may be claimed by a manufactured part —
+  one code unit attributed to the wrong token, with nothing after it shifting. **Tier 3**
+  settles parts with two or more real code units via candidate verification, but a part that
+  is _mostly_ U+FFFD can still anchor a few code units early, so those characters join the
+  following chunk instead of the preceding one. Raising `chunkOverlap` reduces the practical
+  effect.
 
-The anchoring model above assumes a splitter whose **decoded part length equals the source span it consumed**. Concretely:
+Chunk boundaries carry no code-point integrity guarantee — `start` can land inside a surrogate
+pair. See "Chunk Coverage and Positions".
 
-- ✅ `text.split('')`, `text.split(/\s+/)`, sentence/line regex splitters — preserve source bytes verbatim.
-- ✅ `tiktoken` (OpenAI cl100k, ada-002, gpt-4o, etc.) — substitutes exactly one U+FFFD per undecodable byte, so length matches source span. This holds whether or not your source itself contains literal U+FFFD, with the two narrow exceptions described under "Multibyte / Unicode Strings" above. `tiktoken` itself drops nothing between parts, so only the first of the two (a literal U+FFFD at the cursor claiming a manufactured part) applies to it.
-- ⚠️ Embedding models whose tokenizer pipeline **normalizes during decode** (e.g. `gte-small`, `bge-small`, uncased BERT-style WordPiece — typically loaded via `@huggingface/transformers`) — can produce decoded strings longer than the source bytes they consumed. The cursor advances past the next real source position; subsequent tokens either throw `"Splitter returned a part that could not be located in input"` or anchor in the wrong place. To be precise, it's the _model_'s tokenizer config that drives this (lowercase, accent strip, NFC/NFD); the runtime is just executing what the model ships.
+### Supported tokenizers
 
-If you're using one of the affected embedding-model tokenizers today, the safest workarounds are:
+The anchoring model assumes a splitter whose **decoded part length equals the source span it
+consumed**.
 
-1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
-2. Wrap your splitter to pad/trim decoded output to match source length before returning.
+- ✅ `text.split('')`, `text.split(/\s+/)`, sentence/line regex splitters — preserve source
+  bytes verbatim.
+- ✅ `tiktoken` (OpenAI cl100k, ada-002, gpt-4o, etc.) — substitutes exactly one U+FFFD per
+  undecodable byte, so length matches source span. `tiktoken` drops nothing between parts, so
+  of the U+FFFD caveats above only the tier 1 one applies to it.
+- ⚠️ Embedding models whose tokenizer pipeline **normalizes during decode** (e.g. `gte-small`,
+  `bge-small`, uncased BERT-style WordPiece — typically loaded via `@huggingface/transformers`)
+  — can produce decoded strings longer than the source bytes they consumed. The cursor advances
+  past the next real source position; subsequent tokens either throw
+  `"Splitter returned a part that could not be located in input"` or anchor in the wrong
+  place. It's the _model_'s tokenizer config that drives this (lowercase, accent strip,
+  NFC/NFD), not the runtime.
 
-Reporting positions does **not** help here. A reported part still takes its `end` from `start + text.length`, so an inflated part overshoots the cursor and the next part's honest offset is then rejected as moving backwards. Sidestepping inflation needs the consumed span, not just the start.
+If you're using an affected tokenizer today, either chunk with a 1:1 tokenizer (tiktoken is a
+common choice) even if your embedding model is from elsewhere, or wrap your splitter to
+pad/trim decoded output to match source length. Reporting positions does **not** help here: a
+reported part still takes its `end` from `start + text.length`, so an inflated part overshoots
+the cursor and the next part's honest offset is rejected as moving backwards. Sidestepping
+inflation needs the consumed span, not just the start.
 
-Expanding tolerance for length-inflating tokenizers is tracked in [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/) — it's a planned future enhancement, not a permanent constraint. That change records the real-world `gte-small` failure modes and the regression fixtures that will gate the fix.
+Expanding tolerance for length-inflating tokenizers is tracked in
+[openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/).
 
-When parts are gathered into chunks, this means that some chunks may _undercount_ the number of tokens the splitter produced — there can be more semantic tokens in a chunk than `chunkSize` specifies. In a simple test on 10MB of blog post content using the `tiktoken` tokenizer, 99.6% of parts matched the input on tier 1. If your downstream has a hard token limit (like an embedding API's max tokens), apply a small `chunkSize` discount to accommodate multibyte undercounting.
+#### Token undercounting
 
-Let's take a quick look at multibyte handling with some emojis and a `tiktoken`-based splitter:
+Because unanchorable parts are dropped, a chunk may hold more semantic tokens than
+`chunkSize` specifies. On 10MB of blog content with `tiktoken`, 99.6% of parts matched on
+tier 1. If your downstream has a hard token limit (an embedding API's max tokens, say), apply
+a small `chunkSize` discount.
+
+#### Example
 
 ```js
 const text = `
@@ -495,9 +598,8 @@ console.log(JSON.stringify(chunks, null, 2));
 ];
 ```
 
-The leading `\n` in the input doesn't appear in any chunk — paragraph mode strips leading whitespace from each paragraph and the very first chunk has no previous chunk to extend back into. See "Chunk Coverage and Positions" above.
-
-Ultimately, this approach represents a tradeoff: while some higher-level Unicode data may be under counted during the splitting process, it ensures that chunk start/end positions can be reliably determined with any user-supplied splitter function, preventing malformed chunks and internal errors.
+The leading `\n` appears in no chunk — paragraph mode strips leading whitespace and the first
+chunk has no previous chunk to extend back into.
 
 ## License
 
