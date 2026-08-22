@@ -300,25 +300,36 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Backtracking anchor walk** — not started, and the only remaining way to close the last
-  two anchoring residuals: a literal U+FFFD at the cursor claiming a manufactured bare part,
-  and a genuinely-verbatim mixed part anchoring on an earlier decoy grapheme. Both are
-  documented limitations in `multibyte-anchoring`. A guard that merely _picks between_ tier 2's
-  answer and the offset-corrected tier 3 candidate cannot work — the spurious and the
-  legitimate case present identical signatures with opposite correct answers. But do not read
-  that as "no local rule helps", which is how this entry originally overstated it: **verifying
-  the part's non-U+FFFD code units against the source at the tier 3 candidate is measured to
-  fix the decoy class substantially** (multi-character-dropping regression 1,663 → 678 of
-  16,842, every existing gate unchanged, still linear). That is the concrete next step and it
-  is cheaper than backtracking; backtracking is what the remaining gap and the tier 1 residual
-  need. The demonstration is in
+- **Decoy grapheme anchoring** — a genuinely-verbatim mixed part can anchor on an earlier
+  occurrence of its first anchorable grapheme, reporting a position a few code units early. A
+  documented limitation in `multibyte-anchoring`, filed as
+  [openspec/changes/decoy-grapheme-anchoring/](openspec/changes/decoy-grapheme-anchoring/) with
+  a measured prototype, not just a proposal: verifying the part's non-U+FFFD code units against
+  the source at the tier 3 candidate takes the class from 1,663 wrong to 678 of 16,842 and
+  leaves every existing gate untouched, including linearity.
+
+  **It is filed rather than fixed on purpose, and the numbers are why.** Nothing is dropped —
+  coverage and `chunk.text === getChunk(...)` both hold — the boundary just lands early:
+  2-3 code units in the large majority, 9 at worst, and in 89% of affected cases the only
+  thing that changes chunk is the separator the splitter discarded. **`chunkOverlap: 2` removes
+  the observable effect entirely** (tokens left whole in no chunk: 28 → 0 at `chunkSize: 8`).
+  So don't reach for the fix on the strength of "1,663 wrong positions" alone — read that
+  change's `design.md` → Decision 2 first. What would change the priority is a caller using a
+  sentence or paragraph splitter over U+FFFD-bearing text at `chunkOverlap: 0` and depending on
+  exact boundaries. Note the default is `chunkOverlap: 0`.
+
+- **Backtracking anchor walk** — not started, and what is genuinely left once the above ships:
+  the residual 678 and the tier 1 case (a literal U+FFFD at the cursor claiming a manufactured
+  bare part). A guard that merely _picks between_ tier 2's answer and the offset-corrected
+  tier 3 candidate cannot work — the spurious and the legitimate case present identical
+  signatures with opposite correct answers, demonstrated in
   [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md)
-  → Decision 4; don't re-derive it, and don't accept a proposed guard that doesn't address it.
-  Separating them needs knowing whether the _remaining_ parts still anchor under each choice.
-  The cost is the open question: worst case it reintroduces a per-part factor, which is
-  exactly what `anchor-scan-short-circuit` spent a change removing. Nobody has asked for this
-  — both residuals are benign — so it stays unstarted until a caller reports a real
-  mis-anchoring it would fix.
+  → Decision 4. Don't re-derive that, and don't accept a proposed guard that ignores it — but
+  don't over-read it either, since candidate verification above is a local rule that does help.
+  Closing the rest needs knowing whether the _remaining_ parts still anchor under a given
+  choice, and the cost is the open question: worst case it reintroduces a per-part factor,
+  which is exactly what `anchor-scan-short-circuit` spent a change removing. Try the one-part
+  lookahead in `decoy-grapheme-anchoring`'s Open Questions before the full search.
 
 - **Literal U+FFFD in the source** — shipped and archived. A source carrying a literal U+FFFD
   made `split()` throw or mis-anchor under `tiktoken`, because tier 2 matched a manufactured

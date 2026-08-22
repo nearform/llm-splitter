@@ -231,6 +231,11 @@ all. Measured over 16,842 randomized multi-character-dropping cases whose source
 U+FFFD, 1,663 anchored a part away from its true offset, against 489 before Tier 2 was
 skipped.
 
+Where it occurs, the system SHALL still preserve coverage and the correspondence between a
+chunk's text and its positions: the boundary moves earlier, so code units join the following
+chunk rather than being lost. Displacement is bounded by the dropped separator plus any
+displacement already accumulated earlier in the same input.
+
 #### Scenario: Manufactured U+FFFD does not match a literal one later in the source
 
 - **WHEN** a tokenizer fragments a multi-byte character into parts that each decode to a bare U+FFFD, and the source also contains a literal U+FFFD at a later position
