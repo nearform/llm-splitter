@@ -1539,6 +1539,47 @@ describe("split", () => {
         );
       });
 
+      it("anchors a verbatim mixed part after a dropped multi-char separator", () => {
+        // The part's anchor grapheme "\n" also occurs inside the "\n\n" the
+        // splitter dropped. Taking the first occurrence puts the part at 6,
+        // two code units before its true start of 8; only checking the rest of
+        // the part against the source rules that candidate out.
+        /** @param {string} text */
+        const paragraphSplitter = (text) => text.split("\n\n").filter(Boolean);
+
+        const chunks = split("Intro.\n\n\nCaf� notes.\n\nEnd.", {
+          chunkSize: 1,
+          splitter: paragraphSplitter,
+        });
+
+        assert.deepStrictEqual(
+          chunks.map(({ start, end }) => [start, end]),
+          [
+            [0, 8],
+            [8, 22],
+            [22, 26],
+          ],
+        );
+      });
+
+      it("rejects an anchor-grapheme match that the rest of the part contradicts", () => {
+        // Same defect with no dependence on a delimiter shape. "a�b" is
+        // verbatim at 4, but its anchor "a" also sits at 2, and only the "b"
+        // two units on distinguishes the two candidates.
+        const chunks = split("a a a�b", {
+          chunkSize: 1,
+          splitter: () => ["a", "a�b"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map(({ start, end }) => [start, end]),
+          [
+            [0, 4],
+            [4, 7],
+          ],
+        );
+      });
+
       it("drops a part whose replacement char carries a combining mark", () => {
         // Order matters, which is why this is separate from the case above. A
         // mark *after* a replacement char merges into it, so `Intl.Segmenter`

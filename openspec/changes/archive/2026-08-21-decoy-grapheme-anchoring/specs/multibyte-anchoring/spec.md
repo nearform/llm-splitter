@@ -131,6 +131,18 @@ Where it occurs, the system SHALL still preserve coverage and the correspondence
 chunk's text and its positions: the boundary moves earlier, so code units join the following
 chunk rather than being lost.
 
+**A part with no U+FFFD may anchor on a verbatim decoy, independent of this exception.** Tier 2
+takes the first verbatim occurrence at or after the cursor, and where a splitter drops a
+multi-character span that itself contains the part, that occurrence can precede the part's true
+position — `text.split("...")` over `"…漢...é...."` anchors the final `"."` on the separator's
+first `.` rather than the source's own. This is not a multibyte or U+FFFD behaviour: it needs no
+replacement character anywhere and it predates candidate verification, which cannot address it
+because a Tier 2 hit aligns at every position by construction. It is recorded here because the
+same corpus surfaces both, and separating them is what keeps the U+FFFD residual measurable.
+Coverage and the text-to-position correspondence hold in this case too. Closing it requires
+knowing whether the remaining parts still anchor under a given choice — see AGENTS.md →
+"Backtracking anchor walk".
+
 #### Scenario: Manufactured U+FFFD does not match a literal one later in the source
 
 - **WHEN** a tokenizer fragments a multi-byte character into parts that each decode to a bare U+FFFD, and the source also contains a literal U+FFFD at a later position

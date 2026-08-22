@@ -128,6 +128,53 @@ const firstAnchorGrapheme = (splitPart) => {
 };
 
 /**
+ * Does every code unit the splitter could not have invented line up with the
+ * source at `at`?
+ *
+ * The anchor grapheme alone is a weak signal: a part whose first anchorable
+ * grapheme also occurs inside the span the splitter dropped anchors on that
+ * earlier occurrence and reports a position a few code units early. Checking
+ * the rest of the part rejects those candidates, so the search can move on to
+ * the next occurrence instead of trusting the first.
+ *
+ * Positions holding U+FFFD or a combining mark are skipped, since the splitter
+ * may have manufactured them and they constrain nothing. That makes the check
+ * weakest for a part that is mostly U+FFFD, which is where the residual
+ * mis-anchorings live.
+ *
+ * Comparing at fixed offsets is only meaningful while a part's decoded length
+ * equals the source span it consumed — the same assumption `end = start +
+ * splitPart.length` already rests on, so this adds none. It does mean the check
+ * is invalid for a length-inflating tokenizer; see `tokenizer-length-inflation`.
+ *
+ * @param {string} input
+ * @param {string} splitPart
+ * @param {number} at - Candidate left edge of `splitPart` in `input`.
+ * @returns {boolean}
+ */
+const skeletonAligns = (input, splitPart, at) => {
+  if (at < 0) {
+    return false;
+  }
+
+  for (let i = 0; i < splitPart.length; i += 1) {
+    const ch = splitPart[i];
+    // Per code unit, not per cluster: `UNANCHORABLE_CLUSTER` is a character
+    // class, so testing one unit is valid for the marks and replacement chars
+    // it covers. If it ever becomes cluster-aware, both call sites change.
+    if (ch === REPLACEMENT_CHAR || UNANCHORABLE_CLUSTER.test(ch)) {
+      continue;
+    }
+
+    if (at + i >= input.length || input[at + i] !== ch) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+/**
  * Anchor splitter parts against a single source string, producing parts with
  * absolute (offset-adjusted) `start`/`end` positions.
  *
@@ -150,7 +197,11 @@ const firstAnchorGrapheme = (splitPart) => {
  *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find the
  *     first positionable grapheme inside splitPart and anchor the part's left
  *     edge relative to it, correcting for that grapheme's offset into the
- *     part.
+ *     part. Each occurrence is only a candidate: it is accepted once
+ *     `skeletonAligns` confirms the part's non-invented code units line up
+ *     there, and the search walks forward otherwise. Without that check a
+ *     part whose anchor grapheme also occurs inside the span the splitter
+ *     dropped anchors early — see `skeletonAligns`.
  *
  * The tier 3 *match* cannot land mid-surrogate or mid-cluster, because
  * `firstAnchorGrapheme` returns a whole grapheme cluster and a cluster never
@@ -218,7 +269,18 @@ const anchorParts = (input, splitter, baseOffset) => {
       // anchors on its `"b"` one unit late, and the tier 2 exact match is the
       // only thing that hides it. Searching from `cursor + offset` keeps the
       // corrected start at or after the cursor.
-      const match = input.indexOf(anchor.segment, cursor + anchor.offset);
+      //
+      // The first occurrence is only a candidate. The anchor grapheme can also
+      // occur inside the span the splitter dropped, so accept an occurrence
+      // only once the part's non-invented code units line up there too, and
+      // keep walking forward otherwise.
+      let match = input.indexOf(anchor.segment, cursor + anchor.offset);
+      while (
+        match !== -1 &&
+        !skeletonAligns(input, splitPart, match - anchor.offset)
+      ) {
+        match = input.indexOf(anchor.segment, match + 1);
+      }
       start = match === -1 ? -1 : match - anchor.offset;
       if (start === -1) {
         throw new Error(

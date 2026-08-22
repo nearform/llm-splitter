@@ -44,6 +44,17 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   it was O(n²) on byte-dropping splitters; `indexOf` is safe in tier 3
   because anchor graphemes (filtered by `firstAnchorGrapheme`) never
   start with a low surrogate or combining mark.
+- **Tier 3 verifies each candidate before accepting it.** `indexOf` returns the
+  _first_ occurrence of the anchor grapheme at or after `cursor + offset`, which
+  is not necessarily the part's own — the span a splitter dropped can contain the
+  same grapheme. `skeletonAligns` rejects an offset unless every code unit the
+  splitter could not have invented (everything but U+FFFD and combining marks)
+  lines up with the source there, and the search walks to the next occurrence on
+  rejection. This is _not_ worth applying to tier 2: a verbatim hit aligns at
+  every position by construction, so the check is vacuous there. Measured
+  against a real string-delimiter splitter over U+FFFD-bearing text it takes the
+  class from 10.5% of documents mis-anchored to 0%; the residual is a part that
+  is mostly U+FFFD, where the few real units align early too.
 - **Tier 3 anchors the part's left edge, not its anchor grapheme.**
   `firstAnchorGrapheme` returns `{ segment, offset }`, and tier 3 computes
   `indexOf(segment, cursor + offset) - offset`. The subtraction is
@@ -300,29 +311,43 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Decoy grapheme anchoring** — a genuinely-verbatim mixed part can anchor on an earlier
-  occurrence of its first anchorable grapheme, reporting a position a few code units early. A
-  documented limitation in `multibyte-anchoring`, filed as
-  [openspec/changes/decoy-grapheme-anchoring/](openspec/changes/decoy-grapheme-anchoring/) with
-  a measured prototype, not just a proposal: verifying the part's non-U+FFFD code units against
-  the source at the tier 3 candidate takes the class from 906 wrong to 395 of 15,986 and
-  leaves every existing gate untouched, including linearity.
+- **Decoy grapheme anchoring** — shipped. A genuinely-verbatim mixed part used to anchor on an
+  earlier occurrence of its first anchorable grapheme, reporting a position a few code units
+  early. Fixed by verifying each tier 3 candidate (`skeletonAligns`, described in the algorithm
+  map). It was filed rather than fixed for one round on the strength of a synthetic differential
+  that scored it 906 → 395 — a mitigation, not a fix — and a `chunkOverlap` workaround believed
+  to neutralise it. **Both readings were wrong, and the reason is worth keeping.** The
+  differential drove `split()` with a `() => parts` stub, which presents part shapes no real
+  splitter emits; re-scored with the splitter actually applied to the source, the fix takes the
+  class from 10.5% of U+FFFD-bearing documents to **0%** at every replacement-char density from
+  0.05% to 17%. The trigger is structural, not density-dependent — a part need only _begin_ with
+  a character the separator contains, which scraped Markdown does constantly — and the workaround
+  reaches zero only at `chunkOverlap: 4` against a default of `0`. The lesson generalizes: score a
+  splitter-facing change with a real splitter, or the corpus will answer a different question.
+  Background, both differentials, and the reversal are in
+  [openspec/changes/archive/2026-08-21-decoy-grapheme-anchoring/](openspec/changes/archive/2026-08-21-decoy-grapheme-anchoring/)
+  — `design.md` → Decision 2 and "Reachability with a real splitter".
 
-  **It is filed rather than fixed on purpose, and the numbers are why.** Nothing is dropped —
-  coverage and `chunk.text === getChunk(...)` both hold — the boundary just lands early:
-  2-3 code units in the large majority, 6 at worst, and in 92% of affected cases the only
-  thing that changes chunk is the separator the splitter discarded. **Raising `chunkOverlap`
-  all but removes the observable effect, without eliminating it** (tokens left whole in no
-  chunk, at `chunkSize: 8`: 275 at `chunkOverlap: 0` → 2 at `2` → 0 at `4`; at `chunkSize: 4`
-  it is 705 → 2, so a small chunk size leaves more residue).
-  So don't reach for the fix on the strength of "906 wrong positions" alone — read that
-  change's `design.md` → Decision 2 first. What would change the priority is a caller using a
-  multi-character string delimiter (`text.split("\n\n")` and friends) over U+FFFD-bearing text at `chunkOverlap: 0` and depending on
-  exact boundaries. Note the default is `chunkOverlap: 0`.
+- **Backtracking anchor walk** — not started, and now the only open anchoring correctness work.
+  Three residuals, and they are **three different bugs** — the number 395 conflated the first
+  two, so separate them before touching anything:
 
-- **Backtracking anchor walk** — not started, and what is genuinely left once the above ships:
-  the residual 395 and the tier 1 case (a literal U+FFFD at the cursor claiming a manufactured
-  bare part). A guard that merely _picks between_ tier 2's answer and the offset-corrected
+  1. **Tier 2 verbatim decoys — 237 of 15,986, and _not_ a U+FFFD bug at all.** Tier 2 takes the
+     first verbatim occurrence at or after the cursor, so when a splitter drops a
+     multi-character span that itself contains the part, that occurrence can precede the part's
+     true position. No replacement character need appear anywhere: `text.split("...")` over
+     `"�漢ba漢...é...."` anchors the final `"."` at 9, the separator's first `.`, instead of 12.
+     It reproduces identically on the pre-rewrite base, so it predates every U+FFFD change and
+     candidate verification cannot touch it — a tier 2 hit aligns at every position by
+     construction. **This is the largest of the three and the least understood.** It has no
+     change of its own yet.
+  2. **Tier 3 residual — 158 of 15,986.** A part that is _mostly_ U+FFFD with one or two real
+     code units, where an earlier offset aligns on all of them. This is what candidate
+     verification cannot resolve, and the shape is confirmed: 317 of 395 offending parts carry
+     exactly one non-U+FFFD character, 70 carry two.
+  3. **The tier 1 case** — a literal U+FFFD at the cursor claiming a manufactured bare part.
+
+  A guard that merely _picks between_ tier 2's answer and the offset-corrected
   tier 3 candidate cannot work — the spurious and the legitimate case present identical
   signatures with opposite correct answers, demonstrated in
   [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md)

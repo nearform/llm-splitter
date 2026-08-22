@@ -24,6 +24,15 @@ what keeps the corrected `start` at or after the cursor. Anchoring at the match 
 itself would place a part of width `part.length` with its left edge at an interior grapheme,
 contradicting the length-based advance below.
 
+**Tier 3 SHALL verify a candidate before accepting it.** The anchor grapheme is one cluster
+out of the whole part, so a match on it is evidence about that cluster only. Before accepting
+a candidate offset, the system SHALL check that every code unit of the part that the splitter
+could not have invented — everything other than U+FFFD, combining marks and variation
+selectors — appears at the corresponding offset in the source. Where it does not, the system
+SHALL continue the search from the next occurrence of the anchor grapheme rather than accept
+the candidate. This is not the same test as a Tier 2 verbatim match, which already implies
+agreement at every position and therefore verifies nothing; a Tier 3 candidate does not.
+
 **The system SHALL skip Tier 2 for every part containing U+FFFD**, whether or not the source
 contains one. For a source with no U+FFFD this is an equivalence — the skipped search could
 only have reported "not found". For a source that does contain one it is a deliberate
@@ -31,8 +40,7 @@ preference for Tier 3 over a verbatim match: U+FFFD is a character the splitter 
 a verbatim hit on it carries no information about where the part came from, and acting on
 such a hit displaces parts and throws. U+FFFD is the only character a supported splitter can
 introduce that was not in the source (see "Supported tokenizer boundary"), so no other part
-content admits either inference. The trade-off this accepts is stated in "A literal U+FFFD in
-the source does not misdirect anchoring".
+content admits either inference.
 
 Regardless of which tier located the part, the system SHALL set `end = start + part.length`
 clamped to input length, and SHALL advance the cursor to that `end`. This length-based
@@ -58,6 +66,16 @@ boundary").
 
 - **WHEN** a part's first anchorable grapheme sits `k` code units into the part, with `k` greater than zero
 - **THEN** the part's `start` is the grapheme's match position minus `k`, so that `start + part.length` spans the source the part consumed
+
+#### Scenario: Tier 3 rejects a candidate whose remaining code units do not align
+
+- **WHEN** the anchor grapheme is found at an offset where some other non-invented code unit of the part does not match the source
+- **THEN** that candidate is rejected and the search continues from the next occurrence of the anchor grapheme
+
+#### Scenario: Tier 3 accepts the first candidate that does align
+
+- **WHEN** a part that occurs verbatim in the source has its anchor grapheme occurring earlier than the part's true position
+- **THEN** the earlier occurrence is rejected by verification and the part anchors at its true position
 
 #### Scenario: Tier 2 skipped for a part containing U+FFFD
 
@@ -212,32 +230,37 @@ manufactured bare part MAY anchor there. This adds a chunk boundary at that posi
 attributes that one code unit to the wrong part; because the part and the character it
 matched are both one code unit wide, the cursor advances by exactly the consumed span, so no
 subsequent part is displaced and coverage is unaffected. The system SHALL NOT drift as a
-result of such a match.
+result of such a match. Candidate verification does not reach this case, because Tier 1 fires
+before Tier 3.
 
-**A mixed part that is genuinely verbatim may anchor on an earlier decoy.** Because Tier 2 is
-skipped for every part containing U+FFFD (see "Three-tier locate strategy"), a part that
-mixes U+FFFD with real text and does occur verbatim in the source is positioned by Tier 3
-rather than by exact match. If the part's first anchorable grapheme also occurs between the
-cursor and the part's true position, Tier 3 anchors on that earlier occurrence — a wrong
-position with no error.
-
-Reaching this requires a splitter that drops a **multi-character** span between parts. That
-includes splitters this specification lists as supported: a **multi-character string**
-delimiter such as `text.split("\n\n")`, `text.split(". ")` or `text.split("...")` drops a span
-whose characters may also begin a part — a lone `\n` is not `"\n\n"` — so the anchor grapheme
-can match inside the dropped span. A **character-class regex** splitter cannot reach it,
-however many characters it drops: a part containing a class member would itself have been
-split there, so no part can begin with a character the span contains. That rules out
-`text.split(/[.!?]+/)` and `text.split(/\s+/)`, measured at 0 of 3,213 and 0 of 3,213
-round-tripped cases against 5,588 of 17,705 for `text.split("...")`. `text.split('')` and
-`tiktoken` drop nothing at all. Measured over 15,986 randomized string-delimiter cases whose
-source contains U+FFFD, 906 anchored a part away from its true offset, against 258 before
-Tier 2 was skipped.
+**A mixed part may still anchor on a decoy that verification cannot distinguish.** Candidate
+verification (see "Three-tier locate strategy") rejects an offset where the part's
+non-invented code units do not align, which resolves the common form of this exception. It
+does not resolve every form: where an earlier offset happens to align on all of them — easier
+the more of the part is U+FFFD, since those positions impose no constraint — the earlier
+offset is accepted and the part anchors before its true position. Reaching this at all
+requires a splitter whose dropped span contains a character that can also **begin** a part.
+Multi-character string delimiters qualify — `text.split("\n\n")`, `text.split(". ")`,
+`text.split("...")` — because a lone `\n` is not `"\n\n"`. Character-class regex splitters do
+not, however many characters they drop: a part containing a class member would itself have
+been split there, so no part can begin with a character the span contains. That rules out
+`text.split(/[.!?]+/)` and `text.split(/\s+/)`; `text.split('')` and `tiktoken` drop nothing.
 
 Where it occurs, the system SHALL still preserve coverage and the correspondence between a
 chunk's text and its positions: the boundary moves earlier, so code units join the following
-chunk rather than being lost. Displacement is bounded by the dropped separator plus any
-displacement already accumulated earlier in the same input.
+chunk rather than being lost.
+
+**A part with no U+FFFD may anchor on a verbatim decoy, independent of this exception.** Tier 2
+takes the first verbatim occurrence at or after the cursor, and where a splitter drops a
+multi-character span that itself contains the part, that occurrence can precede the part's true
+position — `text.split("...")` over `"…漢...é...."` anchors the final `"."` on the separator's
+first `.` rather than the source's own. This is not a multibyte or U+FFFD behaviour: it needs no
+replacement character anywhere and it predates candidate verification, which cannot address it
+because a Tier 2 hit aligns at every position by construction. It is recorded here because the
+same corpus surfaces both, and separating them is what keeps the U+FFFD residual measurable.
+Coverage and the text-to-position correspondence hold in this case too. Closing it requires
+knowing whether the remaining parts still anchor under a given choice — see AGENTS.md →
+"Backtracking anchor walk".
 
 #### Scenario: Manufactured U+FFFD does not match a literal one later in the source
 
@@ -254,7 +277,17 @@ displacement already accumulated earlier in the same input.
 - **WHEN** a manufactured bare U+FFFD part is tested at a cursor position where the source holds a literal U+FFFD
 - **THEN** the part anchors there, adding a chunk boundary at that position, and every other part in the input still anchors to its correct position
 
+#### Scenario: A verbatim mixed part after a dropped multi-character separator anchors correctly
+
+- **WHEN** a paragraph or sentence splitter drops a multi-character separator and the following part mixes U+FFFD with real text, and that part's first anchorable grapheme also occurs inside the dropped separator
+- **THEN** candidate verification rejects the occurrence inside the separator and the part anchors at its true offset
+
 #### Scenario: A part whose replacement char is genuinely in the source anchors at its own left edge
 
 - **WHEN** a splitter returns a part containing U+FFFD that appears verbatim in the source forward of the cursor, with no earlier occurrence of its first anchorable grapheme
 - **THEN** the part anchors at that verbatim position
+
+#### Scenario: Displacement never breaks coverage
+
+- **WHEN** a part does anchor before its true position under the remaining exception
+- **THEN** every code unit from the first chunk's start onward still appears in exactly one chunk, and each chunk's text still equals the source resliced at its own positions

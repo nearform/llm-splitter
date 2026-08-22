@@ -156,11 +156,50 @@ no inference:
 | current head | **906**                        |
 | prototype    | **395**                        |
 
-### Decision 2: File it rather than ship it
+**Reachability with a real splitter.** The differential above hands `split()` a `() => parts`
+stub, which is what makes truth knowable but also lets it present parts no real splitter would
+produce (a bare U+FFFD standing alone between two separators). Re-run with the splitter actually
+applied to the source — `t.split(sep).filter(Boolean)`, counting only cases it round-trips — and
+scored per document rather than per part:
 
-**Chosen.** The prototype is a clear improvement and still leaves 395 against the base's 258,
-so it is a mitigation, not a fix. Weigh that against what the defect actually costs, all
-measured over the same class, though not all on one corpus — each count names its own:
+| U+FFFD density | round-tripped | base | before fix | after fix |
+| -------------- | ------------- | ---- | ---------- | --------- |
+| 0.05%          | 1,268         | 0.0% | **10.5%**  | **0.0%**  |
+| 0.5%           | 11,102        | 0.0% | 11.6%      | 0.0%      |
+| 5%             | 37,990        | 0.0% | 21.6%      | 0.0%      |
+| 17%            | 43,792        | 0.0% | **28.2%**  | **0.0%**  |
+
+Two things this says that the synthetic differential does not. **The fix is complete for this
+class**, not the 906 → 395 mitigation the stub reports — the residual 395 is reachable only
+through part shapes a real splitter does not emit. And **density is not the trigger**: the rate
+is flat near 10% across three orders of magnitude, because what is actually required is that a
+part _begin_ with a character the separator contains (leading whitespace, a list marker, a
+blank-line run). The alphabet must allow that or every shape reports zero — the same trap
+recorded under "One trap worth knowing", in its other direction.
+
+**What the fix does not change.** On the tokenizer path it is inert, which is the point: over
+401 real sentences carrying one stray U+FFFD, tokenized with `tiktoken`, the base throws
+`could not be located in input` on 85 (21%) and both the pre-fix and post-fix trees throw on 0.
+Restoring Tier 2 would undo that; verifying Tier 3 candidates does not touch it.
+
+### Decision 2: Ship it
+
+**Chosen — reversing an earlier decision to file it.** The case for filing rested on the
+synthetic class differential below (906 → 395, "a mitigation, not a fix") plus a caller
+workaround. Both halves turned out to be weaker than recorded, and the numbers under
+"Reachability with a real splitter" are why:
+
+- Scored against a **real** splitter rather than a `() => parts` stub, the fix is not partial.
+  It takes the class from 10.5% of U+FFFD-bearing documents mis-anchored to **0.0%**, matching
+  the base exactly, at every replacement-char density from 0.05% to 17%.
+- The trigger is **structural, not density-dependent**: a part must merely begin with a
+  character the separator also contains — leading indentation, a blank-line run, a list marker.
+  Scraped Markdown does this constantly, so "needs pathological input" was wrong.
+- The `chunkOverlap` workaround does not eliminate the defect (275 → 2, reaching 0 only at
+  `chunkOverlap: 4`), and it is opt-in against a default of `0`.
+
+What the defect costs, kept here because it still bounds the residual — all measured over the
+same class, though not all on one corpus, so each count names its own:
 
 - **Nothing is dropped.** Coverage held in every case (0 violations), and
   `chunk.text === getChunk(input, start, end)` holds unconditionally. The boundary moves
@@ -200,20 +239,21 @@ measured over the same class, though not all on one corpus — each count names 
 So: a chunking-quality defect, bounded, coverage-safe, with a one-option caller workaround —
 against a 25-line change to the anchoring strategy that does not fully close it and would
 change positions for affected inputs. Documenting the workaround (done, in the README) buys
-most of the value at none of the risk. What would change the priority: a report from someone
-using a multi-character string delimiter on U+FFFD-bearing text at `chunkOverlap: 0` and
-depending on exact boundaries, or a decision to close the remainder properly, at which point
-this becomes the first half of that work.
-
-Note `chunkOverlap` defaults to `0`, so the default configuration is the exposed one. That is
-the strongest argument for shipping anyway.
+most of the value at none of the risk — **and that is the reasoning this decision reverses.**
+It held only while the fix looked partial and the workaround looked complete; measured against
+a real splitter the fix is complete for this class and the workaround is not. What remains open
+is the residual below, which needs backtracking rather than a local rule.
 
 ## Acceptance criteria
 
-Following the convention the sibling changes set, test code lives here until the fix lands, so
-`test/split.test.js` stays unconditional and green.
+The fix has landed, so the two regressions below are now in `test/split.test.js` rather than
+waiting here.
 
-**1. Paragraph-splitter regression.** Fails at current head, passes under Decision 1:
+Both regressions below now live in `test/split.test.js` ("anchors a verbatim mixed part after
+a dropped multi-char separator" and "rejects an anchor-grapheme match that the rest of the part
+contradicts"); they are kept here as the record of what they pin.
+
+**1. Paragraph-splitter regression.** Failed before Decision 1, passes under it:
 
 ```js
 it("anchors a verbatim mixed part after a dropped multi-char separator", () => {
@@ -314,7 +354,8 @@ reachability by splitter shape (patched tree):
   string ". "      round-tripped= 36285  wrong= 10412
   string "\n\n"    round-tripped= 14095  wrong=  3800
 
-class differential over 15986 cases: base wrong=258  patched wrong=906
+class differential over 15986 cases: base wrong=258  patched wrong=395
+  parts dropped (variant emitted fewer chunks than parts): base=0  patched=1961
   coverage broken: 0   displaced: 906   separator-only: 831 (92 percent)
   displacement histogram: {"2":294,"3":544,"4":19,"5":13,"6":36}
 ```
@@ -448,6 +489,7 @@ const classCorpus = (i) => {
 };
 let cases = 0;
 const wrong = { base: 0, patched: 0 };
+const dropped = { base: 0, patched: 0 };
 let covBroken = 0;
 let displaced = 0;
 let sepOnly = 0;
@@ -470,7 +512,13 @@ for (let i = 0; i < 20000; i++) {
     } catch {
       continue;
     }
-    if (chunks.length !== parts.length) continue;
+    // Counted, not skipped: a variant that cannot place a part emits fewer
+    // chunks than parts, and an earlier version of this harness `continue`d
+    // here — which discarded that whole class from every number it printed.
+    if (chunks.length !== parts.length) {
+      dropped[name]++;
+      continue;
+    }
     const bad = chunks.filter((c, k) => c.start !== truth[k]).length;
     if (bad) wrong[name]++;
     if (name !== "patched") continue;
@@ -493,6 +541,9 @@ for (let i = 0; i < 20000; i++) {
 }
 console.log(
   `\nclass differential over ${cases} cases: base wrong=${wrong.base}  patched wrong=${wrong.patched}`,
+);
+console.log(
+  `  parts dropped (variant emitted fewer chunks than parts): base=${dropped.base}  patched=${dropped.patched}`,
 );
 console.log(
   `  coverage broken: ${covBroken}   displaced: ${displaced}   separator-only: ${sepOnly} (${((sepOnly / displaced) * 100).toFixed(0)}%)`,

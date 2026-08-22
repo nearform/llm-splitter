@@ -61,9 +61,9 @@ None.
 
 ## Impact
 
-- **Code**: `anchorParts` in [src/split.js](../../../src/split.js) — the Tier 3 locate step
+- **Code**: `anchorParts` in [src/split.js](../../../../src/split.js) — the Tier 3 locate step
   only. No public API change, no change to the coverage invariant, no new option.
-- **Specs**: [openspec/specs/multibyte-anchoring/spec.md](../../specs/multibyte-anchoring/spec.md).
+- **Specs**: [openspec/specs/multibyte-anchoring/spec.md](../../../specs/multibyte-anchoring/spec.md).
 - **Docs**: README's "Multibyte / Unicode Strings" section, which currently documents the
   exception and the `chunkOverlap` workaround; AGENTS.md's algorithm map and its
   "Backtracking anchor walk" entry.
