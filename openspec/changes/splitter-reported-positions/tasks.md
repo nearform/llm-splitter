@@ -1,57 +1,73 @@
 ## 1. Pin the defect first
 
-- [ ] 1.1 Add the U+FFFD-free Tier 2 regression to `test/split.test.js`:
-      `split("a....", { chunkSize: 1, splitter: (t) => t.split("...").filter(Boolean) })` expects
-      starts `[0, 4]` and reports `[0, 1]` today. Confirm it fails before any code change. Use a
-      bare-string splitter so it pins the _defect_, not the new API.
-- [ ] 1.2 Confirm it also fails on `chore/rewrite`. It is pre-existing, and a test that only fails
-      after the rewrite would be pinning something else.
+- [x] 1.1 Added and confirmed failing before any code change: `[0, 1]` against an expected
+      `[0, 4]`. Since bare-string behavior is deliberately unchanged (gate 4.4), the shipped pair
+      under "reported positions" is a bare-string test characterizing `[0, 1]` as the limitation
+      plus a `delimiterSplitter` test asserting `[0, 4]` as the remedy.
+- [x] 1.2 Confirmed on a pristine `chore/rewrite` copy of `src/`: same `[0, 1]`. Pre-existing.
 
 ## 2. Reported-position path
 
-- [ ] 2.1 Add a `SplitterPart` typedef (`string | { text: string, start: number }`) and widen the
+- [x] 2.1 Add a `SplitterPart` typedef (`string | { text: string, start: number }`) and widen the
       `splitter` JSDoc on `SplitOptions`.
-- [ ] 2.2 In `anchorParts`, normalize each returned element to `{ text, start }` where `start` is
-      `null` for a bare string, then branch: a reported `start` skips all three tiers, `null` runs
-      them unchanged. Keep the tier code untouched so a bare-string splitter is provably unaffected.
-- [ ] 2.3 Validate reported offsets per the spec — integer, `0 <= start <= input.length`, not
+- [x] 2.2 `normalizePart` does the normalizing; the three tiers moved verbatim into `locatePart`,
+      which `anchorParts` calls only when `start` is `null`. Extracting rather than nesting keeps
+      the tier bodies byte-identical and makes "reported parts never reach the search" structural.
+      Gate 4.4 is what proves the tiers did not move.
+- [x] 2.3 Validate reported offsets per the spec — integer, `0 <= start <= input.length`, not
       behind the cursor — throwing `TypeError` with the part and offset named. Do **not** validate
       that `text` matches the source there; design.md → Decision 2 says why.
-- [ ] 2.4 Confirm `end = min(start + text.length, input.length)` and the cursor advance are shared
-      with the inferred path, so the coverage pass needs no change.
+- [x] 2.4 Both branches fall through to one `end` computation and one `cursor = end`, so the
+      coverage pass is untouched.
 
 ## 3. `delimiterSplitter`
 
-- [ ] 3.1 Implement in a new `src/delimiter-splitter.js` using `indexOf` in a loop, omitting empty
+- [x] 3.1 Implement in a new `src/delimiter-splitter.js` using `indexOf` in a loop, omitting empty
       parts. Export from `src/index.js`.
-- [ ] 3.2 Cover the spec scenarios: the `"a...."` case, consecutive delimiters, delimiter absent,
-      delimiter at the start and at the end, and a multi-character delimiter.
-- [ ] 3.3 Reject an empty-string delimiter explicitly — it would loop forever.
+- [x] 3.2 Covered in `test/delimiter-splitter.test.js`, plus delimiters-only and empty input.
+- [x] 3.3 Reject an empty-string delimiter explicitly — it would loop forever.
 
 ## 4. Verify nothing else moved
 
-- [ ] 4.1 `npm run check` green, and confirm the count only grows by the new tests.
-- [ ] 4.2 Re-run the existing coverage fuzz with a _reporting_ splitter as well as a bare one. The
-      new path must satisfy the same coverage contract; this is the main risk in design.md.
-- [ ] 4.3 Confirm both "anchoring cost" scaling regressions are unchanged. The reported path skips
-      the search entirely, so it should if anything be faster — a regression means the branch is in
-      the wrong place.
-- [ ] 4.4 Re-run the differential from
-      [the decoy change](../archive/2026-08-21-decoy-grapheme-anchoring/design.md) →
-      "Reproducing the measurements" with bare-string splitters. Gate: **identical** to current
-      head (395, and the parts-dropped column unchanged). This change must be invisible to it.
-- [ ] 4.5 Then re-run it with `delimiterSplitter`. Gate: **0** mis-anchored. Record both numbers.
-- [ ] 4.6 Probe the type widening per design.md → Decision 3, both assignment directions.
+- [x] 4.1 Green. 174 tests -> 200; the 26 added are all new (13 reported-position, 12
+      `delimiterSplitter`, 1 package-root export). No existing test changed.
+- [x] 4.2 Four reporting splitters added to the contract fuzz's `SPLITTERS`
+      (`reported-codepoint`, two `delimiterSplitter`s, and `mixed-reported` alternating the two
+      forms), so both paths run the identical assertions. Green. Off-suite sweep at higher volume:
+      172,235 cases over 5 seeds x 7 reporting splitters x both strategies x string and array
+      input, zero violations.
+- [x] 4.3 Both green on three consecutive runs. Measured side by side against `chore/rewrite` for
+      an 8x span (threshold 16): clean source 2.3x -> 2.6x, U+FFFD source 7.9x -> 2.8x.
+- [x] 4.4 **Identical.** Base `chore/rewrite` vs this tree: `wrong=395` both sides, parts dropped
+      `1961` both sides, coverage broken 0, and every `chunkOverlap` row equal. Invisible to it.
+- [x] 4.5 **0 mis-anchored**, over the same corpora and the same round-trip filter. By splitter
+      shape, bare -> `delimiterSplitter`: `"..."` 2424 -> 0, `". "` 5140 -> 0, `"\n\n"` 1566 -> 0.
+      On the class corpus, 15,212 of 15,986 cases round-trip through `delimiterSplitter` and score
+      `wrong=0`, `dropped=0`, `coverage broken=0` — against 395 and 1961 for the bare form. The
+      774 that do not round-trip are cases where a generated part contains the separator, so the
+      corpus's ground truth describes a different segmentation than any delimiter splitter can
+      produce; they are excluded rather than counted, exactly as the bare harness excludes them.
+- [x] 4.6 Exactly as Decision 3 predicted, under both `nodenext` and `bundler`. Narrow ->
+      `SplitOptions["splitter"]` compiles, including every call form and `chunk.text` narrowing;
+      `SplitOptions["splitter"]` -> `(input: string) => string[]` fails with TS2322. That one
+      direction is a real source break for a caller who holds the function type and re-assigns it,
+      so the changeset names it rather than claiming the widening is free.
 
 ## 5. Docs
 
-- [ ] 5.1 README: document the reported form and `delimiterSplitter` under the splitter section,
-      and in "Known limitations" replace the three residual descriptions' dead ends with a pointer
-      to the remedy. Tighten while there — that section is one very long paragraph.
-- [ ] 5.2 AGENTS.md: the "Backtracking anchor walk" entry is superseded. Replace it with the
-      reported-position remedy and keep only the measured dead ends, which are the reusable part.
-- [ ] 5.3 Changeset, minor. New API plus a widened type; no positions change for existing callers,
-      which is the thing to say plainly.
+- [x] 5.1 Added "Reported positions" under Custom Splitter Functions, a `delimiterSplitter` API
+      entry, and a feature bullet. The failure-mode list went from three to four — the tier 2
+      verbatim decoy was the largest of them and the README never named it — with the remedy
+      stated once at the top of the list instead of per-bullet, and the U+FFFD bullet tightened.
+      Also added reporting positions as a third workaround under the length-inflation section.
+- [x] 5.2 That entry had already been renamed to "The three residual anchoring defects"; it now
+      leads with the remedy and frames the dead ends as reasons not to refine the search. The
+      algorithm map also gained `normalizePart` / `locatePart`, since `anchorParts` no longer holds
+      the tiers. Note `openspec/specs/multibyte-anchoring/spec.md` still cites the old
+      "Backtracking anchor walk" name — left for `openspec archive` to reconcile (6.3).
+- [x] 5.3 `.changeset/olive-moons-report.md`, minor. Leads with the new capability, states plainly
+      that no positions change for existing callers, and names the one type assignment that breaks
+      (4.6) rather than calling the widening free.
 
 ## 6. Follow-ups, not this change
 

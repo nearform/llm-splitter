@@ -14,10 +14,21 @@ import { getChunk } from "./get-chunk.js";
  */
 
 /**
+ * One element of a splitter's return value.
+ *
+ * A bare string is positioned by the three-tier locate strategy, which infers
+ * an offset from the text. The object form carries the offset the splitter
+ * already knows, so nothing is inferred for that part. The two may be mixed in
+ * one array, letting a splitter report only the offsets it is sure of.
+ *
+ * @typedef {string|{ text: string, start: number }} SplitterPart
+ */
+
+/**
  * @typedef {object} SplitOptions
  * @property {number} [chunkSize]
  * @property {number} [chunkOverlap]
- * @property {(input: string) => string[]} [splitter]
+ * @property {(input: string) => SplitterPart[]} [splitter]
  * @property {"character"|"paragraph"} [chunkStrategy]
  */
 
@@ -46,7 +57,7 @@ const SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
  * @param {{
  *   chunkSize: number
  *   chunkOverlap: number
- *   splitter: (input: string) => string[]
+ *   splitter: (input: string) => SplitterPart[]
  *   chunkStrategy: string
  * }} opts
  */
@@ -175,8 +186,69 @@ const skeletonAligns = (input, splitPart, at) => {
 };
 
 /**
- * Anchor splitter parts against a single source string, producing parts with
- * absolute (offset-adjusted) `start`/`end` positions.
+ * Normalize one element of a splitter's return value to `{ text, start }`,
+ * where `start` is `null` for a bare string and the splitter's own offset for
+ * a reported part.
+ *
+ * A reported offset is validated for *possibility*, not correctness. The
+ * library cannot know whether an offset is right — that is precisely the
+ * knowledge the splitter has and `split()` does not — so it only rejects
+ * offsets that could not be right under any splitter: non-integer, out of
+ * range, or behind the cursor. `text` is deliberately never compared against
+ * the source at `start`: a byte-mutating splitter legitimately returns text
+ * differing from its source span (tiktoken emitting U+FFFD across a multi-byte
+ * boundary), and rejecting a mismatch would exclude the primary use case.
+ *
+ * @param {SplitterPart} element
+ * @param {string} input
+ * @param {number} cursor - End of the previously placed part.
+ * @returns {{ text: string, start: number|null }}
+ */
+const normalizePart = (element, input, cursor) => {
+  if (typeof element === "string") {
+    return { text: element, start: null };
+  }
+
+  if (element === null || typeof element !== "object") {
+    throw new Error(
+      `Splitter returned a non-string part: ${element} for input: ${input}`,
+    );
+  }
+
+  const { text, start } = element;
+
+  if (typeof text !== "string") {
+    throw new TypeError(
+      `Splitter reported a part whose text is not a string: ${text} for input: ${input}`,
+    );
+  }
+
+  if (!Number.isInteger(start) || start < 0 || start > input.length) {
+    throw new TypeError(
+      `Splitter reported start ${start} for part: "${text}", outside the input of length ${input.length}`,
+    );
+  }
+
+  // A start behind the cursor would make this part overlap the previous one,
+  // which breaks the coverage contract by producing overlap `chunkOverlap`
+  // never asked for. Clamping would hide a splitter bug, so it throws.
+  if (start < cursor) {
+    throw new TypeError(
+      `Splitter reported start ${start} for part: "${text}", behind the previous part's end ${cursor}`,
+    );
+  }
+
+  return { text, start };
+};
+
+/**
+ * Infer where `splitPart` sits in `input`, at or after `cursor`. Returns
+ * `null` when the part holds nothing positionable and should be dropped, and
+ * throws when it holds something positionable that is nowhere to be found.
+ *
+ * This is the inference a reported position replaces: every limitation below
+ * is a consequence of guessing an offset from text alone, and none of them
+ * applies to a part whose splitter reported where it came from.
  *
  * Three-tier locate strategy, cheapest first:
  *  1. `startsWith` at the current cursor — byte-preserving splitter with the
@@ -216,7 +288,71 @@ const skeletonAligns = (input, splitPart, at) => {
  * drift, since both are one code unit wide.
  *
  * @param {string} input
- * @param {(input: string) => string[]} splitter
+ * @param {string} splitPart
+ * @param {number} cursor
+ * @returns {number|null}
+ */
+const locatePart = (input, splitPart, cursor) => {
+  // Tier 1: cursor already at the part. Tier 2: search forward, unless the
+  // part carries a U+FFFD the source cannot contain (see docstring).
+  let start = -1;
+  if (input.startsWith(splitPart, cursor)) {
+    start = cursor;
+  } else if (!splitPart.includes(REPLACEMENT_CHAR)) {
+    start = input.indexOf(splitPart, cursor);
+  }
+
+  if (start === -1) {
+    // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
+    const anchor = firstAnchorGrapheme(splitPart);
+    // Entirely U+FFFD or combining marks: nothing positionable, so the part
+    // claims no source bytes and is dropped.
+    if (anchor === null) {
+      return null;
+    }
+
+    // The anchor cluster sits `anchor.offset` code units into the part, so
+    // its match position is not the part's start — subtracting the offset is
+    // what makes `end = start + splitPart.length` span the source the part
+    // actually consumed. This is also what lets tier 2 be skipped for every
+    // U+FFFD-bearing part above: without it, a mixed part like `"�b"`
+    // anchors on its `"b"` one unit late, and the tier 2 exact match is the
+    // only thing that hides it. Searching from `cursor + offset` keeps the
+    // corrected start at or after the cursor.
+    //
+    // The first occurrence is only a candidate. The anchor grapheme can also
+    // occur inside the span the splitter dropped, so accept an occurrence
+    // only once the part's non-invented code units line up there too, and
+    // keep walking forward otherwise.
+    let match = input.indexOf(anchor.segment, cursor + anchor.offset);
+    while (
+      match !== -1 &&
+      !skeletonAligns(input, splitPart, match - anchor.offset)
+    ) {
+      match = input.indexOf(anchor.segment, match + 1);
+    }
+    start = match === -1 ? -1 : match - anchor.offset;
+    if (start === -1) {
+      throw new Error(
+        `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
+      );
+    }
+  }
+
+  return start;
+};
+
+/**
+ * Anchor splitter parts against a single source string, producing parts with
+ * absolute (offset-adjusted) `start`/`end` positions.
+ *
+ * A part carries its own offset (`{ text, start }`) or it does not (a bare
+ * string). Reported offsets are used as given; bare parts go to `locatePart`.
+ * Both forms then share one `end` computation and one cursor advance, so the
+ * coverage contract holds across a mixture of the two.
+ *
+ * @param {string} input
+ * @param {(input: string) => SplitterPart[]} splitter
  * @param {number} baseOffset
  * @returns {Chunk[]}
  */
@@ -232,61 +368,23 @@ const anchorParts = (input, splitter, baseOffset) => {
   const parts = [];
   let cursor = 0;
 
-  for (const splitPart of splits) {
-    if (typeof splitPart !== "string") {
-      throw new Error(
-        `Splitter returned a non-string part: ${splitPart} for input: ${input}`,
-      );
-    }
+  for (const element of splits) {
+    const { text: splitPart, start: reported } = normalizePart(
+      element,
+      input,
+      cursor,
+    );
 
     if (splitPart.length === 0) {
       continue;
     }
 
-    // Tier 1: cursor already at the part. Tier 2: search forward, unless the
-    // part carries a U+FFFD the source cannot contain (see docstring).
-    let start = -1;
-    if (input.startsWith(splitPart, cursor)) {
-      start = cursor;
-    } else if (!splitPart.includes(REPLACEMENT_CHAR)) {
-      start = input.indexOf(splitPart, cursor);
-    }
-
-    if (start === -1) {
-      // Tier 3: byte-mutating splitter — locate via first anchor grapheme.
-      const anchor = firstAnchorGrapheme(splitPart);
-      // Entirely U+FFFD or combining marks: nothing positionable, so the part
-      // claims no source bytes and is dropped.
-      if (anchor === null) {
-        continue;
-      }
-
-      // The anchor cluster sits `anchor.offset` code units into the part, so
-      // its match position is not the part's start — subtracting the offset is
-      // what makes `end = start + splitPart.length` span the source the part
-      // actually consumed. This is also what lets tier 2 be skipped for every
-      // U+FFFD-bearing part above: without it, a mixed part like `"�b"`
-      // anchors on its `"b"` one unit late, and the tier 2 exact match is the
-      // only thing that hides it. Searching from `cursor + offset` keeps the
-      // corrected start at or after the cursor.
-      //
-      // The first occurrence is only a candidate. The anchor grapheme can also
-      // occur inside the span the splitter dropped, so accept an occurrence
-      // only once the part's non-invented code units line up there too, and
-      // keep walking forward otherwise.
-      let match = input.indexOf(anchor.segment, cursor + anchor.offset);
-      while (
-        match !== -1 &&
-        !skeletonAligns(input, splitPart, match - anchor.offset)
-      ) {
-        match = input.indexOf(anchor.segment, match + 1);
-      }
-      start = match === -1 ? -1 : match - anchor.offset;
-      if (start === -1) {
-        throw new Error(
-          `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,
-        );
-      }
+    // A reported offset skips all three tiers, so none of their limitations
+    // reaches this part.
+    const start =
+      reported === null ? locatePart(input, splitPart, cursor) : reported;
+    if (start === null) {
+      continue;
     }
 
     const end = Math.min(start + splitPart.length, input.length);

@@ -3,9 +3,11 @@ import assert from "node:assert";
 import { performance } from "node:perf_hooks";
 import tiktoken from "tiktoken";
 import { split } from "../src/split.js";
+import { delimiterSplitter } from "../src/delimiter-splitter.js";
 import { getChunk } from "../src/get-chunk.js";
 
 /** @typedef {import('../src/split.js').Chunk} Chunk */
+/** @typedef {import('../src/split.js').SplitterPart} SplitterPart */
 
 // Helpers
 /** @param {string} text */
@@ -1605,6 +1607,206 @@ describe("split", () => {
       });
     });
 
+    describe("reported positions", () => {
+      // `"a...."` split on `"..."` yields `["a", "."]`, and the `"."` is at 4:
+      // `String.split` consumed indices 1-3 as the separator. A verbatim search
+      // cannot know that — it finds the `"."` at 1, inside the consumed span —
+      // and no local rule recovers it, because every offset from 1 to 4 tiles
+      // the source. Plain ASCII, no U+FFFD; reporting the offset is the fix.
+      const DECOY = "a....";
+      /** @param {string} text */
+      const decoySplitter = (text) => text.split("...").filter(Boolean);
+
+      it("infers a decoyed part inside the span the splitter consumed", () => {
+        const chunks = split(DECOY, { chunkSize: 1, splitter: decoySplitter });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => chunk.start),
+          [0, 1],
+          "a bare-string splitter still guesses, and guesses 1 rather than 4",
+        );
+      });
+
+      it("uses the reported offset instead of the first verbatim match", () => {
+        const chunks = split(DECOY, {
+          chunkSize: 1,
+          splitter: delimiterSplitter("..."),
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.start, chunk.end]),
+          [
+            [0, 4],
+            [4, 5],
+          ],
+          "the code units the search would have claimed fall to the previous chunk",
+        );
+      });
+
+      it("keeps coverage across a mixture of reported and bare parts", () => {
+        const input = "alpha beta gamma";
+        const chunks = split(input, {
+          chunkSize: 1,
+          splitter: () => ["alpha", { text: "beta", start: 6 }, "gamma"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["alpha ", 0, 6],
+            ["beta ", 6, 11],
+            ["gamma", 11, 16],
+          ],
+        );
+      });
+
+      it("trusts an offset whose text does not match the source there", () => {
+        // A byte-mutating splitter legitimately returns text differing from its
+        // source span — tiktoken emitting U+FFFD across a multi-byte boundary.
+        // Rejecting the mismatch would exclude the primary use case, so the
+        // offset is used and only its possibility is checked.
+        const input = "日本語";
+        const chunks = split(input, {
+          chunkSize: 1,
+          splitter: () => [
+            { text: "�", start: 0 },
+            { text: "��", start: 1 },
+          ],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.start, chunk.end]),
+          [
+            [0, 1],
+            [1, 3],
+          ],
+          "no fragment is dropped as unanchorable and coverage reaches the end",
+        );
+      });
+
+      it("reports positions relative to each paragraph, not the whole input", () => {
+        // Paragraph mode hands the splitter one trimmed paragraph at a time, so
+        // a reported offset is relative to that paragraph and `baseOffset`
+        // carries it back to absolute — the same path the inferred branch uses.
+        const input = "one two\n\nthree four";
+        const chunks = split(input, {
+          chunkSize: 1,
+          chunkStrategy: "paragraph",
+          splitter: delimiterSplitter(" "),
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["one ", 0, 4],
+            ["two\n\n", 4, 9],
+            ["three ", 9, 15],
+            ["four", 15, 19],
+          ],
+        );
+      });
+
+      describe("validation", () => {
+        /** @param {SplitterPart} part */
+        const splitWith = (part) =>
+          split("hello", { chunkSize: 1, splitter: () => [part] });
+
+        it("rejects a fractional offset", () => {
+          assert.throws(() => splitWith({ text: "ell", start: 1.5 }), {
+            name: "TypeError",
+            message:
+              'Splitter reported start 1.5 for part: "ell", outside the input of length 5',
+          });
+        });
+
+        it("rejects a negative offset", () => {
+          assert.throws(() => splitWith({ text: "h", start: -1 }), {
+            name: "TypeError",
+            message:
+              'Splitter reported start -1 for part: "h", outside the input of length 5',
+          });
+        });
+
+        it("rejects NaN", () => {
+          assert.throws(() => splitWith({ text: "h", start: NaN }), {
+            name: "TypeError",
+            message:
+              'Splitter reported start NaN for part: "h", outside the input of length 5',
+          });
+        });
+
+        it("rejects an offset past the end of the input", () => {
+          assert.throws(() => splitWith({ text: "h", start: 6 }), {
+            name: "TypeError",
+            message:
+              'Splitter reported start 6 for part: "h", outside the input of length 5',
+          });
+        });
+
+        it("rejects a reported part whose text is not a string", () => {
+          assert.throws(
+            // @ts-expect-error text must be a string
+            () => splitWith({ text: 42, start: 0 }),
+            {
+              name: "TypeError",
+              message:
+                "Splitter reported a part whose text is not a string: 42 for input: hello",
+            },
+          );
+        });
+
+        it("rejects a reported part with no text at all", () => {
+          assert.throws(
+            // @ts-expect-error text is required
+            () => splitWith({ start: 0 }),
+            {
+              name: "TypeError",
+              message:
+                "Splitter reported a part whose text is not a string: undefined for input: hello",
+            },
+          );
+        });
+
+        it("rejects an offset that moves the cursor backwards", () => {
+          // Accepting it would overlap two chunks without `chunkOverlap` asking,
+          // which breaks the coverage contract. Clamping would hide the bug.
+          assert.throws(
+            () =>
+              split("hello", {
+                chunkSize: 1,
+                splitter: () => [
+                  { text: "hel", start: 0 },
+                  { text: "ell", start: 1 },
+                ],
+              }),
+            {
+              name: "TypeError",
+              message:
+                'Splitter reported start 1 for part: "ell", behind the previous part\'s end 3',
+            },
+          );
+        });
+
+        it("accepts an offset exactly at the cursor", () => {
+          const chunks = split("hello", {
+            chunkSize: 1,
+            splitter: () => [
+              { text: "hel", start: 0 },
+              { text: "lo", start: 3 },
+            ],
+          });
+
+          assert.deepStrictEqual(
+            chunks.map((chunk) => [chunk.start, chunk.end]),
+            [
+              [0, 3],
+              [3, 5],
+            ],
+          );
+        });
+      });
+    });
+
     describe("anchoring cost", () => {
       // Every fourth part becomes a replacement char, the shape a BPE
       // tokenizer produces on dense multi-byte text. The source holds none,
@@ -1956,6 +2158,56 @@ describe("split", () => {
           name: "all-replacement",
           mutates: true,
           fn: (/** @type {string} */ t) => [...t].map(() => "�"),
+        },
+        // Reporting splitters. These hand `split()` the offsets instead of
+        // letting it search, so they exercise the other positioning path
+        // against the identical coverage assertions below. A reported part is
+        // never dropped and never fails to anchor, hence `mutates: false`.
+        {
+          name: "reported-codepoint",
+          mutates: false,
+          fn: (/** @type {string} */ t) => {
+            /** @type {SplitterPart[]} */
+            const parts = [];
+            let at = 0;
+            for (const codePoint of t) {
+              parts.push({ text: codePoint, start: at });
+              at += codePoint.length;
+            }
+            return parts;
+          },
+        },
+        {
+          name: "reported-delimiter-space",
+          mutates: false,
+          fn: delimiterSplitter(" "),
+        },
+        {
+          name: "reported-delimiter-paragraph",
+          mutates: false,
+          fn: delimiterSplitter("\n\n"),
+        },
+        // Alternating forms: the two paths must interleave without either
+        // losing the cursor. Safe by construction because a searched part
+        // never lands *past* its true offset, so the next reported offset is
+        // never behind the cursor.
+        {
+          name: "mixed-reported",
+          mutates: false,
+          fn: (/** @type {string} */ t) => {
+            /** @type {SplitterPart[]} */
+            const parts = [];
+            let at = 0;
+            for (const codePoint of t) {
+              parts.push(
+                parts.length % 2 === 0
+                  ? { text: codePoint, start: at }
+                  : codePoint,
+              );
+              at += codePoint.length;
+            }
+            return parts;
+          },
         },
       ];
 
