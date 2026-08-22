@@ -59,3 +59,7 @@ implementation.
 - Performance: normalized comparison only runs on the Tier 3 fallback path; the char/tiktoken
   happy paths (Tiers 1–2) are untouched.
 - API: additive and backward compatible — `sourceNormalize` defaults to identity.
+- Scope, since `splitter-reported-positions` was filed: a splitter that reports its own offsets
+  needs no normalized scan at all. Re-check before implementing — this change's remaining scope
+  is normalizing tokenizers that **cannot** report positions, which may be a smaller set than the
+  design assumes.

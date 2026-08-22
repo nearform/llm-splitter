@@ -2,6 +2,13 @@
 
 Notes for AI agents (and humans) working in this repo.
 
+## Write short
+
+This file, the README, and OpenSpec artifacts are all too long, and length is actively costing
+readers. When you touch any of them: lead with the claim, keep a measurement only where it
+changes a decision, and **tighten what you edit instead of appending to it**. One sentence of
+breadcrumb beats a paragraph of rationale. Same for replies in chat.
+
 ## Architecture in one paragraph
 
 Source is plain JavaScript (`src/*.js`) with **JSDoc type annotations**, not TypeScript.
