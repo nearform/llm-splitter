@@ -1,6 +1,6 @@
 ## Context
 
-`anchorParts` in [src/split.js](../../../src/split.js) infers each part's offset by searching the
+`anchorParts` in [src/split.js](../../../../src/split.js) infers each part's offset by searching the
 source. Three residual defects are wrong inferences, and none is fixable from the text:
 
 | defect                                                    | scope                                            |
@@ -94,7 +94,7 @@ README already uses.
 ## Measured dead ends
 
 Recorded so they are not re-proposed. All three were measured against the corpus in
-[the decoy change](../archive/2026-08-21-decoy-grapheme-anchoring/design.md):
+[the decoy change](../2026-08-21-decoy-grapheme-anchoring/design.md):
 
 | candidate                                        | result                                                                       |
 | ------------------------------------------------ | ---------------------------------------------------------------------------- |
