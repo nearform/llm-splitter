@@ -360,7 +360,7 @@ const anchorParts = (input, splitter, baseOffset) => {
   const splits = splitter(input);
   if (!Array.isArray(splits)) {
     throw new TypeError(
-      `Splitter must return an array of strings. Received: ${typeof splits}`,
+      `Splitter must return an array of strings or { text, start } parts. Received: ${typeof splits}`,
     );
   }
 

@@ -1787,6 +1787,30 @@ describe("split", () => {
           );
         });
 
+        it("rejects an inflating splitter even when its offsets are true", () => {
+          // Reporting a start does not sidestep decoded-length inflation: `end`
+          // is still `start + text.length`, so a part that decodes longer than
+          // the source span it consumed overshoots the cursor, and the next
+          // part's honest offset then reads as backwards. Closing this would
+          // need the reported form to carry the consumed span — see
+          // `tokenizer-length-inflation`.
+          assert.throws(
+            () =>
+              split("éàü", {
+                chunkSize: 1,
+                splitter: () => [
+                  { text: "XX", start: 0 },
+                  { text: "YY", start: 1 },
+                ],
+              }),
+            {
+              name: "TypeError",
+              message:
+                'Splitter reported start 1 for part: "YY", behind the previous part\'s end 2',
+            },
+          );
+        });
+
         it("accepts an offset exactly at the cursor", () => {
           const chunks = split("hello", {
             chunkSize: 1,
@@ -1945,7 +1969,7 @@ describe("split", () => {
           {
             name: "TypeError",
             message:
-              "Splitter must return an array of strings. Received: string",
+              "Splitter must return an array of strings or { text, start } parts. Received: string",
           },
         );
       });

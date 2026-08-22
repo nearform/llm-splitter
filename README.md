@@ -451,7 +451,8 @@ If you're using one of the affected embedding-model tokenizers today, the safest
 
 1. Use a 1:1 tokenizer for chunking (tiktoken is a common choice) even if your embedding model is from elsewhere. Most embedding models don't require their own tokenizer for _splitting_ — only for tokenization at inference.
 2. Wrap your splitter to pad/trim decoded output to match source length before returning.
-3. Report positions. The length assumption exists only because `split()` has to infer where a part came from; a splitter that returns `{ text, start }` sidesteps it (see "Reported positions" above).
+
+Reporting positions does **not** help here. A reported part still takes its `end` from `start + text.length`, so an inflated part overshoots the cursor and the next part's honest offset is then rejected as moving backwards. Sidestepping inflation needs the consumed span, not just the start.
 
 Expanding tolerance for length-inflating tokenizers is tracked in [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/) — it's a planned future enhancement, not a permanent constraint. That change records the real-world `gte-small` failure modes and the regression fixtures that will gate the fix.
 

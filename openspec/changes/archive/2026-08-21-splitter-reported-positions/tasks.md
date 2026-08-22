@@ -71,8 +71,11 @@
 
 ## 6. Follow-ups, not this change
 
-- [ ] 6.1 Re-scope `tokenizer-length-inflation` to normalizing splitters that cannot report
-      positions, since reporting removes the length assumption for those that can.
+- [ ] 6.1 `tokenizer-length-inflation` is untouched by this change — reporting a `start` does not
+      sidestep inflation, because `end` is still `start + text.length`. Verified: a splitter
+      reporting true offsets for parts that decode longer than their source span throws
+      `behind the previous part's end`. If that change wants to build on reporting, the reported
+      form needs to carry the consumed span (an `end`, or a length), which is a new decision.
 - [ ] 6.2 Answer design.md → Open Questions on the default splitter reporting its own positions.
 - [ ] 6.3 `openspec archive splitter-reported-positions` once green. **Archiving shifts relative
       link depth — re-check every `](../` link in the archived copy afterwards.**

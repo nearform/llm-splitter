@@ -34,8 +34,10 @@ information that never reaches `split()`, which sees only the resulting strings.
 
 - Improving the anchoring search. This change routes around it; the tiers are untouched.
 - Making reporting mandatory, or changing any default.
-- Normalizing tokenizers (`tokenizer-length-inflation`), though reporting positions makes the
-  length assumption moot for a splitter that opts in.
+- Normalizing tokenizers (`tokenizer-length-inflation`). Reporting a `start` does not help: `end`
+  is still `start + text.length`, so an inflating part overshoots the cursor and the next honest
+  offset is rejected as backwards. Closing that would need the reported form to carry the consumed
+  span — a separate decision, not this change.
 
 ## Decisions
 
