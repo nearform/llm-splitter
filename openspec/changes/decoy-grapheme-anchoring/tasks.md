@@ -1,8 +1,11 @@
 ## 0. Decide whether to ship at all
 
 - [ ] 0.1 Re-read [design.md](./design.md) → Decision 2 before starting. This change is filed
-      deliberately, not blocked: the defect is bounded, coverage-safe, and neutralised by
-      `chunkOverlap: 2` or more, while the fix is a 25-line change to the anchoring strategy
+      deliberately, not blocked: the defect is bounded, coverage-safe, and largely — not
+      wholly — mitigated by `chunkOverlap: 2` or more, which at `chunkSize: 8` takes tokens
+      left whole in no chunk from 275 to 2, reaching 0 only at `chunkOverlap: 4`. The
+      mitigation is also opt-in, and `chunkOverlap` defaults to `0`. Against that, the fix is
+      a 25-line change to the anchoring strategy
       that leaves 395 of 15,986 cases wrong against the merge base's 258. Two things justify
       picking it up: a report from someone using a multi-character string delimiter over
       U+FFFD-bearing text at `chunkOverlap: 0` and depending on exact boundaries, or a

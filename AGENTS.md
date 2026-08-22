@@ -311,8 +311,10 @@ library guarantees today_ vs _what we're going to change next_. See
   **It is filed rather than fixed on purpose, and the numbers are why.** Nothing is dropped —
   coverage and `chunk.text === getChunk(...)` both hold — the boundary just lands early:
   2-3 code units in the large majority, 6 at worst, and in 92% of affected cases the only
-  thing that changes chunk is the separator the splitter discarded. **`chunkOverlap: 2` removes
-  the observable effect entirely** (tokens left whole in no chunk: 28 → 0 at `chunkSize: 8`).
+  thing that changes chunk is the separator the splitter discarded. **Raising `chunkOverlap`
+  all but removes the observable effect, without eliminating it** (tokens left whole in no
+  chunk, at `chunkSize: 8`: 275 at `chunkOverlap: 0` → 2 at `2` → 0 at `4`; at `chunkSize: 4`
+  it is 705 → 2, so a small chunk size leaves more residue).
   So don't reach for the fix on the strength of "906 wrong positions" alone — read that
   change's `design.md` → Decision 2 first. What would change the priority is a caller using a
   multi-character string delimiter (`text.split("\n\n")` and friends) over U+FFFD-bearing text at `chunkOverlap: 0` and depending on

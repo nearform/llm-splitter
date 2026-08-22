@@ -19,10 +19,12 @@ It is filed rather than fixed because the impact is much smaller than that numbe
 and the available fix is incomplete. Nothing is dropped — coverage and the
 `chunk.text === getChunk(input, start, end)` correspondence both hold — the boundary simply
 lands early, and in 92% of affected cases the only code units that change chunk are the
-separator the splitter discarded. `chunkOverlap: 2` removes the observable effect entirely
-(28 → 0 tokens left whole in no chunk, at `chunkSize: 8`). So this is a chunking-quality
-defect with a documented workaround, not a data-integrity one, and it does not justify
-changing the anchoring strategy on its own schedule.
+separator the splitter discarded. Raising `chunkOverlap` all but removes the observable
+effect without eliminating it: tokens left whole in no chunk go 275 at `chunkOverlap: 0` to 2
+at `2` and 0 at `4` for `chunkSize: 8`, and 705 to 2 for `chunkSize: 4`. So this is a
+chunking-quality defect with a documented mitigation, not a data-integrity one, and it does
+not justify changing the anchoring strategy on its own schedule. Note that the mitigation is
+opt-in and `chunkOverlap` defaults to `0`, so the default configuration is the exposed one.
 
 ## What Changes
 

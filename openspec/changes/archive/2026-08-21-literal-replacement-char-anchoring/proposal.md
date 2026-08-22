@@ -67,11 +67,11 @@ None.
 
 ## Impact
 
-- **Code**: `anchorParts` in [src/split.js](../../../src/split.js) — the tier 2 guard at
+- **Code**: `anchorParts` in [src/split.js](../../../../src/split.js) — the tier 2 guard at
   the `sourceHasReplacement ||` disjunct, plus `firstAnchorGrapheme` (returns
   `{ segment, offset }`) and the tier 3 locate that consumes it. No public API change; no
   change to the coverage invariant.
-- **Specs**: [openspec/specs/multibyte-anchoring/spec.md](../../specs/multibyte-anchoring/spec.md).
+- **Specs**: [openspec/specs/multibyte-anchoring/spec.md](../../../specs/multibyte-anchoring/spec.md).
 - **Docs**: README's "Supported tokenizers (and a known limitation)" section, whose
   `tiktoken` line ("✅ … so length matches source span") is the user-facing half of the
   same overclaim.

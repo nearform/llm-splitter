@@ -173,7 +173,9 @@ measured over the same class, though not all on one corpus — each count names 
 
   It is bounded by the dropped separator plus any displacement already accumulated upstream —
   a part anchored early leaves the cursor early, which lets the next part be found earlier
-  still. That compounding is why the worst case (9) exceeds the longest separator (6).
+  still. That compounding is why displacement is not simply the separator length; on this
+  corpus it never pushed past it, the worst case (6) matching the longest separator
+  (`"  \n\n  "`). Treat 6 as the measured maximum for this splitter set, not a proven bound.
 
 - **In 92% only the separator moves.** 831 of 906 displaced cases move nothing but the
   characters the splitter discarded. The remaining 145 reach into the preceding part and clip
