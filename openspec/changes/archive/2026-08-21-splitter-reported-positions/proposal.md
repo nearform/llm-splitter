@@ -57,5 +57,7 @@ guess instead of refining it.
   assignability case that is not.
 - Docs — README "Known limitations" gains the remedy; AGENTS.md → "Backtracking anchor walk"
   is superseded by this change.
-- No new dependencies. `tokenizer-length-inflation` overlaps: a splitter that reports positions
-  no longer needs the length assumption that change exists to address.
+- No new dependencies. `tokenizer-length-inflation` is **not** addressed by this change: a
+  reported part still derives `end` from `start + text.length`, so an inflating splitter
+  overshoots the cursor and its next honest offset is rejected as backwards. Reporting a start
+  removes the _search_, not the length assumption.

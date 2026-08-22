@@ -1,6 +1,6 @@
 ## Context
 
-`anchorParts` in [src/split.js](../../../src/split.js) infers each part's offset by searching the
+`anchorParts` in [src/split.js](../../../../src/split.js) infers each part's offset by searching the
 source. Three residual defects are wrong inferences, and none is fixable from the text:
 
 | defect                                                    | scope                                            |
@@ -34,8 +34,10 @@ information that never reaches `split()`, which sees only the resulting strings.
 
 - Improving the anchoring search. This change routes around it; the tiers are untouched.
 - Making reporting mandatory, or changing any default.
-- Normalizing tokenizers (`tokenizer-length-inflation`), though reporting positions makes the
-  length assumption moot for a splitter that opts in.
+- Normalizing tokenizers (`tokenizer-length-inflation`). Reporting a `start` does not help: `end`
+  is still `start + text.length`, so an inflating part overshoots the cursor and the next honest
+  offset is rejected as backwards. Closing that would need the reported form to carry the consumed
+  span — a separate decision, not this change.
 
 ## Decisions
 
@@ -66,14 +68,24 @@ This asymmetry is the crux: the library cannot check whether a reported offset i
 whether it is _possible_. Reporting positions moves that trust to the splitter, which is the point
 — the splitter is the only party that knows.
 
-### Decision 3: Widening `splitter` is source-compatible except for one case
+### Decision 3: Widening `splitter` breaks one assignment, and that is unavoidable
 
 Widening a parameter type is safe for callers passing a splitter. It is not safe for a caller who
 holds the _function type itself_ and assigns to it — `const f: SplitOptions["splitter"] = mySplit`
 still compiles, but code that assigns `SplitOptions["splitter"]` to a narrower
 `(s: string) => string[]` variable stops compiling. The same shape as the overload-set note in
-AGENTS.md. Verify with a probe covering both directions before calling this non-breaking; if it
-bites, the union member goes behind a distinct exported type instead.
+AGENTS.md. Probed in both directions under `nodenext` and `bundler`: confirmed, exactly there and
+nowhere else.
+
+**Putting the union member behind a distinct exported type does not help, so do not re-propose it.**
+Measured against the same probe, alongside a union return type: all three accept both splitter
+forms and all three fail the assignment back, because any type permitting a `{ text, start }[]`
+return is by construction not assignable to `=> string[]`. The break follows from the feature
+living on the `splitter` option, not from how the option was typed. The only shape that survives is
+a separate `positionedSplitter` option — Decision 1, rejected on its own merits.
+
+Accepted as shipped. The affected caller must hold the option type and re-narrow it, which is
+uncommon, and the fix is one annotation: `SplitOptions["splitter"]`.
 
 ### Decision 4: `delimiterSplitter` computes offsets while scanning
 
@@ -84,7 +96,7 @@ README already uses.
 ## Measured dead ends
 
 Recorded so they are not re-proposed. All three were measured against the corpus in
-[the decoy change](../archive/2026-08-21-decoy-grapheme-anchoring/design.md):
+[the decoy change](../2026-08-21-decoy-grapheme-anchoring/design.md):
 
 | candidate                                        | result                                                                       |
 | ------------------------------------------------ | ---------------------------------------------------------------------------- |

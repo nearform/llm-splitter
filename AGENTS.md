@@ -43,7 +43,18 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   constant `PARAGRAPH_DELIMITER` (`"\n\n"`) for both the split regex and
   the per-paragraph cursor advance. Character-mode is a single group at
   offset 0.
-- `anchorParts` runs a three-tier locate per splitter part:
+- `anchorParts` normalizes each returned element through `normalizePart`, then
+  either uses the offset the splitter reported or calls `locatePart` to infer
+  one. Both paths share the `end = min(start + length, input.length)`
+  computation and the cursor advance, which is what keeps coverage identical
+  across a mixture of the two. **A reported offset never reaches the tiers**,
+  so every limitation below is a bare-string-splitter limitation.
+- `normalizePart` validates a reported offset for _possibility_, not
+  correctness — integer, in range, not behind the cursor. It deliberately does
+  **not** compare `text` against the source at `start`: a byte-mutating
+  tokenizer legitimately returns text differing from the span it consumed, so
+  rejecting a mismatch would exclude the primary use case.
+- `locatePart` runs the three-tier locate per splitter part:
   `startsWith(splitPart, cursor)` → `indexOf(splitPart, cursor)` →
   the anchor-grapheme search. Tier 3 is the safety net for byte-mutating
   splitters; tiers 1 and 2 are the perf-critical happy paths. The old
@@ -297,22 +308,19 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Splitter-reported positions** — filed, not started, and the general fix for everything below.
-  A splitter is `(input) => string[]`, so `split()` never learns where a part came from and must
-  infer it. All three residual anchoring defects are wrong inferences. An opt-in
-  `{ text, start }` return plus a `delimiterSplitter` helper removes the inference instead of
-  refining it. See
-  [openspec/changes/splitter-reported-positions/](openspec/changes/splitter-reported-positions/);
-  its `design.md` carries the measured dead ends, which are the reusable part.
+- **The three residual anchoring defects have a remedy, not a fix.** `splitter-reported-positions`
+  shipped the way around them: a splitter may return `{ text, start }`, and a reported offset skips
+  all three tiers, so no inference happens for that part. `delimiterSplitter` covers the common
+  delimiter case. Measured over the decoy corpus, `delimiterSplitter` scores 0 mis-anchored where
+  bare-string splitters score 2,424 / 5,140 / 1,566 by delimiter shape.
 
-- **The three residual anchoring defects.** They are three different bugs — a single number (395)
-  used to conflate the first two, so keep them apart:
+  The search itself is unchanged and still gets these three wrong. Keep them apart — a single
+  number (395) used to conflate the first two:
 
   1. **Tier 2 takes the first verbatim match — 489 of 20,000 (2.4%), and _not_ a U+FFFD bug.**
      `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })` puts the `"."` at 1;
-     it is at 4. Plain ASCII, real splitter, and it reproduces on `chore/rewrite`, so it predates
-     the rewrite. Largest of the three and the least understood. Candidate verification cannot
-     touch it: a verbatim hit aligns at every position by construction.
+     it is at 4. Plain ASCII, real splitter, and it predates `chore/rewrite`. Largest of the three.
+     Candidate verification cannot touch it: a verbatim hit aligns at every position by construction.
   2. **Tier 3 candidate a one-character skeleton cannot rule out — 158 of 15,986.** When a part
      carries one non-U+FFFD code unit and that unit _is_ the anchor grapheme, verification
      re-tests what already matched. 317 of 395 offending parts carry exactly one, 70 carry two.
@@ -320,9 +328,10 @@ library guarantees today_ vs _what we're going to change next_. See
      text: byte-identical at the same position with opposite correct answers, per
      [the archived Decision 4](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md).
 
-  Measured dead ends, so they are not re-proposed: one-part lookahead fixes 0 of 124,
-  rightmost-greedy is worse (578 vs 489), skeleton verification on tier 2 is vacuous, and a
-  global alignment search is ambiguous (`"a...."` admits four valid alignments).
+  **Measured dead ends, so none is re-proposed as an improvement to the search:** one-part
+  lookahead fixes 0 of 124, rightmost-greedy is worse (578 vs 489), skeleton verification on tier 2
+  is vacuous, and a global alignment search is ambiguous (`"a...."` admits four valid alignments).
+  This is why the shipped answer routes around the search instead of refining it.
 
 **Shipped and archived** — detail lives in each change directory, not here:
 
