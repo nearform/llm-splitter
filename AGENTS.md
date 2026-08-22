@@ -51,33 +51,26 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   it was O(n²) on byte-dropping splitters; `indexOf` is safe in tier 3
   because anchor graphemes (filtered by `firstAnchorGrapheme`) never
   start with a low surrogate or combining mark.
-- **Tier 3 verifies each candidate before accepting it.** `indexOf` returns the
-  _first_ occurrence of the anchor grapheme at or after `cursor + offset`, which
-  is not necessarily the part's own — the span a splitter dropped can contain the
-  same grapheme. `skeletonAligns` rejects an offset unless every code unit the
-  splitter could not have invented (everything but U+FFFD and combining marks)
-  lines up with the source there, and the search walks to the next occurrence on
-  rejection. This is _not_ worth applying to tier 2: a verbatim hit aligns at
-  every position by construction, so the check is vacuous there. Measured
-  against a real string-delimiter splitter over U+FFFD-bearing text it takes the
-  class from 10.5% of documents mis-anchored to 0%; the residual is a part that
-  is mostly U+FFFD, where the few real units align early too.
-- **Tier 3 anchors the part's left edge, not its anchor grapheme.**
+- **Tier 3: verify the candidate, and anchor the part's left edge.** Two separate pieces of
+  arithmetic, both load-bearing, both easy to mistake for noise.
+
   `firstAnchorGrapheme` returns `{ segment, offset }`, and tier 3 computes
-  `indexOf(segment, cursor + offset) - offset`. The subtraction is
-  load-bearing and easy to mistake for noise: without it a part 3 code
-  units wide whose anchor sits 1 unit in gets `start` at the match and
-  `end` at `start + 3`, so the span is shifted right by one and the cursor
-  overshoots by one. Searching from `cursor + offset` is what keeps the
-  corrected `start` at or after the cursor. The two halves are pinned by
-  different tests and neither covers both. "anchors a mixed part at its
-  left edge" and "drops unanchorable parts without dropping mixed ones"
-  (whose `[1,4)` expectation looks wrong until you read this) pin the
-  `- offset` subtraction. "searches for the anchor grapheme forward of the
-  part's left edge" pins the `cursor + offset` search start, which needs
-  its own case because dropping the offset there silently breaks the
-  coverage invariant instead of throwing — the whole suite once stayed
-  green with it removed.
+  `indexOf(segment, cursor + offset) - offset`. Without the `- offset`, a part 3 code units wide
+  whose anchor sits 1 unit in gets `start` at the match and `end` at `start + 3` — shifted right
+  by one, cursor overshooting by one. Searching from `cursor + offset` is what keeps the
+  corrected `start` at or after the cursor. Each half is pinned by its own test and neither
+  covers both: "anchors a mixed part at its left edge" and "drops unanchorable parts without
+  dropping mixed ones" (whose `[1,4)` expectation looks wrong until you read this) pin the
+  subtraction; "searches for the anchor grapheme forward of the part's left edge" pins the search
+  start, which needs its own case because dropping it breaks coverage silently rather than
+  throwing — the whole suite once stayed green without it.
+
+  The first occurrence is only a candidate, because the span a splitter dropped can contain the
+  same grapheme. `skeletonAligns` rejects an offset unless every code unit the splitter could not
+  have invented lines up with the source there, and the search walks forward on rejection.
+  **Do not apply this to tier 2** — a verbatim hit aligns at every position by construction, so
+  the check is vacuous there.
+
 - **Tier 2 is skipped for every part containing U+FFFD**, regardless of
   the source. For a source with no U+FFFD this is a provable equivalence:
   the part is not a substring, so the search could only scan to
@@ -96,17 +89,14 @@ Core logic is in [src/split.js](src/split.js). High-level orientation:
   Cost is one extra chunk boundary and no drift, since both are one code
   unit wide. Do not "fix" this by probing the source — that is what the
   removed disjunct did.
-- **The quadratic has now moved three times** — out of `findGrapheme`, out
-  of the tier 2 failure branch, and out of the U+FFFD-bearing-source case
-  the previous round carved out as permanent (measured 40x → 7x cost for
-  an 8x input span). So it is pinned by two scaling regressions under
-  "anchoring cost" in [test/split.test.js](test/split.test.js): "grows
-  linearly with input size" for a clean source and "grows linearly when
-  the source itself contains U+FFFD" for a source holding one. Both
-  measure an 8x size span against a threshold of 16; a 2x span does not
-  separate linear from quadratic at sizes the suite can afford. Do not
-  weaken either to "fix" a slow machine — raise the base size instead.
-  They bite: on the pre-fix tree the U+FFFD one measures 42x.
+- **Linearity is pinned by two scaling regressions**, under "anchoring cost" in
+  [test/split.test.js](test/split.test.js): one for a clean source, one for a source containing
+  U+FFFD. Both measure an 8x size span against a threshold of 16 — a 2x span does not separate
+  linear from quadratic at sizes the suite can afford. Do not weaken either to "fix" a slow
+  machine; raise the base size instead. They bite: the U+FFFD one measures 42x on a tree without
+  the tier 2 skip. Three separate quadratics have been removed from this function, all of them
+  from putting a search inside the per-part loop.
+
 - After all chunks emit, a forward-extension pass sets
   `chunk[i].end = chunk[i+1].start` (and the last chunk to total input
   length). This enforces the **coverage invariant**.
@@ -261,37 +251,26 @@ suite — see "Open work / future".
 
 ### The benchmark baseline is downloaded, not installed or vendored
 
-`test/benchmark.js` compares this working copy against published
-`llm-splitter@0.2.0`. It no longer needs a sibling checkout: the three
-dependency-free ESM files that release publishes are fetched from jsDelivr into
-`test/.cache/` (gitignored) on first run, verified against pinned SHA-256
-digests, and reused offline after that. A clean clone needs only `npm ci` plus
-network on the first run.
+`test/benchmark.js` compares this working copy against published `llm-splitter@0.2.0`. That
+release's three dependency-free ESM files are fetched from jsDelivr into `test/.cache/`
+(gitignored) on first run, verified against pinned SHA-256 digests, and reused offline after.
+A clean clone needs `npm ci` plus network once. Three deliberate consequences:
 
-Three things follow from that, all of them deliberate:
+- **The digests in `BASELINE_FILES` are load-bearing.** The script executes downloaded code, and
+  a baseline that can drift measures nothing, so a mismatch is a hard failure. Bumping
+  `BASELINE_VERSION` means regenerating them (command is in the docstring above the constant).
+- **Don't "simplify" it into a devDependency.** An unaliased `npm i -D llm-splitter` is the trap:
+  it works today only because this package has no `exports` map (see "Considered and deliberately
+  not taken" — declined, but one edit away). Add one and Node's self-reference makes the baseline
+  `src/index.js`, so the benchmark reports zero differences against itself. Today the working copy
+  comes in by relative path and the baseline by cache URL, so neither resolves by package name.
+- **Excluded from `check:types` and `npm run check`.** The baseline import resolves at runtime
+  through a cache URL, so `tsc` has no static path; the run also takes minutes and needs network.
+  `test/.cache/` is in the eslint and prettier ignore lists too — it's someone else's build output.
 
-- **The digests in `BASELINE_FILES` are load-bearing.** The script executes
-  downloaded code, and a benchmark whose baseline can drift measures nothing.
-  A mismatch is a hard failure, not a warning. Bumping `BASELINE_VERSION`
-  means regenerating them (command is in the docstring above the constant).
-- **Don't "simplify" it into a devDependency.** A `npm:` alias would work, but
-  an unaliased `npm i -D llm-splitter` is the trap: it installs fine today only
-  because this package has no `exports` map (see "Considered and deliberately not
-  taken" below — declined, but one edit away). Add one and Node's self-reference
-  takes over, the baseline silently becomes `src/index.js`, and the benchmark
-  reports zero differences against itself. The current setup is immune: the
-  working copy comes in by relative path and the baseline from a cache URL, so
-  neither is resolved by package name.
-- **Still excluded from `check:types` and from `npm run check`.** The baseline
-  import resolves at runtime through a cache URL, so there's no static path for
-  `tsc`; and the run takes minutes and touches the network. `test/.cache/` is
-  also in the eslint and prettier ignore lists — it's someone else's build
-  output.
-
-Behind a corporate proxy the first run fails with `fetch failed`: Node's
-`fetch` ignores `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is set in the
-environment. Setting it from inside the script does not work — undici reads it
-at bootstrap — so the error message says so instead.
+Behind a corporate proxy the first run fails with `fetch failed`: Node's `fetch` ignores
+`HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is in the environment, and setting it from inside the
+script does not work because undici reads it at bootstrap.
 
 ## Spec-driven workflow (OpenSpec)
 
@@ -318,84 +297,46 @@ library guarantees today_ vs _what we're going to change next_. See
   suite is unconditional and green. When it ships, run
   `openspec archive tokenizer-length-inflation` to merge the deltas into `openspec/specs/`.
 
-- **Decoy grapheme anchoring** — shipped. A genuinely-verbatim mixed part used to anchor on an
-  earlier occurrence of its first anchorable grapheme, reporting a position a few code units
-  early. Fixed by verifying each tier 3 candidate (`skeletonAligns`, described in the algorithm
-  map). It was filed rather than fixed for one round on the strength of a synthetic differential
-  that scored it 906 → 395 — a mitigation, not a fix — and a `chunkOverlap` workaround believed
-  to neutralise it. **Both readings were wrong, and the reason is worth keeping.** The
-  differential drove `split()` with a `() => parts` stub, which presents part shapes no real
-  splitter emits; re-scored with the splitter actually applied to the source, the fix takes the
-  class from 10.5% of U+FFFD-bearing documents to **0%** at every replacement-char density from
-  0.05% to 17%. The trigger is structural, not density-dependent — a part need only _begin_ with
-  a character the separator contains, which scraped Markdown does constantly — and the workaround
-  reaches zero only at `chunkOverlap: 4` against a default of `0`. The lesson generalizes: score a
-  splitter-facing change with a real splitter, or the corpus will answer a different question.
-  Background, both differentials, and the reversal are in
-  [openspec/changes/archive/2026-08-21-decoy-grapheme-anchoring/](openspec/changes/archive/2026-08-21-decoy-grapheme-anchoring/)
-  — `design.md` → Decision 2 and "Reachability with a real splitter".
+- **Splitter-reported positions** — filed, not started, and the general fix for everything below.
+  A splitter is `(input) => string[]`, so `split()` never learns where a part came from and must
+  infer it. All three residual anchoring defects are wrong inferences. An opt-in
+  `{ text, start }` return plus a `delimiterSplitter` helper removes the inference instead of
+  refining it. See
+  [openspec/changes/splitter-reported-positions/](openspec/changes/splitter-reported-positions/);
+  its `design.md` carries the measured dead ends, which are the reusable part.
 
-- **Backtracking anchor walk** — not started, and now the only open anchoring correctness work.
-  Three residuals, and they are **three different bugs** — the number 395 conflated the first
-  two, so separate them before touching anything:
+- **The three residual anchoring defects.** They are three different bugs — a single number (395)
+  used to conflate the first two, so keep them apart:
 
-  1. **Tier 2 verbatim decoys — 237 of 15,986, and _not_ a U+FFFD bug at all.** Tier 2 takes the
-     first verbatim occurrence at or after the cursor, so when a splitter drops a
-     multi-character span that itself contains the part, that occurrence can precede the part's
-     true position. No replacement character need appear anywhere: `text.split("...")` over
-     `"�漢ba漢...é...."` anchors the final `"."` at 9, the separator's first `.`, instead of 12.
-     It reproduces identically on the pre-rewrite base, so it predates every U+FFFD change and
-     candidate verification cannot touch it — a tier 2 hit aligns at every position by
-     construction. **This is the largest of the three and the least understood.** It has no
-     change of its own yet.
-  2. **Tier 3 residual — 158 of 15,986.** A part that is _mostly_ U+FFFD with one or two real
-     code units, where an earlier offset aligns on all of them. This is what candidate
-     verification cannot resolve, and the shape is confirmed: 317 of 395 offending parts carry
-     exactly one non-U+FFFD character, 70 carry two.
-  3. **The tier 1 case** — a literal U+FFFD at the cursor claiming a manufactured bare part.
+  1. **Tier 2 takes the first verbatim match — 489 of 20,000 (2.4%), and _not_ a U+FFFD bug.**
+     `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })` puts the `"."` at 1;
+     it is at 4. Plain ASCII, real splitter, and it reproduces on `chore/rewrite`, so it predates
+     the rewrite. Largest of the three and the least understood. Candidate verification cannot
+     touch it: a verbatim hit aligns at every position by construction.
+  2. **Tier 3 candidate a one-character skeleton cannot rule out — 158 of 15,986.** When a part
+     carries one non-U+FFFD code unit and that unit _is_ the anchor grapheme, verification
+     re-tests what already matched. 317 of 395 offending parts carry exactly one, 70 carry two.
+  3. **Tier 1 manufactured vs literal U+FFFD — 7 oracle residual.** Provably not fixable from the
+     text: byte-identical at the same position with opposite correct answers, per
+     [the archived Decision 4](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md).
 
-  A guard that merely _picks between_ tier 2's answer and the offset-corrected
-  tier 3 candidate cannot work — the spurious and the legitimate case present identical
-  signatures with opposite correct answers, demonstrated in
-  [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/design.md)
-  → Decision 4. Don't re-derive that, and don't accept a proposed guard that ignores it — but
-  don't over-read it either, since candidate verification above is a local rule that does help.
-  Closing the rest needs knowing whether the _remaining_ parts still anchor under a given
-  choice, and the cost is the open question: worst case it reintroduces a per-part factor,
-  which is exactly what `anchor-scan-short-circuit` spent a change removing. Try the one-part
-  lookahead in `decoy-grapheme-anchoring`'s Open Questions before the full search.
+  Measured dead ends, so they are not re-proposed: one-part lookahead fixes 0 of 124,
+  rightmost-greedy is worse (578 vs 489), skeleton verification on tier 2 is vacuous, and a
+  global alignment search is ambiguous (`"a...."` admits four valid alignments).
 
-- **Literal U+FFFD in the source** — shipped and archived. A source carrying a literal U+FFFD
-  made `split()` throw or mis-anchor under `tiktoken`, because tier 2 matched a manufactured
-  U+FFFD against the literal one. Fixed by skipping tier 2 for every U+FFFD-bearing part plus
-  correcting the tier 3 left-edge offset (both described in the algorithm map), and it closed
-  the linearity carve-out below. Background, measurements, and a reusable differential
-  verification harness live in
-  [openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/](openspec/changes/archive/2026-08-21-literal-replacement-char-anchoring/) —
-  `design.md` → "Reproducing the measurements" is the script, and Decision 4 is why the two
-  remaining residuals cannot be closed locally.
+**Shipped and archived** — detail lives in each change directory, not here:
 
-- **Quadratic tier-2 anchor scan** — shipped and archived. `indexOf(splitPart, cursor)` used to
-  scan to end of input for every part that isn't verbatim in the source, making
-  `character`-strategy splits O(n²) on tokenizer output; fixed by the tier 2 skip described in
-  the algorithm map, and now part of the `multibyte-anchoring` contract. Background lives in
-  [openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/](openspec/changes/archive/2026-08-20-anchor-scan-short-circuit/) —
-  `design.md` carries the tier instrumentation, the measured tier-2 reach data, the rationale
-  for rejecting a distance bound, and the measurements behind the regression's constants
-  (including the conditional follow-up in `tasks.md` § 6 for revisiting a tier-2 distance bound
-  if a caller ever reports a splitter that legitimately drops long spans).
-
-  **Its one carve-out is now closed.** That change left a source containing literal U+FFFD
-  outside the linearity guarantee, on the grounds that a U+FFFD-bearing part is genuinely
-  findable there so tier 2 could not be skipped. `literal-replacement-char-anchoring` showed the
-  carve-out was a consequence of the disjunct rather than a fact about the problem: skipping
-  tier 2 for those parts unconditionally makes that case linear too (measured 40x → 7x cost for
-  an 8x input span) and fixes a correctness bug in the bargain. `multibyte-anchoring` now states
-  linearity for a U+FFFD-bearing source as a guarantee; the scenario that recorded it as a
-  permanent limitation is gone.
-
-  `tokenizer-length-inflation` also edits `anchorParts` (the tier 3 anchor step) and rebases on
-  this.
+- `2026-08-21-decoy-grapheme-anchoring` — tier 3 now verifies each candidate (`skeletonAligns`).
+  Worth reading for one lesson: it was filed rather than shipped for a round because a
+  `() => parts` stub scored the fix at "906 → 395, a mitigation". Against a **real** splitter it
+  was 10.5% → 0%. Score a splitter-facing change with a real splitter, or the corpus answers a
+  different question.
+- `2026-08-21-literal-replacement-char-anchoring` — tier 2 skipped for every U+FFFD-bearing part,
+  plus the tier 3 left-edge offset. `design.md` → "Reproducing the measurements" is a reusable
+  differential harness.
+- `2026-08-20-anchor-scan-short-circuit` — removed the O(n²) tier 2 scan. Its linearity carve-out
+  for U+FFFD-bearing sources was later closed (40x → 7x for an 8x span) and is now a guarantee in
+  `multibyte-anchoring`. `tasks.md` § 6 holds a conditional follow-up on a tier-2 distance bound.
 
 ### Considered and deliberately not taken
 
