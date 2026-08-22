@@ -11,7 +11,7 @@
 
 ## 2. Anchoring changes
 
-- [x] 2.1 In `anchorParts` ([src/split.js](../../../src/split.js)), probe the source once per
+- [x] 2.1 In `anchorParts` ([src/split.js](../../../../src/split.js)), probe the source once per
       call for U+FFFD
 - [x] 2.2 Skip Tier 2 when the part contains U+FFFD and the source does not, falling through
       to Tier 3; keep Tier 2 unconditional when the source does contain U+FFFD
@@ -22,7 +22,7 @@
 
 ## 3. Tests
 
-- [x] 3.1 Add a scaling regression to [test/split.test.js](../../../test/split.test.js) per
+- [x] 3.1 Add a scaling regression to [test/split.test.js](../../../../test/split.test.js) per
       design.md, Decision 4: a synthetic splitter (not `tiktoken` — the suite has no
       tokenizer dependency and should not gain one) emitting U+FFFD for every fourth part,
       over a U+FFFD-free source, `character` strategy, best-of-2 per size taking the
@@ -55,11 +55,11 @@
       work is: confirm the before/after and growth tables against the landed code (they came
       from the prototype), update the splitter median-ratio table, and flip the
       "**Status: proposed, not landed**" line
-- [x] 5.2 Update the `anchorParts` bullet in [AGENTS.md](../../../AGENTS.md) — Algorithm map
+- [x] 5.2 Update the `anchorParts` bullet in [AGENTS.md](../../../../AGENTS.md) — Algorithm map
       to describe the Tier 2 skip, and note the scaling regression alongside the existing
       warning that the quadratic has moved once already
 - [x] 5.3 Add the literal-U+FFFD-in-source failure (identical before and after this change)
-      to [tokenizer-length-inflation/research.md](../tokenizer-length-inflation/research.md)
+      to [tokenizer-length-inflation/research.md](../../tokenizer-length-inflation/research.md)
       as another instance of the length-based-advance root cause
 
 ## 6. Follow-up (out of scope for this change)

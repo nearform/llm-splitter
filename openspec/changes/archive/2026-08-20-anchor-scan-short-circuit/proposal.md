@@ -53,12 +53,12 @@ No public API change. No observable output change.
 
 ## Impact
 
-- Source: [src/split.js](../../../src/split.js) — `anchorParts` (Tier 2 guard) and
+- Source: [src/split.js](../../../../src/split.js) — `anchorParts` (Tier 2 guard) and
   `firstAnchorGrapheme` (all-replacement fast path). ~9 lines added, 1 changed.
-- Tests: [test/split.test.js](../../../test/split.test.js) — a scaling regression asserting
+- Tests: [test/split.test.js](../../../../test/split.test.js) — a scaling regression asserting
   sub-quadratic growth on a U+FFFD-heavy synthetic splitter, plus equivalence cases.
 - Docs: [core-rewrite/design.md](../2026-08-20-core-rewrite/design.md) — "Performance" (measurement refresh and status
-  flip); [AGENTS.md](../../../AGENTS.md) algorithm map.
+  flip); [AGENTS.md](../../../../AGENTS.md) algorithm map.
 - Performance: 19x on the pathological row, 3.4x on CJK, and the growth curve goes from
   quadratic to linear. Cost on splitters that never emit U+FFFD is ≤0.3ms per 100KB
   (`whitespace` worst case) and unmeasurable elsewhere.

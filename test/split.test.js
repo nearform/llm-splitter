@@ -1430,6 +1430,94 @@ describe("split", () => {
         }
       });
 
+      it("does not anchor a manufactured replacement char on a literal one", () => {
+        // tiktoken fragments the leading 漢 into two bare U+FFFD parts. The
+        // source also holds a literal U+FFFD at index 14, which used to
+        // re-enable the verbatim search, so a manufactured part matched that
+        // literal one 13 code units downstream, stranded the cursor past
+        // " world", and threw.
+        const withLiteral = split("漢 hello world � tail", {
+          chunkSize: 100,
+          splitter: tokenSplitter,
+        });
+        // The same input with the replacement char swapped for an ordinary
+        // character is the control, and it succeeds either way with
+        // [{ text: " hello world X tail", start: 1, end: 20 }]. Comparing
+        // against it is what isolates the U+FFFD as the cause rather than the
+        // multi-byte character.
+        const control = split("漢 hello world X tail", {
+          chunkSize: 100,
+          splitter: tokenSplitter,
+        });
+
+        assert.deepStrictEqual(
+          withLiteral.map(({ start, end }) => [start, end]),
+          control.map(({ start, end }) => [start, end]),
+        );
+        assert.deepStrictEqual(withLiteral, [
+          { text: " hello world � tail", start: 1, end: 20 },
+        ]);
+      });
+
+      it("drops a bare replacement part rather than matching a literal one", () => {
+        // The same shape as above with no native dependency, so the regression
+        // still bites if the tiktoken devDependency is ever dropped: "漢"
+        // fragments into two bare U+FFFD parts, and the source holds a literal
+        // one for them to spuriously match.
+        /** @param {string} text */
+        const fragmentingSplitter = (text) =>
+          [...text].flatMap((ch) => (ch === "漢" ? ["�", "�"] : [ch]));
+
+        const chunks = split("漢ab�cd", {
+          chunkSize: 100,
+          splitter: fragmentingSplitter,
+        });
+
+        assert.deepStrictEqual(chunks, [{ text: "ab�cd", start: 1, end: 6 }]);
+      });
+
+      it("anchors a mixed part at its left edge, not at its anchor grapheme", () => {
+        // The anchor grapheme "c" sits 2 code units into the part, so the
+        // part's left edge is 2 before it. Anchoring on "c" itself reports
+        // [2,4) and advances the cursor two units too far.
+        //
+        // This pins the `- anchor.offset` subtraction only. It does not pin
+        // the offset in the *search start*: "c" is found at index 2 whether
+        // the search begins at the cursor, at cursor + 1, or at cursor + 2,
+        // so all three produce [0,4) here. The test below covers that half.
+        const chunks = split("abcd", {
+          chunkSize: 8,
+          splitter: () => ["��cd"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [["abcd", 0, 4]],
+        );
+      });
+
+      it("searches for the anchor grapheme forward of the part's left edge", () => {
+        // Covers the other half of the tier 3 arithmetic: the `+ anchor.offset`
+        // in the search start. The anchor "b" sits at part offset 1 and the
+        // source holds another "b" at index 1, exactly where the cursor is.
+        // Searching from the cursor finds that one and puts the part's start at
+        // 0 — behind the cursor, and before the previous chunk ends, which
+        // breaks the coverage invariant rather than throwing. Starting the
+        // search at cursor + 1 is what rules it out.
+        const chunks = split("abzb", {
+          chunkSize: 1,
+          splitter: () => ["a", "�b"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
+          [
+            ["ab", 0, 2],
+            ["zb", 2, 4],
+          ],
+        );
+      });
+
       it("drops unanchorable parts without dropping mixed ones", () => {
         // Three shapes that all reach the anchor walk differently: nothing
         // but replacement chars (unanchorable outright), a combining mark
@@ -1441,9 +1529,54 @@ describe("split", () => {
         const splitter = () => ["���", "́�", "�cd"];
         const chunks = split(input, { chunkSize: 8, splitter });
 
+        // `[1,4)`, not `[2,4)`: the part "�cd" is 3 code units and a part's
+        // span equals its length, so its left edge belongs at 4-3. The
+        // replacement char stands in for the source's "b". Reporting 2 was the
+        // anchor grapheme "c"'s own position standing in for the part's.
         assert.deepStrictEqual(
           chunks.map((chunk) => [chunk.text, chunk.start, chunk.end]),
-          [["cd", 2, 4]],
+          [["bcd", 1, 4]],
+        );
+      });
+
+      it("anchors a verbatim mixed part after a dropped multi-char separator", () => {
+        // The part's anchor grapheme "\n" also occurs inside the "\n\n" the
+        // splitter dropped. Taking the first occurrence puts the part at 6,
+        // two code units before its true start of 8; only checking the rest of
+        // the part against the source rules that candidate out.
+        /** @param {string} text */
+        const paragraphSplitter = (text) => text.split("\n\n").filter(Boolean);
+
+        const chunks = split("Intro.\n\n\nCaf� notes.\n\nEnd.", {
+          chunkSize: 1,
+          splitter: paragraphSplitter,
+        });
+
+        assert.deepStrictEqual(
+          chunks.map(({ start, end }) => [start, end]),
+          [
+            [0, 8],
+            [8, 22],
+            [22, 26],
+          ],
+        );
+      });
+
+      it("rejects an anchor-grapheme match that the rest of the part contradicts", () => {
+        // Same defect with no dependence on a delimiter shape. "a�b" is
+        // verbatim at 4, but its anchor "a" also sits at 2, and only the "b"
+        // two units on distinguishes the two candidates.
+        const chunks = split("a a a�b", {
+          chunkSize: 1,
+          splitter: () => ["a", "a�b"],
+        });
+
+        assert.deepStrictEqual(
+          chunks.map(({ start, end }) => [start, end]),
+          [
+            [0, 4],
+            [4, 7],
+          ],
         );
       });
 
@@ -1530,6 +1663,61 @@ describe("split", () => {
         assert.ok(
           growth < SPAN * 2,
           `anchoring cost grew ${growth.toFixed(1)}x for a ${SPAN}x larger input (${baseline.toFixed(2)}ms -> ${scaled.toFixed(2)}ms); linear is ~${SPAN}x, quadratic ~${SPAN ** 2}x`,
+        );
+      });
+
+      // The source above holds no U+FFFD, which was the only case the
+      // linearity guarantee used to cover. A source that has one re-enabled
+      // the verbatim search for every U+FFFD-bearing part, and that case was
+      // carved out as a permanent limitation. It is not permanent: skipping
+      // tier 2 for those parts closes it. Parts here are deliberately *mixed*
+      // — one real char plus a manufactured U+FFFD — because those are the
+      // ones that each paid a full failed scan. Two code units per part
+      // against two of source, so length still equals span and the cursor
+      // cannot run off the end.
+      /** @param {string} text */
+      const mixedFragmentingSplitter = (text) => {
+        const chars = [...text];
+        /** @type {string[]} */
+        const parts = [];
+        for (let i = 2; i + 1 < chars.length; i += 2) {
+          parts.push(chars[i] + "�");
+        }
+        return parts;
+      };
+
+      /** @param {number} size */
+      const fastestReplacementBearingMs = (size) => {
+        const input = "� " + multibyteSource(size);
+        let best = Infinity;
+        for (let run = 0; run < 2; run++) {
+          const started = performance.now();
+          split(input, { chunkSize: 512, splitter: mixedFragmentingSplitter });
+          best = Math.min(best, performance.now() - started);
+        }
+        return best;
+      };
+
+      it("grows linearly when the source itself contains U+FFFD", () => {
+        // BASE is far smaller than the test above because every part here
+        // reaches tier 3 and pays a grapheme segmentation, so the baseline is
+        // already ~10ms — measured at 10.2-12.3ms across repeated runs, a
+        // stable enough denominator. Growth measured 7.6-8.2x with the tier 2
+        // skip in place and 45.3x without it, so the threshold sits with ~2x
+        // margin below and ~3x above. Raise BASE, never the threshold.
+        const SPAN = 8;
+        const BASE = 12_500;
+        const baseline = fastestReplacementBearingMs(BASE);
+        const scaled = fastestReplacementBearingMs(BASE * SPAN);
+
+        assert.ok(
+          baseline > 0,
+          "baseline measurement must be greater than zero to divide by",
+        );
+        const growth = scaled / baseline;
+        assert.ok(
+          growth < SPAN * 2,
+          `anchoring cost grew ${growth.toFixed(1)}x for a ${SPAN}x larger U+FFFD-bearing input (${baseline.toFixed(2)}ms -> ${scaled.toFixed(2)}ms); linear is ~${SPAN}x, quadratic ~${SPAN ** 2}x`,
         );
       });
     });

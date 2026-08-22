@@ -96,8 +96,12 @@ const splitValidate = ({
 // straddles a multi-byte char emits U+FFFD, or emits an isolated combining
 // mark that only ever appears merged into a preceding base grapheme.
 /**
+ * Returns the cluster together with its offset into `splitPart`, because the
+ * cluster's position in the source is not the part's position unless that
+ * offset is zero — see the tier 3 call site.
+ *
  * @param {string} splitPart
- * @returns {string|null}
+ * @returns {{ segment: string, offset: number }|null}
  */
 const firstAnchorGrapheme = (splitPart) => {
   // Fast path only — not the full unanchorable test. Keyed on the part being
@@ -107,7 +111,7 @@ const firstAnchorGrapheme = (splitPart) => {
     return null;
   }
 
-  for (const { segment } of SEGMENTER.segment(splitPart)) {
+  for (const { segment, index } of SEGMENTER.segment(splitPart)) {
     // Whole clusters, not code units: a mark merges into whatever precedes it,
     // so a cluster anchors only if it holds something other than a replacement
     // char or a mark. `\p{M}` covers variation selectors FE00-FE0F.
@@ -115,12 +119,59 @@ const firstAnchorGrapheme = (splitPart) => {
       continue;
     }
 
-    return segment;
+    return { segment, offset: index };
   }
 
   // Reached when no single cluster anchors but the part was not caught above —
   // an isolated combining mark, or a mark alongside a replacement char.
   return null;
+};
+
+/**
+ * Does every code unit the splitter could not have invented line up with the
+ * source at `at`?
+ *
+ * The anchor grapheme alone is a weak signal: a part whose first anchorable
+ * grapheme also occurs inside the span the splitter dropped anchors on that
+ * earlier occurrence and reports a position a few code units early. Checking
+ * the rest of the part rejects those candidates, so the search can move on to
+ * the next occurrence instead of trusting the first.
+ *
+ * Positions holding U+FFFD or a combining mark are skipped, since the splitter
+ * may have manufactured them and they constrain nothing. That makes the check
+ * weakest for a part that is mostly U+FFFD, which is where the residual
+ * mis-anchorings live.
+ *
+ * Comparing at fixed offsets is only meaningful while a part's decoded length
+ * equals the source span it consumed — the same assumption `end = start +
+ * splitPart.length` already rests on, so this adds none. It does mean the check
+ * is invalid for a length-inflating tokenizer; see `tokenizer-length-inflation`.
+ *
+ * @param {string} input
+ * @param {string} splitPart
+ * @param {number} at - Candidate left edge of `splitPart` in `input`.
+ * @returns {boolean}
+ */
+const skeletonAligns = (input, splitPart, at) => {
+  if (at < 0) {
+    return false;
+  }
+
+  for (let i = 0; i < splitPart.length; i += 1) {
+    const ch = splitPart[i];
+    // Per code unit, not per cluster: `UNANCHORABLE_CLUSTER` is a character
+    // class, so testing one unit is valid for the marks and replacement chars
+    // it covers. If it ever becomes cluster-aware, both call sites change.
+    if (ch === REPLACEMENT_CHAR || UNANCHORABLE_CLUSTER.test(ch)) {
+      continue;
+    }
+
+    if (at + i >= input.length || input[at + i] !== ch) {
+      return false;
+    }
+  }
+
+  return true;
 };
 
 /**
@@ -132,19 +183,37 @@ const firstAnchorGrapheme = (splitPart) => {
  *     cursor sitting exactly on the next part (char/tiktoken happy path).
  *  2. `indexOf(splitPart)` forward — byte-preserving splitter that drops
  *     bytes between parts (e.g. `text.split(/\s+/)` discards whitespace, so
- *     the cursor lands in the gap and `startsWith` fails). Skipped when the
- *     part contains U+FFFD and the source does not: the part cannot be a
- *     substring, so the search could only fail after scanning to end of
- *     input, and with O(n) such parts that is quadratic. U+FFFD is the only
- *     character a splitter may introduce, so nothing else admits the same
- *     inference; a source that does contain one disables the skip.
+ *     the cursor lands in the gap and `startsWith` fails). Skipped for every
+ *     part containing U+FFFD. When the source has none, that is an
+ *     equivalence: the part cannot be a substring, so the search could only
+ *     fail after scanning to end of input, and with O(n) such parts that is
+ *     quadratic. When the source does have one, it is a deliberate preference
+ *     for tier 3 — U+FFFD is a character the splitter invented, so a verbatim
+ *     hit on it says nothing about where the part came from, and acting on
+ *     such a hit strands the cursor past real source. U+FFFD is the only
+ *     character a splitter may introduce, so nothing else admits either
+ *     inference.
  *  3. `indexOf(firstAnchorGrapheme(splitPart))` — byte-mutating splitter
- *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find
- *     the first positionable grapheme inside splitPart and anchor there.
+ *     (e.g. tiktoken emitting U+FFFD across a multi-byte boundary); find the
+ *     first positionable grapheme inside splitPart and anchor the part's left
+ *     edge relative to it, correcting for that grapheme's offset into the
+ *     part. Each occurrence is only a candidate: it is accepted once
+ *     `skeletonAligns` confirms the part's non-invented code units line up
+ *     there, and the search walks forward otherwise. Without that check a
+ *     part whose anchor grapheme also occurs inside the span the splitter
+ *     dropped anchors early — see `skeletonAligns`.
  *
- * `indexOf` is safe in tier 3 because `firstAnchorGrapheme` returns a whole
- * grapheme cluster, which never starts with a low surrogate or combining
- * mark — a code-unit match cannot land mid-surrogate or mid-cluster.
+ * The tier 3 *match* cannot land mid-surrogate or mid-cluster, because
+ * `firstAnchorGrapheme` returns a whole grapheme cluster and a cluster never
+ * starts with a low surrogate or combining mark. Note this is a claim about
+ * the match, not about `start`: subtracting the anchor's offset can put
+ * `start` inside a surrogate pair, which is consistent with chunk boundaries
+ * carrying no code-point integrity guarantee (see the `split()` docstring).
+ *
+ * Tier 1 remains unguarded, and cannot be: at the cursor a manufactured bare
+ * U+FFFD is byte-identical to a literal one, so a literal U+FFFD standing
+ * there may claim a manufactured part. That costs one chunk boundary and no
+ * drift, since both are one code unit wide.
  *
  * @param {string} input
  * @param {(input: string) => string[]} splitter
@@ -162,8 +231,6 @@ const anchorParts = (input, splitter, baseOffset) => {
   /** @type {Chunk[]} */
   const parts = [];
   let cursor = 0;
-  // Precondition for the tier 2 skip; constant while we walk `input`.
-  const sourceHasReplacement = input.includes(REPLACEMENT_CHAR);
 
   for (const splitPart of splits) {
     if (typeof splitPart !== "string") {
@@ -181,7 +248,7 @@ const anchorParts = (input, splitter, baseOffset) => {
     let start = -1;
     if (input.startsWith(splitPart, cursor)) {
       start = cursor;
-    } else if (sourceHasReplacement || !splitPart.includes(REPLACEMENT_CHAR)) {
+    } else if (!splitPart.includes(REPLACEMENT_CHAR)) {
       start = input.indexOf(splitPart, cursor);
     }
 
@@ -194,7 +261,27 @@ const anchorParts = (input, splitter, baseOffset) => {
         continue;
       }
 
-      start = input.indexOf(anchor, cursor);
+      // The anchor cluster sits `anchor.offset` code units into the part, so
+      // its match position is not the part's start — subtracting the offset is
+      // what makes `end = start + splitPart.length` span the source the part
+      // actually consumed. This is also what lets tier 2 be skipped for every
+      // U+FFFD-bearing part above: without it, a mixed part like `"�b"`
+      // anchors on its `"b"` one unit late, and the tier 2 exact match is the
+      // only thing that hides it. Searching from `cursor + offset` keeps the
+      // corrected start at or after the cursor.
+      //
+      // The first occurrence is only a candidate. The anchor grapheme can also
+      // occur inside the span the splitter dropped, so accept an occurrence
+      // only once the part's non-invented code units line up there too, and
+      // keep walking forward otherwise.
+      let match = input.indexOf(anchor.segment, cursor + anchor.offset);
+      while (
+        match !== -1 &&
+        !skeletonAligns(input, splitPart, match - anchor.offset)
+      ) {
+        match = input.indexOf(anchor.segment, match + 1);
+      }
+      start = match === -1 ? -1 : match - anchor.offset;
       if (start === -1) {
         throw new Error(
           `Splitter returned a part that could not be located in input (${input.length}): "${input.slice(0, 20)}"... with part (${splitPart.length}): "${splitPart.slice(0, 20)}"...`,

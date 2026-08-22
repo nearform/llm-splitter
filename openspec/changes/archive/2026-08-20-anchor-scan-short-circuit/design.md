@@ -16,7 +16,7 @@ Two structural facts shape the fix:
   `character` rows and why paragraph mode looked fine.
 - **The quadratic has moved before.** It used to live in `findGrapheme` (`slice` +
   `Intl.Segmenter` per call) and was displaced, not removed, when `indexOf` replaced it. See
-  [AGENTS.md](../../../AGENTS.md) — Algorithm map.
+  [AGENTS.md](../../../../AGENTS.md) — Algorithm map.
 
 ## Goals / Non-Goals
 
@@ -140,7 +140,7 @@ That makes noise control part of the test design rather than an afterthought:
   false failure.
 - **Input shape:** one part per code unit with every fourth replaced by U+FFFD (the shape
   already used by the synthetic splitter cases in
-  [test/split.test.js](../../../test/split.test.js)), over CJK source containing no U+FFFD, in
+  [test/split.test.js](../../../../test/split.test.js)), over CJK source containing no U+FFFD, in
   `character` strategy, `chunkSize: 512`.
 - **If the baseline gets too small to divide by** on faster hardware, raise the base size —
   never loosen the threshold. Observed baseline is 2.3–5.9ms, so there is a wide margin before
@@ -247,5 +247,5 @@ the absolute number is the one to check. **Confirmed on the landed code:**
 
 Plus the standing gate from `openspec/config.yaml`: `npm run check` green (**163/163 on the
 landed code**, up from 160 by the three tests in Decision 4), and the gte-small fixtures in
-[tokenizer-length-inflation/design.md](../tokenizer-length-inflation/design.md) —
+[tokenizer-length-inflation/design.md](../../tokenizer-length-inflation/design.md) —
 "Acceptance criteria" unaffected, since this change does not touch the Tier 3 anchor step.

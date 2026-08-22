@@ -39,8 +39,26 @@ literal one further along, the length-based advance carries the cursor past real
 the next part throws or mis-anchors. It is the same length-vs-span mismatch as mode 1, reached
 without any normalization. Confirmed identical before and after `anchor-scan-short-circuit`
 (that change's tier 2 skip switches itself off precisely when the source contains U+FFFD, so
-it neither helps nor hurts here) — recorded so the fix designed for modes 1-3 is checked
-against this shape too.
+it neither helps nor hurts here).
+
+**No longer open here.** This shape is owned by `literal-replacement-char-anchoring`, which
+fixes it in two edits: Tier 3 stops treating the anchor grapheme's position as the part's
+position (`indexOf(anchor.segment, cursor + anchor.offset) - anchor.offset`), and Tier 2 is
+then skipped for every U+FFFD-bearing part. Measured there at 0 throws across 15,000 fuzz
+cases with zero `OK→THROW`. A benign residual remains: Tier 1's `startsWith` still cannot tell
+a manufactured bare U+FFFD from a literal one standing at the cursor, which adds a chunk
+boundary without drift.
+
+**Two consequences for this change, both live:**
+
+1. Its Tier 3 edit is on the **identity path** — the path this change leaves in place when
+   `sourceNormalize` is unset. So a normalizing tokenizer used without `sourceNormalize` now
+   reaches a _corrected_ Tier 3, which changes where its parts land relative to the numbers
+   recorded in "Phase 1 evidence" below. Those numbers were measured before that fix.
+2. That change could not run the gte-small leg — `@huggingface/transformers` is not a
+   devDependency, and re-adding it is task 4.2 here. **This change therefore owns verifying
+   the corrected Tier 3 against gte-small** (task 4.6). It is a handoff, not a gap that was
+   waived.
 
 ## Phase 1 evidence (gte-small, 2026-05-25)
 
