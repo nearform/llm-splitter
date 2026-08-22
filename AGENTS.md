@@ -305,21 +305,21 @@ library guarantees today_ vs _what we're going to change next_. See
   documented limitation in `multibyte-anchoring`, filed as
   [openspec/changes/decoy-grapheme-anchoring/](openspec/changes/decoy-grapheme-anchoring/) with
   a measured prototype, not just a proposal: verifying the part's non-U+FFFD code units against
-  the source at the tier 3 candidate takes the class from 1,663 wrong to 678 of 16,842 and
+  the source at the tier 3 candidate takes the class from 906 wrong to 395 of 15,986 and
   leaves every existing gate untouched, including linearity.
 
   **It is filed rather than fixed on purpose, and the numbers are why.** Nothing is dropped —
   coverage and `chunk.text === getChunk(...)` both hold — the boundary just lands early:
-  2-3 code units in the large majority, 9 at worst, and in 89% of affected cases the only
+  2-3 code units in the large majority, 6 at worst, and in 92% of affected cases the only
   thing that changes chunk is the separator the splitter discarded. **`chunkOverlap: 2` removes
   the observable effect entirely** (tokens left whole in no chunk: 28 → 0 at `chunkSize: 8`).
-  So don't reach for the fix on the strength of "1,663 wrong positions" alone — read that
+  So don't reach for the fix on the strength of "906 wrong positions" alone — read that
   change's `design.md` → Decision 2 first. What would change the priority is a caller using a
-  sentence or paragraph splitter over U+FFFD-bearing text at `chunkOverlap: 0` and depending on
+  multi-character string delimiter (`text.split("\n\n")` and friends) over U+FFFD-bearing text at `chunkOverlap: 0` and depending on
   exact boundaries. Note the default is `chunkOverlap: 0`.
 
 - **Backtracking anchor walk** — not started, and what is genuinely left once the above ships:
-  the residual 678 and the tier 1 case (a literal U+FFFD at the cursor claiming a manufactured
+  the residual 395 and the tier 1 case (a literal U+FFFD at the cursor claiming a manufactured
   bare part). A guard that merely _picks between_ tier 2's answer and the offset-corrected
   tier 3 candidate cannot work — the spurious and the legitimate case present identical
   signatures with opposite correct answers, demonstrated in

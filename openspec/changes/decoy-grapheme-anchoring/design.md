@@ -65,7 +65,7 @@ information to add. That distinction is the whole basis of this change.
 **Non-Goals:**
 
 - The Tier 1 residual. Tier 1 fires before Tier 3, so candidate verification cannot see it.
-- Closing the remainder (678 of 16,842). That needs backtracking; see Open Questions.
+- Closing the remainder (395 of 15,986). That needs backtracking; see Open Questions.
 - Any change to normalizing tokenizers, or any new public option.
 - Restoring Tier 2 for U+FFFD-bearing parts. That reintroduces the throws and the quadratic
   the previous change removed; measured there at 768 residual throws and 42x cost for an 8x
@@ -138,59 +138,59 @@ run base-vs-prototype and compared against base-vs-head:
 | positions moved vs base                   | 142/461/107 | 142/461/107 |
 | oracle `ok→off`                           | 0           | 0           |
 | oracle residual (all Tier 1 signature)    | 7           | 7           |
-| unit suite                                | 171/171     | 171/171     |
+| unit suite                                | 172/172     | 172/172     |
 | scaling, U+FFFD source, 8x span           | 7.7x        | **7.2x**    |
 
 Identical on everything already covered, and linear — the `while` loop does not reintroduce a
 per-part cost in practice, because the skeleton check fails on its first mismatched code unit
 and the anchor grapheme is rare enough that candidates are few.
 
-**The class it targets**, ground-truth differential over 16,842 randomized cases using
+**The class it targets**, ground-truth differential over 15,986 randomized cases using
 multi-character-dropping splitters (`"\n\n"`, `". "`, `"..."`, `" | "`, `"\n\n\n"`,
 `"  \n\n  "`) whose source holds a literal U+FFFD, parts built at known offsets so truth needs
 no inference:
 
 | variant      | parts anchored away from truth |
 | ------------ | ------------------------------ |
-| merge base   | 489                            |
-| current head | **1,663**                      |
-| prototype    | **678**                        |
+| merge base   | 258                            |
+| current head | **906**                        |
+| prototype    | **395**                        |
 
 ### Decision 2: File it rather than ship it
 
-**Chosen.** The prototype is a clear improvement and still leaves 678 against the base's 489,
+**Chosen.** The prototype is a clear improvement and still leaves 395 against the base's 258,
 so it is a mitigation, not a fix. Weigh that against what the defect actually costs, all
-measured over the same 16,842 cases:
+measured over the same class, though not all on one corpus — each count names its own:
 
 - **Nothing is dropped.** Coverage held in every case (0 violations), and
   `chunk.text === getChunk(input, start, end)` holds unconditionally. The boundary moves
   earlier; code units join the following chunk instead of the preceding one.
-- **Displacement is small.** 2-3 code units in 1,162 of 1,283 displaced cases, 9 at worst:
+- **Displacement is small.** 2-3 code units in 838 of 906 displaced cases, 6 at worst:
 
-  | displacement | 2   | 3   | 4   | 5   | 6   | 7   | 9   |
-  | ------------ | --- | --- | --- | --- | --- | --- | --- |
-  | cases        | 537 | 625 | 44  | 20  | 46  | 7   | 4   |
+  | displacement | 2   | 3   | 4   | 5   | 6   |
+  | ------------ | --- | --- | --- | --- | --- |
+  | cases        | 294 | 544 | 19  | 13  | 36  |
 
   It is bounded by the dropped separator plus any displacement already accumulated upstream —
   a part anchored early leaves the cursor early, which lets the next part be found earlier
   still. That compounding is why the worst case (9) exceeds the longest separator (6).
 
-- **In 89% only the separator moves.** 1,138 of 1,283 displaced cases move nothing but the
+- **In 92% only the separator moves.** 831 of 906 displaced cases move nothing but the
   characters the splitter discarded. The remaining 145 reach into the preceding part and clip
   a token across the boundary.
-- **`chunkOverlap` removes the observable effect.** Metric: is each part's true source span
+- **`chunkOverlap` all but removes the observable effect.** Metric: is each part's true source span
   wholly contained in at least one chunk? A clipped token is retrievable from neither chunk
-  alone, which is the only consumer-visible symptom. 7,968 cases per row:
+  alone, which is the only consumer-visible symptom. 7,993 cases per row:
 
-  | chunkSize | chunkOverlap | base | head   |
-  | --------- | ------------ | ---- | ------ |
-  | 4         | 0            | 0    | **95** |
-  | 4         | 1            | 0    | 23     |
-  | 4         | 2            | 0    | **1**  |
-  | 8         | 0            | 0    | **28** |
-  | 8         | 1            | 0    | 8      |
-  | 8         | 2            | 0    | **0**  |
-  | 8         | 4            | 0    | **0**  |
+  | chunkSize | chunkOverlap | base | head    | prototype |
+  | --------- | ------------ | ---- | ------- | --------- |
+  | 4         | 0            | 0    | **705** | 26        |
+  | 4         | 1            | 0    | 177     | —         |
+  | 4         | 2            | 0    | **2**   | **0**     |
+  | 8         | 0            | 0    | **275** | 5         |
+  | 8         | 1            | 0    | 75      | —         |
+  | 8         | 2            | 0    | **2**   | **0**     |
+  | 8         | 4            | 0    | **0**   | **0**     |
 
   The shift is a handful of code units while the overlap is whole tokens, so anything crossing
   the boundary is already duplicated forward.
@@ -199,7 +199,7 @@ So: a chunking-quality defect, bounded, coverage-safe, with a one-option caller 
 against a 25-line change to the anchoring strategy that does not fully close it and would
 change positions for affected inputs. Documenting the workaround (done, in the README) buys
 most of the value at none of the risk. What would change the priority: a report from someone
-using a sentence or paragraph splitter on U+FFFD-bearing text at `chunkOverlap: 0` and
+using a multi-character string delimiter on U+FFFD-bearing text at `chunkOverlap: 0` and
 depending on exact boundaries, or a decision to close the remainder properly, at which point
 this becomes the first half of that work.
 
@@ -269,12 +269,275 @@ prints must match what the current head produces — zero throws, zero `OK→THR
 invariant violations, `ok→off` zero, and the same positions-moved counts.
 
 **5. Class improvement.** The multi-character-dropping differential above must come in at or
-below 678 of 16,842, against 1,663 at head. A materially different number means the corpus or
+below 395 of 15,986, against 906 at head. A materially different number means the corpus or
 the patch drifted.
+
+## Reproducing the measurements
+
+Every figure in Decision 1 and Decision 2 comes from the script below. Save it as
+`decoy-verify.mjs` anywhere and point it at two directories each holding a copy of `src/`:
+
+```sh
+V=$(mktemp -d)
+mkdir -p "$V/base/src" "$V/patched/src"
+for f in $(git ls-tree --name-only <pre-fix-ref> src/); do
+  git show "<pre-fix-ref>:$f" > "$V/base/src/$(basename "$f")"
+done
+cp src/*.js "$V/patched/src/"
+node decoy-verify.mjs "$V/base" "$V/patched"
+```
+
+It needs no dependencies - every corpus is synthetic with known offsets, so unlike the
+sibling change's harness it does not use `tiktoken` and can live outside the repo.
+
+**Why this exists.** The first version of this design quoted figures whose generator was
+never saved, and they did not reproduce: 16,842 / 1,663 / 489 / 678 against this harness's
+15,986 / 906 / 258 / 395. Direction and ratio survived (head is ~3.5x base either way) but the
+absolute numbers did not, so the recorded ones are now the harness's. A gate that names a
+number needs the script that produced it, or it is a number nobody can check.
+
+**One trap worth knowing**, because an early version of this harness fell into it: the corpus
+must let a part **begin** with a character the dropped separator contains. Generate parts from
+an alphabet that excludes the separator's characters and every splitter shape reports zero,
+because the decoy is then unreachable by construction - which reads as "no problem here"
+rather than "this corpus cannot see the problem".
+
+Expected output against the current head, reproduced on a clean run:
+
+```
+reachability by splitter shape (patched tree):
+  regex /[.!?]+/   round-tripped=  3213  wrong=     0
+  regex /\s+/      round-tripped=  3213  wrong=     0
+  string "..."     round-tripped= 17705  wrong=  5588
+  string ". "      round-tripped= 36285  wrong= 10412
+  string "\n\n"    round-tripped= 14095  wrong=  3800
+
+class differential over 15986 cases: base wrong=258  patched wrong=906
+  coverage broken: 0   displaced: 906   separator-only: 831 (92 percent)
+  displacement histogram: {"2":294,"3":544,"4":19,"5":13,"6":36}
+```
+
+Under the Decision 1 prototype the same run gives `patched wrong=395`, separator-only 97
+percent, and the string-delimiter rows drop to 2,424 / 5,140 / 1,566. `coverage broken` must
+stay 0 in every configuration.
+
+```js
+// Reproduces every number in this change's Decision 1 and Decision 2.
+// Usage: node decoy-verify.mjs <baselineTree> <patchedTree>
+// Each tree is a directory holding a copy of src/. Needs no dependencies, so
+// it can live anywhere; unlike the sibling change's harness it does not use
+// tiktoken, because every corpus here is synthetic with known offsets.
+const load = async (d) => (await import(`${d}/src/split.js`)).split;
+const [BASE_DIR, PATCHED_DIR] = process.argv.slice(2);
+if (!BASE_DIR || !PATCHED_DIR) throw new Error("usage: <baseline> <patched>");
+const BASE = await load(BASE_DIR);
+const PATCHED = await load(PATCHED_DIR);
+
+const R = "�";
+// Deterministic: mulberry32, never Math.random, so both trees see one corpus.
+const rngFor = (seed) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+/**
+ * Builds a case with KNOWN offsets: parts are generated, then joined by a
+ * separator the splitter drops, so ground truth needs no inference. `atoms`
+ * deliberately includes a separator character where the splitter permits it —
+ * that is what makes a decoy reachable, and omitting it silently measures
+ * nothing (an early version of this harness did exactly that and reported 0
+ * everywhere).
+ */
+const build = (seed, i, { atoms, sep, minParts = 2, spread = 4 }) => {
+  const rng = rngFor(seed + i * 7919);
+  const nParts = minParts + Math.floor(rng() * spread);
+  const parts = [];
+  const truth = [];
+  let src = "";
+  for (let k = 0; k < nParts; k++) {
+    let p = "";
+    for (let c = 0, n = 1 + Math.floor(rng() * 5); c < n; c++) {
+      p += atoms[Math.floor(rng() * atoms.length)];
+    }
+    if (k > 0) src += sep(rng);
+    truth.push(src.length);
+    parts.push(p);
+    src += p;
+  }
+  return { src, parts, truth };
+};
+
+const STRING_SEP = { atoms: ["a", "漢", R, "\n"], sep: () => "\n\n" };
+
+// ---- 1. Which splitter shapes reach the class at all -------------------
+const SHAPES = [
+  {
+    name: "regex /[.!?]+/",
+    atoms: ["a", "漢", R, "."],
+    sep: (r) => ".".repeat(1 + Math.floor(r() * 3)),
+    fn: (t) => t.split(/[.!?]+/).filter(Boolean),
+  },
+  {
+    name: "regex /\\s+/",
+    atoms: ["a", "漢", R, " "],
+    sep: (r) => " ".repeat(1 + Math.floor(r() * 3)),
+    fn: (t) => t.split(/\s+/).filter(Boolean),
+  },
+  {
+    name: 'string "..."',
+    atoms: ["a", "漢", R, "."],
+    sep: () => "...",
+    fn: (t) => t.split("...").filter(Boolean),
+  },
+  {
+    name: 'string ". "',
+    atoms: ["a", "漢", R, "."],
+    sep: () => ". ",
+    fn: (t) => t.split(". ").filter(Boolean),
+  },
+  {
+    name: 'string "\\n\\n"',
+    atoms: ["a", "漢", R, "\n"],
+    sep: () => "\n\n",
+    fn: (t) => t.split("\n\n").filter(Boolean),
+  },
+];
+console.log("reachability by splitter shape (patched tree):");
+for (const s of SHAPES) {
+  let cases = 0;
+  let wrong = 0;
+  for (let i = 0; i < 40000; i++) {
+    const { src, parts, truth } = build(4242, i, s);
+    if (!src.includes(R)) continue;
+    const got = s.fn(src);
+    // Only count cases the splitter round-trips: otherwise "truth" is fiction.
+    if (got.length !== parts.length || got.some((g, j) => g !== parts[j]))
+      continue;
+    cases++;
+    let chunks;
+    try {
+      chunks = PATCHED(src, { chunkSize: 1, splitter: s.fn });
+    } catch {
+      continue;
+    }
+    if (chunks.length !== parts.length) continue;
+    if (chunks.some((c, k) => c.start !== truth[k])) wrong++;
+  }
+  console.log(
+    `  ${s.name.padEnd(16)} round-tripped=${String(cases).padStart(6)}  wrong=${String(wrong).padStart(6)}`,
+  );
+}
+
+// ---- 2. Class differential, base vs patched ---------------------------
+const SEPS = ["\n\n", ". ", "...", " | ", "\n\n\n", "  \n\n  "];
+const classCorpus = (i) => {
+  const rng = rngFor(31337 + i * 7919);
+  const sep = SEPS[Math.floor(rng() * SEPS.length)];
+  return build(31337, i, {
+    atoms: ["a", "b", "漢", "é", R, "."],
+    sep: () => sep,
+  });
+};
+let cases = 0;
+const wrong = { base: 0, patched: 0 };
+let covBroken = 0;
+let displaced = 0;
+let sepOnly = 0;
+const hist = {};
+for (let i = 0; i < 20000; i++) {
+  const { src, parts, truth } = classCorpus(i);
+  if (!src.includes(R)) continue;
+  cases++;
+  const isContent = new Array(src.length).fill(false);
+  truth.forEach((t, k) => {
+    for (let j = 0; j < parts[k].length; j++) isContent[t + j] = true;
+  });
+  for (const [name, f] of [
+    ["base", BASE],
+    ["patched", PATCHED],
+  ]) {
+    let chunks;
+    try {
+      chunks = f(src, { chunkSize: 1, splitter: () => parts });
+    } catch {
+      continue;
+    }
+    if (chunks.length !== parts.length) continue;
+    const bad = chunks.filter((c, k) => c.start !== truth[k]).length;
+    if (bad) wrong[name]++;
+    if (name !== "patched") continue;
+    if (chunks.length && chunks.at(-1).end !== src.length) covBroken++;
+    let worst = 0;
+    let movedContent = false;
+    chunks.forEach((c, k) => {
+      const d = truth[k] - c.start;
+      if (d <= 0) return;
+      worst = Math.max(worst, d);
+      for (let j = c.start; j < truth[k]; j++)
+        if (isContent[j]) movedContent = true;
+    });
+    if (worst > 0) {
+      displaced++;
+      hist[worst] = (hist[worst] ?? 0) + 1;
+      if (!movedContent) sepOnly++;
+    }
+  }
+}
+console.log(
+  `\nclass differential over ${cases} cases: base wrong=${wrong.base}  patched wrong=${wrong.patched}`,
+);
+console.log(
+  `  coverage broken: ${covBroken}   displaced: ${displaced}   separator-only: ${sepOnly} (${((sepOnly / displaced) * 100).toFixed(0)}%)`,
+);
+console.log(`  displacement histogram:`, JSON.stringify(hist));
+
+// ---- 3. Does chunkOverlap mask it? -----------------------------------
+console.log("\nchunkOverlap: parts whose true span is in NO single chunk");
+for (const chunkSize of [4, 8]) {
+  for (const chunkOverlap of [0, 1, 2, 4]) {
+    if (chunkOverlap >= chunkSize) continue;
+    let n = 0;
+    const tally = { base: 0, patched: 0 };
+    for (let i = 0; i < 8000; i++) {
+      const { src, parts, truth } = build(31337, i, {
+        ...STRING_SEP,
+        minParts: 6,
+        spread: 14,
+      });
+      if (!src.includes(R)) continue;
+      n++;
+      for (const [name, f] of [
+        ["base", BASE],
+        ["patched", PATCHED],
+      ]) {
+        let chunks;
+        try {
+          chunks = f(src, { chunkSize, chunkOverlap, splitter: () => parts });
+        } catch {
+          continue;
+        }
+        for (let k = 0; k < parts.length; k++) {
+          const span = src.slice(truth[k], truth[k] + parts[k].length);
+          if (span && !chunks.some((c) => c.text.includes(span))) tally[name]++;
+        }
+      }
+    }
+    console.log(
+      `  chunkSize=${chunkSize} overlap=${chunkOverlap}  cases=${n}  base=${tally.base}  patched=${tally.patched}`,
+    );
+  }
+}
+```
 
 ## Risks / Trade-offs
 
-- **[678 residual]** → Not closed. Those are cases where an earlier offset aligns on every
+- **[395 residual]** → Not closed. Those are cases where an earlier offset aligns on every
   non-invented code unit, which gets easier the more of the part is U+FFFD, since those
   positions impose no constraint. A part that is entirely U+FFFD has an empty skeleton and is
   dropped as unanchorable before this code runs, so the bad case is a part that is _mostly_
@@ -297,7 +560,7 @@ the patch drifted.
 
 ## Open Questions
 
-- Does closing the remaining 678 require full backtracking (accept a candidate only if the
+- Does closing the remaining 395 require full backtracking (accept a candidate only if the
   remaining parts still anchor from it), or is there a cheaper rule — preferring the candidate
   whose _following_ part also verifies, a one-part lookahead rather than a full search? The
   lookahead is bounded and worth measuring first; it is recorded here rather than in AGENTS.md

@@ -222,14 +222,17 @@ cursor and the part's true position, Tier 3 anchors on that earlier occurrence �
 position with no error.
 
 Reaching this requires a splitter that drops a **multi-character** span between parts. That
-includes splitters this specification lists as supported: sentence and line/paragraph
-splitters such as `text.split(/[.!?]+/)` or `text.split("\n\n")` drop two or more characters
-and their parts can contain U+FFFD once the source does. Single-character droppers like
-`text.split(/\s+/)` cannot reach it, because the cursor lands adjacent to the next part and
-Tier 1 or an exact Tier 3 match resolves it; `text.split('')` and `tiktoken` drop nothing at
-all. Measured over 16,842 randomized multi-character-dropping cases whose source contains
-U+FFFD, 1,663 anchored a part away from its true offset, against 489 before Tier 2 was
-skipped.
+includes splitters this specification lists as supported: a **multi-character string**
+delimiter such as `text.split("\n\n")`, `text.split(". ")` or `text.split("...")` drops a span
+whose characters may also begin a part — a lone `\n` is not `"\n\n"` — so the anchor grapheme
+can match inside the dropped span. A **character-class regex** splitter cannot reach it,
+however many characters it drops: a part containing a class member would itself have been
+split there, so no part can begin with a character the span contains. That rules out
+`text.split(/[.!?]+/)` and `text.split(/\s+/)`, measured at 0 of 3,213 and 0 of 3,213
+round-tripped cases against 5,588 of 17,705 for `text.split("...")`. `text.split('')` and
+`tiktoken` drop nothing at all. Measured over 15,986 randomized string-delimiter cases whose
+source contains U+FFFD, 906 anchored a part away from its true offset, against 258 before
+Tier 2 was skipped.
 
 Where it occurs, the system SHALL still preserve coverage and the correspondence between a
 chunk's text and its positions: the boundary moves earlier, so code units join the following

@@ -152,9 +152,12 @@ const firstAnchorGrapheme = (splitPart) => {
  *     edge relative to it, correcting for that grapheme's offset into the
  *     part.
  *
- * `indexOf` is safe in tier 3 because `firstAnchorGrapheme` returns a whole
- * grapheme cluster, which never starts with a low surrogate or combining
- * mark — a code-unit match cannot land mid-surrogate or mid-cluster.
+ * The tier 3 *match* cannot land mid-surrogate or mid-cluster, because
+ * `firstAnchorGrapheme` returns a whole grapheme cluster and a cluster never
+ * starts with a low surrogate or combining mark. Note this is a claim about
+ * the match, not about `start`: subtracting the anchor's offset can put
+ * `start` inside a surrogate pair, which is consistent with chunk boundaries
+ * carrying no code-point integrity guarantee (see the `split()` docstring).
  *
  * Tier 1 remains unguarded, and cannot be: at the cursor a manufactured bare
  * U+FFFD is byte-identical to a literal one, so a literal U+FFFD standing

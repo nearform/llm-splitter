@@ -120,10 +120,12 @@ non-invented code units do not align, which resolves the common form of this exc
 does not resolve every form: where an earlier offset happens to align on all of them — easier
 the more of the part is U+FFFD, since those positions impose no constraint — the earlier
 offset is accepted and the part anchors before its true position. Reaching this at all
-requires a splitter that drops a **multi-character** span between parts, which includes
-sentence and line/paragraph splitters such as `text.split(/[.!?]+/)` and
-`text.split("\n\n")`; single-character droppers like `text.split(/\s+/)` cannot, and
-`text.split('')` and `tiktoken` drop nothing.
+requires a splitter whose dropped span contains a character that can also **begin** a part.
+Multi-character string delimiters qualify — `text.split("\n\n")`, `text.split(". ")`,
+`text.split("...")` — because a lone `\n` is not `"\n\n"`. Character-class regex splitters do
+not, however many characters they drop: a part containing a class member would itself have
+been split there, so no part can begin with a character the span contains. That rules out
+`text.split(/[.!?]+/)` and `text.split(/\s+/)`; `text.split('')` and `tiktoken` drop nothing.
 
 Where it occurs, the system SHALL still preserve coverage and the correspondence between a
 chunk's text and its positions: the boundary moves earlier, so code units join the following

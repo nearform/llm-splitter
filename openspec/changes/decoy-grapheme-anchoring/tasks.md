@@ -3,8 +3,8 @@
 - [ ] 0.1 Re-read [design.md](./design.md) → Decision 2 before starting. This change is filed
       deliberately, not blocked: the defect is bounded, coverage-safe, and neutralised by
       `chunkOverlap: 2` or more, while the fix is a 25-line change to the anchoring strategy
-      that leaves 678 of 16,842 cases wrong against the merge base's 489. Two things justify
-      picking it up: a report from someone using a sentence or paragraph splitter over
+      that leaves 395 of 15,986 cases wrong against the merge base's 258. Two things justify
+      picking it up: a report from someone using a multi-character string delimiter over
       U+FFFD-bearing text at `chunkOverlap: 0` and depending on exact boundaries, or a
       decision to close the remainder properly, in which case this is the first half.
 - [ ] 0.2 Confirm the numbers still hold before trusting them. They were measured against the
@@ -16,7 +16,7 @@
 
 - [ ] 1.1 Add the paragraph-splitter regression from [design.md](./design.md) → "Acceptance
       criteria" § 1 to `test/split.test.js`, and confirm it **fails** at head, reporting
-      `[0,6]` for the second chunk against the expected `[0,8]`.
+      `[[0,6],[6,22],[22,26]]` against the expected `[[0,8],[8,22],[22,26]]` — the misplaced boundary is the first chunk's `end` and the second's `start`, not the first chunk alone.
 - [ ] 1.2 Add the decoy regression from "Acceptance criteria" § 2 and confirm it also fails at
       head. It carries no dependence on a delimiter shape, so it survives if the paragraph
       case is ever reshaped.
@@ -47,7 +47,7 @@
       `OK→THROW`, zero invariant violations, `ok→off` zero, same positions-moved counts. This
       change must be invisible to every existing gate.
 - [ ] 3.2 Re-run the multi-character-dropping differential from design.md → Decision 1. Gate:
-      **at or below 678** of 16,842, against 1,663 at head. Record the number here.
+      **at or below 395** of 15,986, against 906 at head. Record the number here.
 - [ ] 3.3 Confirm both "anchoring cost" scaling regressions stay green. The rejection loop is a
       per-part search, the shape that made `character` splits quadratic once before, so this is
       a gate rather than a formality. Prototype measured 7.2x for an 8x span.
@@ -71,7 +71,7 @@
       exception together with the measured impact and the `chunkOverlap: 2` workaround; the
       workaround guidance stays useful, but the numbers change and the exception narrows.
 - [ ] 5.2 Update AGENTS.md's algorithm map: the tier 3 bullet gains the verification step, and
-      the "Backtracking anchor walk" entry narrows to what is genuinely left (the remaining 678
+      the "Backtracking anchor walk" entry narrows to what is genuinely left (the remaining 395
       and the tier 1 residual) now that the cheap local rule has shipped.
 - [ ] 5.3 Add a changeset. Positions change for affected inputs, so this is not a patch and
       needs the "regenerate persisted embeddings / citation offsets" note. Say plainly that it
@@ -79,7 +79,7 @@
 
 ## 6. Hand off what is not done
 
-- [ ] 6.1 Record the remaining 678 and the tier 1 residual as the scope of the backtracking
+- [ ] 6.1 Record the remaining 395 and the tier 1 residual as the scope of the backtracking
       follow-up in AGENTS.md → "Open work / future", replacing the current entry's claim that
       no local rule helps (already corrected there, but it will need re-narrowing once this
       ships).

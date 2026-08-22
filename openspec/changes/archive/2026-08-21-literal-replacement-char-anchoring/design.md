@@ -280,12 +280,12 @@ part's remaining non-U+FFFD code units against the source at that candidate is n
 there, unlike the same check on a verbatim tier 2 hit. Measured: adding a skeleton check to
 the tier 3 candidate (advance the search while the part's non-U+FFFD units do not align)
 fixes the paragraph-splitter case, both decoy cases, and cuts the multi-character-dropping
-regression from 1,663 wrong to 678 of 16,842 — while leaving every gate in "Reproducing the
+regression from 906 wrong to 395 of 15,986 — while leaving every gate in "Reproducing the
 measurements" unchanged: 0 throws on all three fuzz sweeps, 0 `OK→THROW`, the same 142/461/107
 positions moved, the same oracle residual, 171/171 suite, and still linear at 7.2x for an 8x
 input span.
 
-It is not a complete fix (678 against 489 at the merge base) and it was not adopted here, so
+It is not a complete fix (395 against 258 at the merge base) and it was not adopted here, so
 it is recorded as the concrete next step rather than as shipped. What genuinely needs
 backtracking is closing the remaining gap and the Tier 1 residual: knowing whether the _rest_
 of the parts still anchor under each choice.
@@ -765,11 +765,15 @@ process.exitCode = failures === 0 ? 0 : 1;
   documented splitters qualify", reasoning from `char` and `tiktoken` (which drop nothing) and
   `text.split(/\s+/)` (which drops a single whitespace run). That reasoning does not
   generalize, and the requirement it appealed to names _sentence/line regex splitters_ as
-  supported. `text.split(/[.!?]+/)` — the README's own worked example — drops `"..."`, and
-  `text.split("\n\n")` drops the same delimiter the library uses for
-  `chunkStrategy: "paragraph"`. Both qualify. Measured over 16,842 randomized
-  multi-character-dropping cases whose source holds a literal U+FFFD: **1,663 parts anchored
-  away from their true offset, against 489 at the merge base** — a real regression inside the
+  supported. `text.split("\n\n")` — the delimiter the library itself uses for
+  `chunkStrategy: "paragraph"` — qualifies, as do `text.split(". ")` and `text.split("...")`:
+  a multi-character **string** delimiter drops a span whose characters may also begin a part,
+  since a lone `\n` is not `"\n\n"`. Character-class regex splitters such as
+  `text.split(/[.!?]+/)` do **not**, however much they drop, because a part containing a class
+  member would itself have been split there — measured at 0 of 3,213 round-tripped cases.
+  Measured over 15,986 randomized
+  multi-character-dropping cases whose source holds a literal U+FFFD: **906 parts anchored
+  away from their true offset, against 258 at the merge base** — a real regression inside the
   branch, though published 0.2.0 mis-anchors the same inputs, so nothing users hold regresses.
 
   Measured two independent ways, both clean. Against `tiktoken`'s byte-derived truth the

@@ -5,17 +5,20 @@ on an earlier occurrence of its first anchorable grapheme, reporting a position 
 units before the part's true offset. `literal-replacement-char-anchoring` introduced this when
 it stopped consulting Tier 2 for U+FFFD-bearing parts, and accepted it as a stated limitation
 on the grounds that no documented splitter could reach it. That reachability claim was wrong:
-sentence and paragraph splitters (`text.split(/[.!?]+/)`, `text.split("\n\n")`) drop a
-multi-character span between parts, which is exactly the condition, and the first is the
-README's own worked example.
+a splitter using a multi-character **string** delimiter — `text.split("\n\n")`,
+`text.split(". ")`, `text.split("...")` — drops a span whose characters may also begin a part,
+which is the condition. (A first correction to this overshot and named
+`text.split(/[.!?]+/)` too. Character-class regex splitters cannot reach it, however much they
+drop: a part containing a class member would have been split there, so no part begins with a
+character the span contains. Measured at 0 of 3,213 round-tripped cases.)
 
-Measured over 16,842 randomized cases in that class whose source holds a literal U+FFFD:
-**1,663 parts anchored away from their true offset, against 489 before Tier 2 was skipped.**
+Measured over 15,986 randomized cases in that class whose source holds a literal U+FFFD:
+**906 parts anchored away from their true offset, against 258 before Tier 2 was skipped.**
 
 It is filed rather than fixed because the impact is much smaller than that number suggests,
 and the available fix is incomplete. Nothing is dropped — coverage and the
 `chunk.text === getChunk(input, start, end)` correspondence both hold — the boundary simply
-lands early, and in 89% of affected cases the only code units that change chunk are the
+lands early, and in 92% of affected cases the only code units that change chunk are the
 separator the splitter discarded. `chunkOverlap: 2` removes the observable effect entirely
 (28 → 0 tokens left whole in no chunk, at `chunkSize: 8`). So this is a chunking-quality
 defect with a documented workaround, not a data-integrity one, and it does not justify
@@ -26,10 +29,10 @@ changing the anchoring strategy on its own schedule.
 - **Verify a Tier 3 candidate before accepting it.** After the anchor-grapheme search finds a
   candidate, check that the part's non-U+FFFD code units line up with the source at that
   offset; if they do not, continue the search. Prototyped and measured: fixes the paragraph
-  and both decoy cases, cuts the class from 1,663 wrong to 678, and leaves every gate that
+  and both decoy cases, cuts the class from 906 wrong to 395, and leaves every gate that
   `literal-replacement-char-anchoring` established unchanged, including linearity.
-- **Decide whether 678 is acceptable, or whether the remainder needs backtracking.** The
-  residual is not closed by this approach; 678 is still worse than the 489 the pre-skip
+- **Decide whether 395 is acceptable, or whether the remainder needs backtracking.** The
+  residual is not closed by this approach; 395 is still worse than the 258 the pre-skip
   behavior produced. `design.md` records what the remaining cases look like and why they need
   a different mechanism.
 - **Correct the record on what a local rule can do.** `literal-replacement-char-anchoring`'s
