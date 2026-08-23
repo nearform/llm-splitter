@@ -140,15 +140,16 @@ component:
   of 270 benchmark scenarios). The lesson is not to go back, but that a fix here should attack
   the span derivation, which is what `sourceNormalize` plus a normalized-comparison Tier 3
   does.
-- **Reported starts shipped; reported spans did not.** `splitter-reported-positions` landed the
-  `{text, start}` form, and a reported `start` skips all three tiers — so for a splitter that
+- **Reported starts are accepted; reported spans are not.** `splitter-reported-positions` landed
+  the `{text, start}` form, and a reported `start` skips all three tiers — so for a splitter that
   knows its offsets, anchoring is no longer a reconstruction problem. It does not close _this_
   problem: `end` is still `start + text.length`, so an inflated part overshoots the cursor and
   the next part's honest offset is rejected as moving backwards. What would close it is a
-  reported **consumed span** (`{text, start, end}`, as the benchmark's own tiktoken byte-prefix
-  reference computes), and that is not implemented. Out of scope here for a different reason
-  than before: the tokenizers this change targets are the ones that cannot report a span at all
-  (see `proposal.md`, "Impact").
+  reported **consumed span** (`{text, start, end}`), which is not implemented and has no
+  reference implementation anywhere in the repo. Note the shape of the gap: reporting a `start`
+  helps splitters that were never going to mis-anchor, and does nothing for the normalizing
+  tokenizers that are the whole subject of this change. That is why `{text, start}` stays
+  unadvertised (`design.md`, "Non-Goals") — the span is the half that would matter here.
 
 ## Follow-up model coverage
 

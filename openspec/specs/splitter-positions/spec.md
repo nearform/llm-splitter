@@ -6,6 +6,15 @@ Lets a splitter report the source offset of each part it returns, so `split()` u
 position instead of inferring one by searching the source. This is the contract for the reported
 form, its validation, and its precedence over the anchoring search.
 
+**Accepted, not advertised.** The form is honored wherever a splitter uses it, and everything
+below is binding. It is deliberately absent from the README, the changeset, and the exported
+type names, because the population it currently serves is close to empty: no JS tokenizer in
+reach exposes offsets, a splitter that can report them gains nothing measurable, and a reported
+`start` does not help the normalizing tokenizers that have the real anchoring problem — `end`
+is still `start + text.length`. Advertising waits on a reported consumed span
+(`tokenizer-length-inflation`), which is the half with a population. See AGENTS.md, "Considered
+and declined".
+
 ## Requirements
 
 ### Requirement: A splitter MAY report each part's source position
@@ -74,10 +83,19 @@ backwards.
 ### Requirement: Reporting is a contract, not a bundled splitter
 
 The reported-position form is the capability; building a splitter on it is the caller's. The
-library SHALL NOT export a delimiter-based or otherwise pre-built reporting splitter, so the
-supported surface stays `split()` and `getChunk()`.
+library SHALL NOT export a delimiter-based or otherwise pre-built reporting splitter, nor a
+type naming the reported form, so the supported surface stays `split()`, `getChunk()`, and the
+`Chunk` / `SplitOptions` types. The form SHALL stay usable through `SplitOptions["splitter"]`
+without being nameable from the package root.
 
 #### Scenario: Package exports
 
 - **WHEN** the package root is imported
-- **THEN** `split` and `getChunk` are available and no pre-built reporting splitter is
+- **THEN** `split` and `getChunk` are available, along with the `Chunk` and `SplitOptions`
+  types, and neither a pre-built reporting splitter nor a `SplitterPart` type is
+
+#### Scenario: A TypeScript caller writes a reporting splitter
+
+- **WHEN** a caller assigns a splitter returning bare strings, `{ text, start }` objects, or a
+  mixture, to `SplitOptions["splitter"]`
+- **THEN** all three forms type-check, without the caller importing a name for the part type

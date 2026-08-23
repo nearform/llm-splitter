@@ -12,8 +12,6 @@ A JavaScript library for splitting text into configurable chunks with overlap su
 - 🧠 **Any tokenizer**: bring your own splitter — `tiktoken`, words, sentences, characters
 - 📊 **Positions that add up**: every chunk carries `start`/`end`, and they cover the source
   with no gaps, so you can store embeddings without storing text
-- 🎯 **Exact positions**: a splitter that knows its own offsets can report them, skipping the
-  anchoring search
 - 📝 **Typed**: authored in JS with JSDoc annotations; ships `.d.ts` for TypeScript consumers
 
 ## Installation
@@ -60,9 +58,7 @@ Notes:
 - `input` must be a `string` or an array whose elements are all strings; anything else throws `TypeError`.
 - `chunkSize` must be a positive integer ≥ 1.
 - `chunkOverlap` must be a non-negative integer ≥ 0, and less than `chunkSize`.
-- `splitter` must return an array of strings, or of `{ text, start }` objects reporting where
-  each part came from (see "Reported positions"). A non-array return — or a `{ text, start }`
-  whose `text` isn't a string or whose `start` is out of range — throws `TypeError`; an element
+- `splitter` must return an array of strings. A non-array return throws `TypeError`; an element
   that is neither a string nor an object throws plain `Error`, as do invalid options.
 - `splitter` functions may **omit** text but must not **mutate** it. Splitting on spaces is
   fine (`(t) => t.split(" ")`); uppercasing the results is not. A mutating splitter throws
@@ -303,38 +299,6 @@ tokenizer.free();
 
 </details>
 
-#### Reported positions
-
-A splitter that returns bare strings leaves `split()` to work out where each part came from by
-searching the source. A splitter that already knows — a tokenizer exposing offset mappings, or
-any splitter tracking its own cursor — can say so instead. Return `{ text, start }` in place of
-a bare string and that offset is used as given, with no search:
-
-```js
-split("alpha, beta", {
-  chunkSize: 1,
-  splitter: () => [
-    { text: "alpha", start: 0 },
-    { text: "beta", start: 7 },
-  ],
-});
-// =>
-[
-  { text: "alpha, ", start: 0, end: 7 },
-  { text: "beta", start: 7, end: 11 },
-];
-```
-
-The two forms mix freely in one array, so a splitter can report only the offsets it is sure of
-and leave the rest to the search. `start` is a UTF-16 code unit offset into the string the
-splitter was handed — under `chunkStrategy: "paragraph"` that is a single paragraph, not the
-whole input.
-
-Offsets are checked for possibility, not correctness: a `start` that is fractional, negative,
-past the end of the input, or behind the previous part throws `TypeError`, but `text` is never
-compared against the source there. A merely wrong offset is used as given, and the splitter
-owns that.
-
 ### Chunk Coverage and Positions
 
 `start` and `end` index the source as one continuous run of UTF-16 code units. For an array
@@ -400,8 +364,7 @@ is dropped, its source absorbed into the neighboring chunk.
 
 Single-character delimiters and character-class regexes (`/\s+/`, `/[.!?]+/`) can't reach any of
 this: a part never contains a character the splitter splits on. Neither can `tiktoken` or
-`text.split('')`, which drop nothing between parts. A splitter that reports its own offsets is
-exempt by construction — see "Reported positions". Full model and measured residuals in
+`text.split('')`, which drop nothing between parts. Full model and measured residuals in
 [openspec/specs/multibyte-anchoring/spec.md](openspec/specs/multibyte-anchoring/spec.md).
 
 #### Token undercounting

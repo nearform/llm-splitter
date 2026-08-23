@@ -310,8 +310,27 @@ Each says what would change our mind.
   which was built to hit the defect — a bug measurement, not evidence a caller hits it.
 
   Changes our mind: a caller who chunks on a multi-character string delimiter that isn't
-  `"\n\n"`. The `{ text, start }` contract stays either way — its real consumer is a tokenizer
-  that already has offset mappings.
+  `"\n\n"`. The `{ text, start }` contract stays either way, but see below — it is accepted, not
+  advertised.
+
+- **`{ text, start }` is accepted but undocumented.** No JS tokenizer in reach exposes offsets:
+  `@huggingface/transformers` v4.2.0 returns `{input_ids, attention_mask, token_type_ids}` with
+  no `offset_mapping` and no `return_offsets_mapping`, and `tiktoken`'s JS surface is
+  `encode`/`decode` only. (Python fast tokenizers do; the JS ports do not. Do not repeat the
+  claim that they do — it was in the README for a while and it was wrong.) The caller who _can_
+  report — a regex splitter using `matchAll`, which gets `m.index` where `split` discards it —
+  gains nothing measurable: byte-identical output, and 6.5ms vs 5.8ms on 270KB, because
+  per-part object allocation costs more than the tier 1 `startsWith` it skips. Meanwhile a
+  reported `start` does **not** help normalizing tokenizers, since `end` is still
+  `start + text.length`.
+
+  So it serves only the tier 2 decoy population, which is the same near-empty set
+  `delimiterSplitter` was removed for. Kept because it costs no export, because adding `end`
+  later is additive, and because `normalizePart` unifying both paths is what keeps coverage
+  identical across a mixture. Not in the README, not in the changeset, not in the examples.
+
+  Changes our mind: implement the consumed span (`tokenizer-length-inflation`), which is the
+  half with a real population. Advertise the whole thing then, or not at all.
 
 - **No packaged-consumer test.** Nothing in CI installs a packed tarball and imports by name,
   so the resolution model above is verified only by hand. Disproportionate for a package this

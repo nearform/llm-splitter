@@ -6,4 +6,3 @@ export { split } from "./split.js";
  * @typedef {import('./split.js').Chunk<T>} Chunk
  */
 /** @typedef {import('./split.js').SplitOptions} SplitOptions */
-/** @typedef {import('./split.js').SplitterPart} SplitterPart */
