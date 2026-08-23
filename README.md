@@ -8,13 +8,13 @@ A JavaScript library for splitting text into configurable chunks with overlap su
 
 ## Features
 
-- 📖 **Paragraph-Aware Chunking**: Respects document structure while maintaining token limits
-- 🧠 **LLM Optimized**: Designed for vectorization with tiktoken and other tokenizers
-- 📊 **Rich Metadata**: Complete character position tracking for all chunks
-- ⚡ **High Performance**: Single pass greedy algorithms for optimized processing
-- 🎨 **Flexible Input**: Supports strings, arrays, and custom tokenization
-- 🎯 **Exact Positions**: A splitter that knows its offsets can report them, skipping the anchoring search entirely
-- 📝 **Typed**: Authored in JS with JSDoc annotations; ships `.d.ts` type definitions
+- 📖 **Paragraph-aware**: fits whole paragraphs per chunk where the token budget allows
+- 🧠 **Any tokenizer**: bring your own splitter — `tiktoken`, words, sentences, characters
+- 📊 **Positions that add up**: every chunk carries `start`/`end`, and they cover the source
+  with no gaps, so you can store embeddings without storing text
+- 🎯 **Exact positions**: a splitter that knows its own offsets can report them, skipping the
+  anchoring search
+- 📝 **Typed**: authored in JS with JSDoc annotations; ships `.d.ts` for TypeScript consumers
 
 ## Installation
 
@@ -60,12 +60,10 @@ Notes:
 - `input` must be a `string` or an array whose elements are all strings; anything else throws `TypeError`.
 - `chunkSize` must be a positive integer ≥ 1.
 - `chunkOverlap` must be a non-negative integer ≥ 0, and less than `chunkSize`.
-- `splitter` must return an array whose elements are strings, or objects of the form
-  `{ text, start }` reporting where each part came from (see "Reported positions"). Not
-  returning an array throws `TypeError`, as does a `{ text, start }` object with a non-string
-  `text` or an out-of-range `start`. An element that is neither a string nor an object throws
-  plain `Error` — as do an invalid `chunkSize`, `chunkOverlap`, or `chunkStrategy`, and a
-  `splitter` that isn't a function.
+- `splitter` must return an array of strings, or of `{ text, start }` objects reporting where
+  each part came from (see "Reported positions"). A non-array return — or a `{ text, start }`
+  whose `text` isn't a string or whose `start` is out of range — throws `TypeError`; an element
+  that is neither a string nor an object throws plain `Error`, as do invalid options.
 - `splitter` functions may **omit** text but must not **mutate** it. Splitting on spaces is
   fine (`(t) => t.split(" ")`); uppercasing the results is not. A mutating splitter throws
   when a token can't be located — but it can also anchor at a wrong position with no error,
@@ -99,18 +97,7 @@ narrowing automatically; `getChunk` narrows the same way. Passing a value typed
 
 #### Examples
 
-**Basic usage with default options:**
-
-```js
-const text = "Hello world! This is a test.";
-const chunks = split(text);
-
-// =>
-// Splits into character-level chunks of 512 characters, which is just the original string here ;)
-[{ text: "Hello world! This is a test.", start: 0, end: 28 }];
-```
-
-**Custom chunk size and overlap:**
+**Chunk size and overlap:**
 
 ```js
 const text = "Hello world! This is a test.";
@@ -272,18 +259,8 @@ const chunk = getChunk(texts, 0, 16);
 
 ### Custom Splitter Functions
 
-#### Sentences
-
-```js
-const sentenceSplitter = (text) => text.split(/[.!?]+/);
-const chunks = split(text, {
-  chunkSize: 5,
-  splitter: sentenceSplitter,
-});
-
-// =>
-[{ text: "Hello world! This is a test.", start: 0, end: 28 }];
-```
+Beyond the one-liners listed under `split()`'s parameters, the interesting case is a real
+tokenizer.
 
 #### TikToken
 
@@ -357,34 +334,6 @@ Offsets are checked for possibility, not correctness: a `start` that is fraction
 past the end of the input, or behind the previous part throws `TypeError`, but `text` is never
 compared against the source there. A merely wrong offset is used as given, and the splitter
 owns that.
-
-### Working with Overlaps
-
-Chunk overlap is useful for maintaining context between chunks:
-
-<details>
-  <summary>See example...</summary>
-
-```js
-const text = "This is a very long document that needs to be split into chunks.";
-const chunks = split(text, {
-  chunkSize: 10,
-  chunkOverlap: 3,
-  splitter: (text) => text.split(" "),
-});
-// Each chunk will share 3 words with the previous chunk
-// =>
-[
-  {
-    text: "This is a very long document that needs to be",
-    start: 0,
-    end: 45,
-  },
-  { text: "needs to be split into chunks.", start: 34, end: 64 },
-];
-```
-
-</details>
 
 ### Chunk Coverage and Positions
 
