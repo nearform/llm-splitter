@@ -99,3 +99,7 @@ without being nameable from the package root.
 - **WHEN** a caller assigns a splitter returning bare strings, `{ text, start }` objects, or a
   mixture, to `SplitOptions["splitter"]`
 - **THEN** all three forms type-check, without the caller importing a name for the part type
+
+Both scenarios above are checked by the `type-probe` skill
+(`.claude/skills/type-probe/`), which compiles against the emitted declarations. Changing
+either one means deleting an assertion there.

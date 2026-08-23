@@ -60,6 +60,4 @@ const getChunkImpl = (input, start, end) => {
  * which is not assignable to the narrowed signatures even though every call
  * site is sound.
  */
-export const getChunk = /** @type {GetChunkFn} */ (
-  /** @type {unknown} */ (getChunkImpl)
-);
+export const getChunk = /** @type {GetChunkFn} */ (getChunkImpl);

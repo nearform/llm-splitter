@@ -143,16 +143,26 @@ runtime ESM and `require()`. No automated test — see "Considered and declined"
 - **`@overload` does not work on an arrow function**, and multiple `@overload` tags in one
   block don't work either. It is silently ignored, so you get no error, just no narrowing.
   `split` and `getChunk` instead declare a `@typedef` of call signatures and export a cast of
-  a private `…Impl` arrow. The cast is required: the implementation returns the union form,
-  which is not assignable to the narrowed signatures.
+  a private `…Impl` arrow. **One** cast is required — drop it and declaration emit writes the
+  impl's union signature, so consumers get no narrowing and nothing errors to tell you. A
+  second hop through `unknown` is _not_ required: `/** @type {SplitFn} */ (splitImpl)` emits
+  `export declare const split: SplitFn` identically, verified under `strict` + `checkJs` with
+  real declaration emit, not `noEmit`.
 
 ### Overload sets keep a union signature last
 
 `SplitFn` and `GetChunkFn` each end with a `string|string[]` signature after the two narrow
-ones. Not redundant: without it a caller holding a `string | string[]` variable matches
-neither and stops compiling. Verified against a probe covering both narrowed forms, union
-input, a bare `Chunk[]` annotation, and assignment to the pre-change function type. Don't
-"simplify" it away.
+ones. Not redundant: delete it and a caller holding a `string | string[]` variable matches
+neither signature and fails with `TS2769: No overload matches this call`. Don't "simplify" it
+away — but note this is the only part of the cast machinery that survives scrutiny; see the
+`@overload` bullet above for the part that didn't.
+
+Both claims are now pinned by a probe rather than by this paragraph: run
+`npm run build && npx tsc -p .claude/skills/type-probe/tsconfig.json`, or invoke the
+`type-probe` skill. It compiles against `dist/`, because `check:types` uses `noEmit` where
+these casts have no effect. Each assertion was validated by mutating `src/` and confirming the
+probe fails — see the table in its `SKILL.md`. **Run it after touching the export list, the
+call-signature typedefs, the casts, `Chunk`, or `SplitOptions`.**
 
 ### Don't reintroduce removed tooling
 

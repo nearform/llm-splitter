@@ -593,6 +593,4 @@ const splitImpl = (
  * site is sound. `@overload` is not an option here: it applies to `function`
  * declarations, not to a `const` bound to an arrow function.
  */
-export const split = /** @type {SplitFn} */ (
-  /** @type {unknown} */ (splitImpl)
-);
+export const split = /** @type {SplitFn} */ (splitImpl);
