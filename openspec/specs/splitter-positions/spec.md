@@ -19,10 +19,11 @@ and declined".
 
 ### Requirement: A splitter MAY report each part's source position
 
-A splitter MAY return, for any element, an object of the form `{ text: string, start: number }`
-in place of a bare string. `start` SHALL be the zero-based UTF-16 code unit offset of `text` in
-the input the splitter received. The two forms MAY be mixed in one returned array, so a splitter
-that knows some offsets and not others reports only the ones it knows.
+A reported part SHALL carry its position: the splitter MAY return, for any element, an object
+of the form `{ text: string, start: number }` in place of a bare string, whose `start` is the
+zero-based UTF-16 code unit offset of `text` in the input the splitter received. The two forms
+MAY be mixed in one returned array, so a splitter that knows some offsets and not others reports
+only the ones it knows.
 
 #### Scenario: A reported position is used verbatim
 
@@ -82,10 +83,10 @@ backwards.
 
 ### Requirement: Reporting is a contract, not a bundled splitter
 
-The reported-position form is the capability; building a splitter on it is the caller's. The
-library SHALL NOT export a delimiter-based or otherwise pre-built reporting splitter, nor a
+The library SHALL NOT export a delimiter-based or otherwise pre-built reporting splitter, nor a
 type naming the reported form, so the supported surface stays `split()`, `getChunk()`, and the
-`Chunk` / `SplitOptions` types. The form SHALL stay usable through `SplitOptions["splitter"]`
+`Chunk` / `SplitOptions` types. The reported-position form is the capability; building a splitter
+on it is the caller's. The form SHALL stay usable through `SplitOptions["splitter"]`
 without being nameable from the package root.
 
 #### Scenario: Package exports

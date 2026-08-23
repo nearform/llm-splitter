@@ -80,16 +80,14 @@ in input length (see "Anchoring cost is linear in input length").
 
 ### Requirement: Unlocatable parts fail loudly
 
-A part is unlocatable when its normalized form does not occur in the source within the bounded
-window from the cursor. Control tokens (`[CLS]`, `[SEP]`, `[UNK]`) and genuinely mutating
-splitters both land here, and the system SHALL NOT attempt to tell them apart: nothing in a
-part distinguishes a tokenizer control token from ordinary source text of the same shape —
-`[CLS]` is itself anchorable on its literal `[`, and today anchors silently against any source
-containing one.
-
-The system SHALL therefore throw for an unlocatable part, with a message naming the part and
-the likely cause, rather than skipping it or anchoring it on a partial match. Splitters MUST
-drop tokenizer control tokens before returning parts.
+The system SHALL throw for an unlocatable part — one whose normalized form does not occur in the
+source within the bounded window from the cursor — rather than skipping it or anchoring it on a
+partial match, with a message naming the part and the likely cause. Control tokens (`[CLS]`,
+`[SEP]`, `[UNK]`) and genuinely mutating splitters both land there, and the system SHALL NOT
+attempt to tell them apart: nothing in a part distinguishes a tokenizer control token from
+ordinary source text of the same shape — `[CLS]` is itself anchorable on its literal `[`, and
+today anchors silently against any source containing one. Splitters MUST drop tokenizer control
+tokens before returning parts.
 
 #### Scenario: Control token framing the input
 

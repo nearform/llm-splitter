@@ -136,7 +136,7 @@ const firstAnchorGrapheme = (splitPart) => {
  *
  * Comparing at fixed offsets rests on decoded length equalling the source span,
  * the same assumption as `end = start + splitPart.length`, so it adds none. It
- * is invalid for a length-inflating tokenizer; see `tokenizer-length-inflation`.
+ * is invalid for a length-inflating tokenizer.
  *
  * @param {string} input
  * @param {string} splitPart

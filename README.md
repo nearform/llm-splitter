@@ -20,6 +20,8 @@ A JavaScript library for splitting text into configurable chunks with overlap su
 $ npm install llm-splitter
 ```
 
+Runs on any currently supported Node.js release and evergreen browsers.
+
 ## Usage
 
 ```js
@@ -349,8 +351,7 @@ For an affected tokenizer, chunk with a 1:1 tokenizer (tiktoken is a common choi
 your embedding model is from elsewhere. Failing that, apply the same normalization to the input
 and split the normalized text, accepting that positions then index that text rather than your
 original. Padding decoded parts back to source length is not enough — it repairs the cursor
-arithmetic, not the mutation. Wider support is tracked in
-[openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/).
+arithmetic, not the mutation.
 
 #### Known limitations
 
@@ -364,8 +365,7 @@ is dropped, its source absorbed into the neighboring chunk.
 
 Single-character delimiters and character-class regexes (`/\s+/`, `/[.!?]+/`) can't reach any of
 this: a part never contains a character the splitter splits on. Neither can `tiktoken` or
-`text.split('')`, which drop nothing between parts. Full model and measured residuals in
-[openspec/specs/multibyte-anchoring/spec.md](openspec/specs/multibyte-anchoring/spec.md).
+`text.split('')`, which drop nothing between parts.
 
 #### Token undercounting
 

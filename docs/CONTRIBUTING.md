@@ -5,7 +5,7 @@ covers only the setup that isn't obvious from the repo itself.
 
 ## Prerequisites
 
-Use the project's Node version — the default `node` on some machines is too old for the
+Use the project's Node.js version — the default `node` on some machines is too old for the
 toolchain and produces baffling errors:
 
 ```sh
@@ -15,7 +15,7 @@ source ~/.nvm/nvm.sh && cd <repo> && nvm use   # honors .nvmrc (lts/*)
 Install the OpenSpec CLI **globally**:
 
 ```sh
-npm install -g @fission-ai/openspec@latest   # requires Node >= 20.19
+npm install -g @fission-ai/openspec@latest   # requires Node.js >= 20.19
 ```
 
 Intentionally _not_ a `devDependency` — see AGENTS.md, "Don't reintroduce removed tooling".

@@ -176,7 +176,7 @@ const loadBaseline = async () => {
     throw new Error(
       `Could not resolve the published llm-splitter@${BASELINE_VERSION} baseline.\n` +
         `It downloads once into ${BASELINE_DIR.pathname} and is reused offline after that,\n` +
-        `so the first run needs network access. Behind a proxy, Node ignores\n` +
+        `so the first run needs network access. Behind a proxy, Node.js ignores\n` +
         `HTTPS_PROXY for fetch() unless you set NODE_USE_ENV_PROXY=1.`,
       { cause: err },
     );

@@ -126,8 +126,8 @@ whole documents, and a quadratic term makes large multi-byte inputs unusable.
 
 ### Requirement: Unanchorable parts are dropped but bytes preserved
 
-When an entire part consists of U+FFFD and/or combining marks (nothing positionable), the
-system SHALL silently drop that part while preserving its source bytes in chunk text,
+The system SHALL silently drop a part made up entirely of U+FFFD and/or combining marks
+(nothing positionable) while preserving its source bytes in chunk text,
 because chunks span from their first part's `start` to their last part's `end` and gaps
 between parts are absorbed forward.
 
@@ -157,9 +157,9 @@ Callers MUST NOT rely on a mutating splitter failing loudly.
 
 ### Requirement: Anchoring positions parts, it does not police boundaries
 
-Grapheme segmentation is used only to choose an anchor _inside a part_ during Tier 3. It
-carries no guarantee about chunk boundaries. The system SHALL faithfully reproduce whatever
-units the splitter returns, so when a splitter emits parts that are fragments of a grapheme
+The system SHALL faithfully reproduce whatever units the splitter returns; grapheme segmentation
+is used only to choose an anchor _inside a part_ during Tier 3 and carries no guarantee about
+chunk boundaries. When a splitter emits parts that are fragments of a grapheme
 cluster — which the default `text.split('')` does for any astral character, one UTF-16 code
 unit at a time — chunk boundaries MAY fall inside a grapheme cluster or between the halves of
 a surrogate pair. Choosing units that are meaningful for the caller's model is the splitter's
@@ -207,10 +207,10 @@ work.
 
 ### Requirement: A literal U+FFFD in the source does not misdirect anchoring
 
-A source string may itself contain U+FFFD — scraped and mojibake-recovered text routinely
-does. The system SHALL NOT anchor a part on a U+FFFD that the splitter manufactured by
-searching the source for it verbatim. For a splitter whose decoded part length equals its
-consumed source span, the presence of a literal U+FFFD in the source SHALL NOT cause a throw
+The system SHALL NOT anchor a part on a U+FFFD that the splitter manufactured by searching the
+source for it verbatim. A source string may itself contain U+FFFD — scraped and mojibake-recovered
+text routinely does — and for a splitter whose decoded part length equals its consumed source
+span, the presence of a literal U+FFFD in the source SHALL NOT cause a throw
 that the same input without that character would not produce, and SHALL NOT displace any
 part from the position it would otherwise anchor to.
 
@@ -279,11 +279,11 @@ surfaces both, and separating them is what keeps the U+FFFD residual measurable.
 
 ### Requirement: Reported positions bypass the anchoring limitations
 
-Every limitation of the locate strategy — the Tier 2 verbatim decoy, the Tier 3 candidate a
-one-character skeleton cannot rule out, and the Tier 1 ambiguity between a manufactured and a
-literal U+FFFD — is a consequence of inferring a position from text. A splitter that reports
-positions (see the `splitter-positions` capability) SHALL NOT be subject to any of them, because
-no inference is performed for a reported part.
+A splitter that reports positions (see the `splitter-positions` capability) SHALL NOT be subject
+to any limitation of the locate strategy, because no inference is performed for a reported part:
+every one of them — the Tier 2 verbatim decoy, the Tier 3 candidate a one-character skeleton
+cannot rule out, and the Tier 1 ambiguity between a manufactured and a literal U+FFFD — is a
+consequence of inferring a position from text.
 
 The limitations SHALL continue to hold as stated for bare-string splitters. This requirement adds
 a remedy; it does not narrow the exceptions.
