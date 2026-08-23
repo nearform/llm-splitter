@@ -19,6 +19,6 @@ Rewrite the chunking core so chunk positions account for the whole input.
 - Multibyte parts anchored a few code units to the right of their true position when the part's first anchorable character sat partway into it.
 - Paragraph groups were located by substring search, which mis-anchored a paragraph whose text appeared earlier in the document and could drop the final chunk.
 
-**New: a splitter can report each part's source position.** Return `{ text, start }` in place of a bare string and that offset is used verbatim rather than inferred by searching. The two forms mix freely in one array. `delimiterSplitter(delimiter)` builds a reporting splitter for the common case. This is the way around the inference limitations in the README's "Known limitations".
+**New: a splitter can report each part's source position.** Return `{ text, start }` in place of a bare string and that offset is used verbatim rather than inferred by searching. The two forms mix freely in one array, so a splitter can report only the offsets it is sure of. This is the way around the inference limitations in the README's "Known limitations", and the direct path for a tokenizer that already exposes offset mappings.
 
 Also: source is now plain JavaScript with JSDoc annotations rather than TypeScript, with `.d.ts` published for TypeScript consumers, and `SplitOptions` and `SplitterPart` are exported as types.

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { split, getChunk, delimiterSplitter } from "../src/index.js";
+import { split, getChunk } from "../src/index.js";
 
 // Helper splitters
 /** @param {string} text */
@@ -386,12 +386,16 @@ describe("index (integration)", () => {
     });
   });
 
-  describe("delimiterSplitter from the package root", () => {
+  describe("reported positions from the package root", () => {
     it("positions parts by their reported offsets", () => {
       const input = "alpha, beta, gamma";
       const chunks = split(input, {
         chunkSize: 1,
-        splitter: delimiterSplitter(", "),
+        splitter: () => [
+          { text: "alpha", start: 0 },
+          { text: "beta", start: 7 },
+          { text: "gamma", start: 13 },
+        ],
       });
 
       assert.deepStrictEqual(

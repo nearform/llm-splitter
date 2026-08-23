@@ -252,9 +252,7 @@ vs what changes next. Full workflow in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.
 
 - **Three residual anchoring defects have a remedy, not a fix.** `splitter-reported-positions`
   shipped the way around them: a splitter may return `{ text, start }`, and a reported offset
-  skips all three tiers. `delimiterSplitter` covers the common delimiter case, scoring 0
-  mis-anchored over the decoy corpus where bare-string splitters score 2,424 / 5,140 / 1,566
-  by delimiter shape. The search itself is unchanged and still gets these wrong:
+  skips all three tiers. The search itself is unchanged and still gets these wrong:
 
   1. **Tier 2 takes the first verbatim match — 489 of 20,000 (2.4%).** Not a U+FFFD bug:
      `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })` puts the `"."` at
@@ -282,8 +280,8 @@ Each says what would change our mind.
   `src`/`dist` skew is not a reason to add one; the only thing `exports` buys is
   encapsulation, and we would rather document the supported surface than have the resolver
   enforce it. Deep paths like `import('llm-splitter/src/split.js')` resolve today; that is
-  accepted, not an oversight. `split()`, `getChunk()`, and `delimiterSplitter()` from the
-  package root are the contract.
+  accepted, not an oversight. `split()` and `getChunk()` from the package root are the
+  contract.
 
   Changes our mind: a report of someone depending on an internal path in a way that blocks a
   refactor. The minimal form, kept so the option stays one edit away:
@@ -299,6 +297,21 @@ Each says what would change our mind.
   tooling working. Measured: deep imports start returning `ERR_PACKAGE_PATH_NOT_EXPORTED` and
   everything else stays green. It is a breaking change for deep importers, so it wants its own
   minor and a changeset that says so.
+
+- **No bundled reporting splitter.** A `delimiterSplitter(delimiter)` export shipped and was
+  removed. It changes no position for any splitter shape a chunking caller reaches for:
+  single-character delimiters and character-class regexes cannot reach the tier 2 decoy at all
+  (a part never contains a character the splitter splits on), and `tiktoken` / `text.split('')`
+  drop nothing between parts. Measured over 4,000 random strings on an alphabet seeded with the
+  delimiter characters, bare `split(d).filter(Boolean)` vs. the reporting form: `" "` `"."`
+  `"|"` and `/\s+/` `/[.!?]+/` `/[.!?]+\s*/` all 0 differences; only multi-character strings
+  differ (`". "` 60, `"--"` 11, `"\n\n"` 8), and `"\n\n"` is `chunkStrategy: "paragraph"`
+  already. The 2,424 / 5,140 / 1,566 figures that justified it came from the decoy corpus,
+  which was built to hit the defect — a bug measurement, not evidence a caller hits it.
+
+  Changes our mind: a caller who chunks on a multi-character string delimiter that isn't
+  `"\n\n"`. The `{ text, start }` contract stays either way — its real consumer is a tokenizer
+  that already has offset mappings.
 
 - **No packaged-consumer test.** Nothing in CI installs a packed tarball and imports by name,
   so the resolution model above is verified only by hand. Disproportionate for a package this

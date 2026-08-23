@@ -3,7 +3,6 @@ import assert from "node:assert";
 import { performance } from "node:perf_hooks";
 import tiktoken from "tiktoken";
 import { split } from "../src/split.js";
-import { delimiterSplitter } from "../src/delimiter-splitter.js";
 import { getChunk } from "../src/get-chunk.js";
 
 /** @typedef {import('../src/split.js').Chunk} Chunk */
@@ -14,6 +13,35 @@ import { getChunk } from "../src/get-chunk.js";
 const charSplitter = (text) => text.split("");
 /** @param {string} text */
 const whitespaceSplitter = (text) => text.split(/\s+/);
+
+/**
+ * Splits on `delimiter` and reports each part's true offset, for exercising the
+ * reported path against a splitter that cannot be wrong. Scanned with `indexOf`
+ * because `String.split` discards precisely the offsets this needs to report.
+ *
+ * @param {string} delimiter
+ * @returns {(input: string) => SplitterPart[]}
+ */
+const reportingSplitter = (delimiter) => (input) => {
+  /** @type {SplitterPart[]} */
+  const parts = [];
+  let cursor = 0;
+  let hit = input.indexOf(delimiter);
+
+  while (hit !== -1) {
+    if (hit > cursor) {
+      parts.push({ text: input.slice(cursor, hit), start: cursor });
+    }
+    cursor = hit + delimiter.length;
+    hit = input.indexOf(delimiter, cursor);
+  }
+
+  if (cursor < input.length) {
+    parts.push({ text: input.slice(cursor), start: cursor });
+  }
+
+  return parts;
+};
 
 const td = new TextDecoder();
 /** @param {string} text */
@@ -1624,7 +1652,7 @@ describe("split", () => {
       it("uses the reported offset instead of the first verbatim match", () => {
         const chunks = split(DECOY, {
           chunkSize: 1,
-          splitter: delimiterSplitter("..."),
+          splitter: reportingSplitter("..."),
         });
 
         assert.deepStrictEqual(
@@ -1686,7 +1714,7 @@ describe("split", () => {
         const chunks = split(input, {
           chunkSize: 1,
           chunkStrategy: "paragraph",
-          splitter: delimiterSplitter(" "),
+          splitter: reportingSplitter(" "),
         });
 
         assert.deepStrictEqual(
@@ -2186,12 +2214,12 @@ describe("split", () => {
         {
           name: "reported-delimiter-space",
           mutates: false,
-          fn: delimiterSplitter(" "),
+          fn: reportingSplitter(" "),
         },
         {
           name: "reported-delimiter-paragraph",
           mutates: false,
-          fn: delimiterSplitter("\n\n"),
+          fn: reportingSplitter("\n\n"),
         },
         // Alternating forms: the two paths must interleave without either
         // losing the cursor. Safe by construction because a searched part

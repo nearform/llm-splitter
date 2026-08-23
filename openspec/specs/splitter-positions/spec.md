@@ -71,28 +71,13 @@ backwards.
 - **THEN** the reported offset is still used, because a byte-mutating splitter legitimately
   returns text that differs from its source span, and rejecting it would exclude tokenizers
 
-### Requirement: The library SHALL provide a delimiter splitter that reports positions
+### Requirement: Reporting is a contract, not a bundled splitter
 
-A `delimiterSplitter(delimiter)` helper SHALL be exported, returning a splitter that splits on
-`delimiter` and reports each part's exact offset. Empty parts SHALL be omitted.
+The reported-position form is the capability; building a splitter on it is the caller's. The
+library SHALL NOT export a delimiter-based or otherwise pre-built reporting splitter, so the
+supported surface stays `split()` and `getChunk()`.
 
-#### Scenario: Delimiter splitter over a source whose part repeats inside the delimiter run
+#### Scenario: Package exports
 
-- **WHEN** `delimiterSplitter("...")` is used on `"a...."`
-- **THEN** the parts are `"a"` at 0 and `"."` at 4, the offsets the search reports as 0 and 1
-
-#### Scenario: Consecutive delimiters
-
-- **WHEN** the input contains consecutive delimiters, producing empty parts
-- **THEN** empty parts are omitted and the remaining parts report their true offsets
-
-#### Scenario: Delimiter absent from the input
-
-- **WHEN** a non-empty input contains no occurrence of the delimiter
-- **THEN** the splitter reports one part covering the whole input at offset 0
-
-#### Scenario: Empty input
-
-- **WHEN** the input is the empty string
-- **THEN** the splitter returns no parts, because the whole-input part would be empty and empty
-  parts are omitted
+- **WHEN** the package root is imported
+- **THEN** `split` and `getChunk` are available and no pre-built reporting splitter is

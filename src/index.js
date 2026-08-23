@@ -1,6 +1,5 @@
 export { getChunk } from "./get-chunk.js";
 export { split } from "./split.js";
-export { delimiterSplitter } from "./delimiter-splitter.js";
 
 /**
  * @template {string|string[]} [T=string|string[]]
