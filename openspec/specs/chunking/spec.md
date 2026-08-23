@@ -116,7 +116,9 @@ input consisting only of whitespace, which paragraph trimming removes before anc
 The system SHALL validate its arguments before doing any work and SHALL throw on invalid
 input. `chunkSize` MUST be an integer of at least `1`; `chunkOverlap` MUST be an integer of
 at least `0` and MUST be less than `chunkSize`; `splitter` MUST be a function that returns an
-array of strings; `input` MUST be a string or an array whose every element is a string.
+array whose every element is either a string or a `{ text, start }` object (see the
+`splitter-positions` capability); `input` MUST be a string or an array whose every element is
+a string.
 
 Invalid options, and a splitter element that is neither a string nor an object, SHALL throw
 `Error`. An invalid `input` type, a splitter that does not return an array, and a reported
@@ -147,9 +149,9 @@ part whose `text` is not a string or whose `start` is out of range SHALL throw `
 - **WHEN** a splitter returns something other than an array (e.g. a string)
 - **THEN** `split` throws a `TypeError`
 
-#### Scenario: Splitter returns a non-string part
+#### Scenario: Splitter returns a part that is neither a string nor an object
 
-- **WHEN** a splitter returns an array containing a non-string part
+- **WHEN** a splitter returns an array containing an element that is neither a string nor an object (e.g. a number, `null`)
 - **THEN** `split` throws an `Error`
 
 #### Scenario: Splitter errors propagate

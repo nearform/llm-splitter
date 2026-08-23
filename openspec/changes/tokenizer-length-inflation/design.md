@@ -45,8 +45,10 @@ regression fixtures and produced concrete evidence (full writeup in
   actually rests on". It is neither the cause of these failures nor part of the fix. Leave it
   alone here; it is a separable simplification worth ~31% of the hottest Tier 3 row if it is
   ever wanted.
-- Accepting positions from the splitter. Ruled out — these callers cannot supply offsets, so
-  anchoring stays a reconstruction problem (`research.md`, same section).
+- Accepting a reported **consumed span** (`end`/`length`) from the splitter. Reported _starts_
+  already shipped in `splitter-reported-positions` and bypass the search; a span is the piece
+  that would dissolve inflation outright, and it stays out of scope here — the tokenizers this
+  change targets cannot report one (`research.md`, same section).
 
 ## Decisions
 

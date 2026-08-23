@@ -177,22 +177,28 @@ for every chunk, and coverage is unbroken.
 
 The system SHALL correctly position any splitter whose decoded part length equals the source
 span it consumed — including `text.split('')`, whitespace and sentence/line regex splitters,
-and `tiktoken` (which substitutes exactly one U+FFFD per undecodable byte). This holds
-whether or not the source itself contains literal U+FFFD, subject to the two stated
-exceptions in "A literal U+FFFD in the source does not misdirect anchoring". Tokenizers whose
-pipeline normalizes during decode (e.g. `gte-small`, `bge-small`, uncased WordPiece via
-`@huggingface/transformers`) are a known limitation: they can inflate decoded length and
-cause a throw or mis-anchoring. Expanding support for these is tracked as future work.
+and `tiktoken` (which substitutes exactly one U+FFFD per undecodable byte) — subject to the
+three inference limitations stated in "A literal U+FFFD in the source does not misdirect
+anchoring". Length preservation does not exempt a splitter from those: they are properties of
+the search, and a multi-character string delimiter reaches them while preserving length —
+`(t) => t.split("...")` over `"a...."` anchors the trailing `"."` at 1, not 4. They apply
+whether or not the source itself contains literal U+FFFD, and a splitter that reports its own
+positions is subject to none of them.
+
+Tokenizers whose pipeline normalizes during decode (e.g. `gte-small`, `bge-small`, uncased
+WordPiece via `@huggingface/transformers`) are a known limitation: they can inflate decoded
+length and cause a throw or mis-anchoring. Expanding support for these is tracked as future
+work.
 
 #### Scenario: Length-preserving tokenizer
 
 - **WHEN** a splitter's decoded part length equals its consumed source span (char, whitespace, sentence, tiktoken)
-- **THEN** every part anchors to a correct source position
+- **THEN** every part anchors to a correct source position, except as allowed by the three inference limitations in "A literal U+FFFD in the source does not misdirect anchoring"
 
 #### Scenario: Length-preserving tokenizer over a source containing U+FFFD
 
 - **WHEN** a length-preserving tokenizer such as `tiktoken` splits a source that contains one or more literal U+FFFD characters
-- **THEN** no throw occurs, and every part anchors to a correct source position except as allowed by the two exceptions in "A literal U+FFFD in the source does not misdirect anchoring"
+- **THEN** no throw occurs, and every part anchors to a correct source position except as allowed by the three exceptions in "A literal U+FFFD in the source does not misdirect anchoring"
 
 #### Scenario: Length-inflating tokenizer (known limitation)
 

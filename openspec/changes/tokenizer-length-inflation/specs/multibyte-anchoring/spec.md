@@ -11,20 +11,21 @@ normalizing tokenizers (e.g. `gte-small`, `bge-small`, uncased WordPiece via
 `##`-prefixed, by comparing normalized source against normalized parts. Without
 `sourceNormalize`, such tokenizers remain unsupported and MAY throw or mis-anchor.
 
-For a length-preserving splitter this holds whether or not the source itself contains literal
-U+FFFD, subject to the two stated exceptions in "A literal U+FFFD in the source does not
-misdirect anchoring". `sourceNormalize` does not change that: it replaces Tier 3 only, and the
-Tier 2 skip for U+FFFD-bearing parts is independent of it.
+Both halves remain subject to the three inference limitations stated in "A literal U+FFFD in
+the source does not misdirect anchoring", which apply whether or not the source itself contains
+literal U+FFFD and are not exempted by length preservation. `sourceNormalize` does not change
+that either: it replaces Tier 3 only, and both the Tier 2 skip for U+FFFD-bearing parts and the
+Tier 2 first-verbatim-match limitation are independent of it.
 
 #### Scenario: Length-preserving tokenizer
 
 - **WHEN** a splitter's decoded part length equals its consumed source span (char, whitespace, sentence, tiktoken)
-- **THEN** every part anchors to a correct source position, whether or not `sourceNormalize` is supplied
+- **THEN** every part anchors to a correct source position whether or not `sourceNormalize` is supplied, except as allowed by the three inference limitations in "A literal U+FFFD in the source does not misdirect anchoring"
 
 #### Scenario: Length-preserving tokenizer over a source containing U+FFFD
 
 - **WHEN** a length-preserving tokenizer such as `tiktoken` splits a source that contains one or more literal U+FFFD characters
-- **THEN** no throw occurs, and every part anchors to a correct source position except as allowed by the two exceptions in "A literal U+FFFD in the source does not misdirect anchoring"
+- **THEN** no throw occurs, and every part anchors to a correct source position except as allowed by the three exceptions in "A literal U+FFFD in the source does not misdirect anchoring"
 
 #### Scenario: Normalizing tokenizer with sourceNormalize
 

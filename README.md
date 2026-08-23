@@ -61,8 +61,11 @@ Notes:
 - `chunkSize` must be a positive integer ≥ 1.
 - `chunkOverlap` must be a non-negative integer ≥ 0, and less than `chunkSize`.
 - `splitter` must return an array whose elements are strings, or objects of the form
-  `{ text, start }` reporting where each part came from (see "Reported positions"). Anything
-  else throws `TypeError`.
+  `{ text, start }` reporting where each part came from (see "Reported positions"). Not
+  returning an array throws `TypeError`, as does a `{ text, start }` object with a non-string
+  `text` or an out-of-range `start`. An element that is neither a string nor an object throws
+  plain `Error` — as do an invalid `chunkSize`, `chunkOverlap`, or `chunkStrategy`, and a
+  `splitter` that isn't a function.
 - `splitter` functions may **omit** text but must not **mutate** it. Splitting on spaces is
   fine (`(t) => t.split(" ")`); uppercasing the results is not. A mutating splitter throws
   when a token can't be located — but it can also anchor at a wrong position with no error,
@@ -544,12 +547,17 @@ consumed**.
   place. It's the _model_'s tokenizer config that drives this (lowercase, accent strip,
   NFC/NFD), not the runtime.
 
-If you're using an affected tokenizer today, either chunk with a 1:1 tokenizer (tiktoken is a
-common choice) even if your embedding model is from elsewhere, or wrap your splitter to
-pad/trim decoded output to match source length. Reporting positions does **not** help here: a
-reported part still takes its `end` from `start + text.length`, so an inflated part overshoots
-the cursor and the next part's honest offset is rejected as moving backwards. Sidestepping
-inflation needs the consumed span, not just the start.
+If you're using an affected tokenizer today, chunk with a 1:1 tokenizer (tiktoken is a common
+choice) even if your embedding model is from elsewhere. Failing that, apply the tokenizer's own
+normalization to the input and split the normalized text, accepting that the returned positions
+then index that text rather than your original. Padding or trimming decoded parts to match
+source length is not enough — it repairs the cursor arithmetic but not the mutation, so a
+lowercased or accent-stripped part can still anchor silently on unrelated source.
+
+Reporting positions does **not** help either: a reported part still takes its `end` from
+`start + text.length`, so an inflated part overshoots the cursor and the next part's honest
+offset is rejected as moving backwards. Sidestepping inflation needs the consumed span, not
+just the start.
 
 Expanding tolerance for length-inflating tokenizers is tracked in
 [openspec/changes/tokenizer-length-inflation/](openspec/changes/tokenizer-length-inflation/).

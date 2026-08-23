@@ -88,5 +88,11 @@ A `delimiterSplitter(delimiter)` helper SHALL be exported, returning a splitter 
 
 #### Scenario: Delimiter absent from the input
 
-- **WHEN** the input contains no occurrence of the delimiter
+- **WHEN** a non-empty input contains no occurrence of the delimiter
 - **THEN** the splitter reports one part covering the whole input at offset 0
+
+#### Scenario: Empty input
+
+- **WHEN** the input is the empty string
+- **THEN** the splitter returns no parts, because the whole-input part would be empty and empty
+  parts are omitted
