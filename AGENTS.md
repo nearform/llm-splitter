@@ -231,9 +231,6 @@ plus network once.
   today only because this package has no `exports` map (see below). Add one and Node's
   self-reference makes the baseline `src/index.js`, so the benchmark reports zero differences
   against itself.
-- **Excluded from `check:types` and `npm run check`** — the baseline import resolves through
-  a cache URL, so `tsc` has no static path; the run also takes minutes and needs network.
-  `test/.cache/` is in the eslint and prettier ignore lists too.
 
 Behind a corporate proxy the first run fails with `fetch failed`: Node's `fetch` ignores
 `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is in the environment, and setting it from inside
