@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# `@changesets/get-github-info` reads GITHUB_TOKEN from a .env in cwd, so a
+# maintainer running `changeset version` locally may put a PAT here.
+.env
+.env.*
+!.env.example
 .eslintcache
 
 # Editor directories and files
@@ -27,3 +33,20 @@ dist-ssr
 coverage
 demo-public
 tmp-*
+
+# `test/benchmark.js` downloads the published llm-splitter here on first run.
+test/.cache
+
+# Claude Code: ignore personal/local files, track the shared workflow. The
+# OpenSpec commands and skills are regenerable via `openspec update`, but
+# committed so contributors get `/opsx:*` without re-running init; `type-probe`
+# is ours and is not regenerable. Anything added under here needs its own
+# negation or it is silently dropped from the commit.
+.claude/*
+!.claude/commands/
+!.claude/skills/
+.claude/commands/*
+.claude/skills/*
+!.claude/commands/opsx/
+!.claude/skills/openspec-*/
+!.claude/skills/type-probe/

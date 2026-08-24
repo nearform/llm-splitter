@@ -1,14 +1,18 @@
 {
   "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
     "declaration": true,
+    "emitDeclarationOnly": true,
     "lib": ["ESNext"],
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "outDir": "./dist",
-    "sourceMap": true,
+    "rootDir": "./src",
+    "skipLibCheck": true,
     "strict": true,
     "target": "ESNext"
   },
-  "exclude": ["node_modules/**/*"],
-  "include": ["src/**/*.ts"]
+  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*.js"]
 }

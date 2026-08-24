@@ -3,27 +3,15 @@
   "private": false,
   "version": "0.2.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "type": "module",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "check": "npm run lint && npm run test && npm run check-format",
-    "check-format": "prettier --check .",
-    "check-lint": "eslint .",
-    "format": "prettier --write . && eslint --cache --fix .",
-    "lint": "eslint .",
-    "prebuild": "rm -rf dist",
-    "prepare": "husky",
-    "test": "node --loader ts-node/esm/transpile-only --test",
-    "test:only": "npm run test -- --test-only"
-  },
+  "license": "MIT",
+  "author": "Ryan Roemer <ryan.roemer@nearform.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nearform/llm-splitter.git"
+  },
+  "homepage": "https://github.com/nearform/llm-splitter#readme",
+  "bugs": {
+    "url": "https://github.com/nearform/llm-splitter/issues"
   },
   "keywords": [
     "llm",
@@ -32,31 +20,37 @@
     "text",
     "vectorization"
   ],
-  "author": "Ryan Roemer <ryan.roemer@nearform.com>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/nearform/llm-splitter/issues"
+  "type": "module",
+  "main": "src/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist",
+    "build": "tsc --project tsconfig.json",
+    "prepack": "npm run build",
+    "check": "npm run check:lint && npm run check:types && npm run check:format && npm run test",
+    "check:format": "prettier --check .",
+    "check:lint": "eslint .",
+    "check:types": "tsc --project tsconfig.check.json",
+    "format": "prettier --write . && eslint --cache --fix .",
+    "test": "node --test \"test/*.test.js\"",
+    "test:only": "node --test --test-only \"test/*.test.js\"",
+    "dep:check": "npx npm-check-updates"
   },
-  "homepage": "https://github.com/nearform/llm-splitter#readme",
   "devDependencies": {
-    "@commitlint/cli": "^21.0.0",
-    "@commitlint/config-conventional": "^21.0.1",
-    "@eslint/js": "^9.30.0",
-    "@types/node": "^26.0.0",
-    "eslint": "^10.0.3",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-prettier": "^5.5.1",
-    "globals": "^17.0.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^17.0.4",
-    "prettier": "^3.6.2",
-    "tiktoken": "^1.0.21",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.0.0",
-    "typescript-eslint": "^8.45.0"
-  },
-  "lint-staged": {
-    "*.{js,jsx}": "eslint --cache --fix"
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.1",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "prettier": "^3.9.6",
+    "tiktoken": "^1.0.22",
+    "typescript": "^7.0.2"
   },
   "publishConfig": {
     "access": "public"

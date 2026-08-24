@@ -14,18 +14,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
       - run: |
           npm ci
-          npm run lint
-          npm test
-
-  automerge:
-    name: Merge dependabot's PRs
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: write
-    steps:
-      - uses: fastify/github-action-merge-dependabot@v3
+          npm run check
+      # `check:types` runs with `noEmit`, so it validates JSDoc but never
+      # exercises declaration emit. Errors that only surface when writing
+      # `.d.ts` (TS4023 and friends) would otherwise stay hidden until the
+      # release workflow's `pack` job — i.e. after the "Version Packages" PR
+      # has already merged. Build here so they fail on the PR instead.
+      - name: Build declarations
+        run: npm run build
