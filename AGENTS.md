@@ -260,7 +260,6 @@ vs what changes next. Full workflow in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.
 - **Three residual anchoring defects have a remedy, not a fix.** `splitter-reported-positions`
   shipped the way around them: a splitter may return `{ text, start }`, and a reported offset
   skips all three tiers. The search itself is unchanged and still gets these wrong:
-
   1. **Tier 2 takes the first verbatim match — 489 of 20,000 (2.4%).** Not a U+FFFD bug:
      `split("a....", { splitter: (t) => t.split("...").filter(Boolean) })` puts the `"."` at
      1; it is at 4. Largest of the three. Candidate verification cannot touch it — a verbatim

@@ -2,9 +2,11 @@
 "llm-splitter": minor
 ---
 
-Rewrite the chunking core so chunk positions account for the whole input.
+Rewrite the chunking core.
 
 **Breaking — regenerate anything keyed on positions.** Chunk positions and counts change, so persisted embeddings, citation offsets, and chunk indices need rebuilding.
+
+`getChunk()` itself is unchanged: the same `(input, start, end)` returns exactly the same text as in 0.2.0, so stored positions still resolve. The breaking changes are confined to `split()` and related functionality.
 
 - Chunks now cover the source: each chunk's `end` extends to the next chunk's `start`, and the last chunk ends at the input length. Chunk text therefore includes whitespace and `\n\n` delimiters that previously fell between chunks.
 - `chunk.text` now follows your input type — `split(str)` returns `Chunk<string>[]`, `split(arr)` returns `Chunk<string[]>[]`, so TypeScript consumers no longer narrow a union on every access. A `string | string[]` argument still compiles and still returns the union.
