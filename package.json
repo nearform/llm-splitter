@@ -1,7 +1,7 @@
 {
   "name": "llm-splitter",
   "private": false,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Efficient, configurable text chunking utility for LLM vectorization. Returns rich chunk metadata.",
   "license": "MIT",
   "author": "Ryan Roemer <ryan.roemer@nearform.com>",
